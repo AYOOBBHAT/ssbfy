@@ -5,6 +5,7 @@ import { testRepository } from '../repositories/testRepository.js';
 import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
 import { questionRepository } from '../repositories/questionRepository.js';
 import { resultRepository } from '../repositories/resultRepository.js';
+import { testService } from './testService.js';
 
 const WEAK_TOPIC_LIMIT = 10;
 
@@ -65,12 +66,13 @@ function validateAnswerCoverage(attemptQuestionIds, answers) {
 
 export const testAttemptService = {
   async start(userId, testId) {
-    const test = await testRepository.findById(testId);
-    if (!test) {
-      throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
-    }
+    // Use the service view so inactive / orphaned questions are already
+    // stripped out before we build the attempt snapshot. This prevents a
+    // user from ever being assigned a question whose subject or topic has
+    // since been disabled by an admin.
+    const test = await testService.getById(testId);
     if (!test.questionIds?.length) {
-      throw new AppError('Test has no questions configured', HTTP_STATUS.BAD_REQUEST);
+      throw new AppError('Test has no active questions available', HTTP_STATUS.BAD_REQUEST);
     }
 
     const submitted = await testAttemptRepository.findSubmittedByUserAndTest(userId, testId);

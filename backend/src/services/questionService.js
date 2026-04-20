@@ -39,18 +39,49 @@ function deriveAnswerFields(options, correctAnswerIndex, correctAnswerValue) {
   };
 }
 
-async function assertSubjectAndTopic(subjectId, topicId) {
+/**
+ * Walk the Post → Subject → Topic hierarchy and return the parent `subject`
+ * so callers can derive/verify dependent fields (e.g. postIds).
+ */
+async function resolveHierarchy(subjectId, topicId) {
   const subject = await subjectRepository.findById(subjectId);
   if (!subject) {
     throw new AppError('Subject not found', HTTP_STATUS.NOT_FOUND);
   }
+  if (!subject.postId) {
+    throw new AppError(
+      'Subject is not linked to any post; cannot tag question.',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  // `isActive === false` means the admin has hidden this subject; we refuse
+  // to attach new questions to it. Legacy docs without the field are treated
+  // as active (schema default).
+  if (subject.isActive === false) {
+    throw new AppError(
+      'Subject is inactive; cannot create or move questions under it.',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
   const topic = await topicRepository.findById(topicId);
   if (!topic) {
     throw new AppError('Topic not found', HTTP_STATUS.NOT_FOUND);
   }
   if (topic.subjectId.toString() !== subjectId.toString()) {
-    throw new AppError('Topic does not belong to the given subject', HTTP_STATUS.BAD_REQUEST);
+    throw new AppError(
+      'Topic does not belong to the given subject',
+      HTTP_STATUS.BAD_REQUEST
+    );
   }
+  if (topic.isActive === false) {
+    throw new AppError(
+      'Topic is inactive; cannot create or move questions under it.',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  return { subject, topic };
 }
 
 async function assertPostIds(postIds) {
@@ -59,6 +90,27 @@ async function assertPostIds(postIds) {
   if (!ok) {
     throw new AppError('One or more post IDs are invalid', HTTP_STATUS.BAD_REQUEST);
   }
+}
+
+/**
+ * Ensure the subject's parent post is present in `postIds`. If the caller
+ * passed an empty array, we derive `[subject.postId]` for them so that every
+ * question is always reachable from its primary post. If they passed a list,
+ * it must include the subject's post.
+ */
+function reconcilePostIds(postIds, subjectPostId) {
+  const provided = Array.isArray(postIds) ? postIds.map(String) : [];
+  const parent = String(subjectPostId);
+  if (provided.length === 0) {
+    return [parent];
+  }
+  if (!provided.includes(parent)) {
+    throw new AppError(
+      'postIds must include the subject\'s parent post',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  return Array.from(new Set(provided));
 }
 
 function parsePagination(query) {
@@ -156,8 +208,9 @@ export const questionService = {
     } = body;
 
     const answerFields = deriveAnswerFields(options, correctAnswerIndex, correctAnswerValue);
-    await assertSubjectAndTopic(subjectId, topicId);
-    await assertPostIds(postIds);
+    const { subject } = await resolveHierarchy(subjectId, topicId);
+    const reconciledPostIds = reconcilePostIds(postIds, subject.postId);
+    await assertPostIds(reconciledPostIds);
 
     const payload = {
       questionText,
@@ -166,7 +219,7 @@ export const questionService = {
       explanation,
       subjectId,
       topicId,
-      postIds,
+      postIds: reconciledPostIds,
       year,
       isActive: true,
     };
@@ -222,10 +275,15 @@ export const questionService = {
     doc.correctAnswerIndex = fields.correctAnswerIndex;
     doc.correctAnswerValue = fields.correctAnswerValue;
 
-    if (patch.subjectId !== undefined || patch.topicId !== undefined) {
-      await assertSubjectAndTopic(doc.subjectId, doc.topicId);
-    }
-    if (patch.postIds !== undefined) {
+    // If subject/topic/postIds are touched, we must re-walk the hierarchy and
+    // re-reconcile postIds so the Post → Subject → Topic invariant holds.
+    const hierarchyTouched =
+      patch.subjectId !== undefined ||
+      patch.topicId !== undefined ||
+      patch.postIds !== undefined;
+    if (hierarchyTouched) {
+      const { subject } = await resolveHierarchy(doc.subjectId, doc.topicId);
+      doc.postIds = reconcilePostIds(doc.postIds, subject.postId);
       await assertPostIds(doc.postIds);
     }
 

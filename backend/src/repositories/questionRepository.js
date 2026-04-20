@@ -27,6 +27,23 @@ export const questionRepository = {
   },
 
   /**
+   * Raw lean fetch by ids — does NOT filter by `isActive`. Returns a trimmed
+   * projection sufficient for hierarchy classification (`_id`, `isActive`,
+   * `subjectId`, `topicId`). Callers that need scoring use `findActiveByIds`.
+   */
+  async findByIdsRaw(ids) {
+    if (!ids?.length) return [];
+    const unique = [...new Set(ids.map(String))];
+    const oids = unique.map((id) => new mongoose.Types.ObjectId(id));
+    return Question.find(
+      { _id: { $in: oids } },
+      { _id: 1, isActive: 1, subjectId: 1, topicId: 1 }
+    )
+      .lean()
+      .exec();
+  },
+
+  /**
    * Active questions whose _id is in `ids`, returned in the same order as `ids`
    * (duplicates preserved; missing/inactive ids are omitted).
    */

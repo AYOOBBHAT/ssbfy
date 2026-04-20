@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   createQuestion,
   getSubjects,
@@ -25,7 +25,8 @@ export default function AddQuestion() {
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
 
-  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [loadingTopics, setLoadingTopics] = useState(false);
   const [metaError, setMetaError] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -36,19 +37,19 @@ export default function AddQuestion() {
     let cancelled = false;
     (async () => {
       try {
-        setLoadingMeta(true);
+        setLoadingSubjects(true);
         setMetaError('');
-        const [subjectsRes, topicsRes] = await Promise.all([
-          getSubjects(),
-          getTopics(),
-        ]);
+        const subjectsRes = await getSubjects();
         if (cancelled) return;
-        setSubjects(Array.isArray(subjectsRes) ? subjectsRes : subjectsRes?.subjects || []);
-        setTopics(Array.isArray(topicsRes) ? topicsRes : topicsRes?.topics || []);
+        setSubjects(
+          Array.isArray(subjectsRes)
+            ? subjectsRes
+            : subjectsRes?.subjects || []
+        );
       } catch (e) {
         if (!cancelled) setMetaError(getApiErrorMessage(e));
       } finally {
-        if (!cancelled) setLoadingMeta(false);
+        if (!cancelled) setLoadingSubjects(false);
       }
     })();
     return () => {
@@ -56,13 +57,32 @@ export default function AddQuestion() {
     };
   }, []);
 
-  // If a topic carries a subjectId, narrow the dropdown to that subject.
-  const filteredTopics = useMemo(() => {
-    if (!form.subjectId) return topics;
-    const hasSubjectLink = topics.some((t) => t?.subjectId);
-    if (!hasSubjectLink) return topics;
-    return topics.filter((t) => String(t.subjectId) === String(form.subjectId));
-  }, [topics, form.subjectId]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!form.subjectId) {
+      setTopics([]);
+      return undefined;
+    }
+    (async () => {
+      try {
+        setLoadingTopics(true);
+        const res = await getTopics({ subjectId: form.subjectId });
+        if (cancelled) return;
+        const list = Array.isArray(res) ? res : res?.topics || [];
+        setTopics(list);
+      } catch (e) {
+        if (!cancelled) {
+          setMetaError(getApiErrorMessage(e));
+          setTopics([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingTopics(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.subjectId]);
 
   function updateField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -144,12 +164,17 @@ export default function AddQuestion() {
         Create a new MCQ. Fields marked * are required.
       </p>
 
-      {loadingMeta ? (
+      {loadingSubjects ? (
         <div className="card">
-          <p className="muted">Loading subjects and topics…</p>
+          <p className="muted">Loading subjects…</p>
         </div>
       ) : metaError ? (
         <div className="alert alert-error">{metaError}</div>
+      ) : subjects.length === 0 ? (
+        <div className="alert alert-error">
+          No subjects found. Create one in{' '}
+          <strong>Manage Subjects &amp; Topics</strong> first.
+        </div>
       ) : null}
 
       <form className="card form" onSubmit={handleSubmit}>
@@ -222,7 +247,7 @@ export default function AddQuestion() {
                 updateField('subjectId', e.target.value);
                 updateField('topicId', '');
               }}
-              disabled={submitting || loadingMeta}
+              disabled={submitting || loadingSubjects}
             >
               <option value="">— Select subject —</option>
               {subjects.map((s) => (
@@ -242,15 +267,28 @@ export default function AddQuestion() {
               className="input"
               value={form.topicId}
               onChange={(e) => updateField('topicId', e.target.value)}
-              disabled={submitting || loadingMeta}
+              disabled={submitting || !form.subjectId || loadingTopics}
             >
-              <option value="">— Select topic —</option>
-              {filteredTopics.map((t) => (
+              <option value="">
+                {!form.subjectId
+                  ? '— Select a subject first —'
+                  : loadingTopics
+                  ? 'Loading topics…'
+                  : topics.length === 0
+                  ? 'No topics for this subject'
+                  : '— Select topic —'}
+              </option>
+              {topics.map((t) => (
                 <option key={t._id} value={t._id}>
                   {t.name || t.title || t._id}
                 </option>
               ))}
             </select>
+            {form.subjectId && !loadingTopics && topics.length === 0 ? (
+              <p className="helper">
+                No topics yet. Add one in Manage Subjects &amp; Topics.
+              </p>
+            ) : null}
           </div>
 
           <div className="form-row">
@@ -300,7 +338,7 @@ export default function AddQuestion() {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={submitting || loadingMeta}
+            disabled={submitting || loadingSubjects}
           >
             {submitting ? 'Saving…' : 'Create Question'}
           </button>

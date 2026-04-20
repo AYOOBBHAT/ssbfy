@@ -5,7 +5,7 @@ const links = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/add-question', label: 'Add Question' },
   { to: '/create-test', label: 'Create Test' },
-  { to: '/topics', label: 'Manage Topics' },
+  { to: '/topics', label: 'Subjects & Topics' },
 ];
 
 export default function Navbar() {

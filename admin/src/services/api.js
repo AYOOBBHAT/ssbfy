@@ -78,15 +78,74 @@ export async function createQuestion(payload) {
   return unwrap(res);
 }
 
-/** List all subjects. */
-export async function getSubjects() {
-  const res = await api.get('/subjects');
+/** List all posts (exams). */
+export async function getPosts() {
+  const res = await api.get('/posts');
   return unwrap(res);
 }
 
-/** List all topics. */
-export async function getTopics() {
-  const res = await api.get('/topics');
+/**
+ * List subjects. Pass `{ postId }` to filter by post, or nothing to list all.
+ * @param {{ postId?: string }} [params]
+ */
+export async function getSubjects(params = {}) {
+  const res = await api.get('/subjects', { params });
+  return unwrap(res);
+}
+
+/**
+ * Create a new subject under a post (admin only).
+ * `postId` is required — the server enforces Post → Subject hierarchy.
+ */
+export async function createSubject({ name, postId, order } = {}) {
+  if (!postId) {
+    throw new Error('postId is required to create a subject.');
+  }
+  const payload = { name, postId };
+  if (typeof order === 'number') payload.order = order;
+  const res = await api.post('/subjects', payload);
+  return unwrap(res);
+}
+
+/**
+ * List topics. Pass `{ subjectId }` to scope to a subject, or nothing to list all.
+ * @param {{ subjectId?: string }} [params]
+ */
+export async function getTopics(params = {}) {
+  const res = await api.get('/topics', { params });
+  return unwrap(res);
+}
+
+/** Create a new topic under a subject (admin only). */
+export async function createTopic({ name, subjectId, order } = {}) {
+  const payload = { name, subjectId };
+  if (typeof order === 'number') payload.order = order;
+  const res = await api.post('/topics', payload);
+  return unwrap(res);
+}
+
+/**
+ * Patch a subject (admin only). Pass any of `name`, `order`, `isActive`.
+ * Fields left `undefined` are not sent and remain unchanged on the server.
+ */
+export async function updateSubject(id, { name, order, isActive } = {}) {
+  if (!id) throw new Error('updateSubject requires an id.');
+  const payload = {};
+  if (name !== undefined) payload.name = name;
+  if (typeof order === 'number') payload.order = order;
+  if (typeof isActive === 'boolean') payload.isActive = isActive;
+  const res = await api.patch(`/subjects/${id}`, payload);
+  return unwrap(res);
+}
+
+/** Patch a topic (admin only). Same shape as `updateSubject`. */
+export async function updateTopic(id, { name, order, isActive } = {}) {
+  if (!id) throw new Error('updateTopic requires an id.');
+  const payload = {};
+  if (name !== undefined) payload.name = name;
+  if (typeof order === 'number') payload.order = order;
+  if (typeof isActive === 'boolean') payload.isActive = isActive;
+  const res = await api.patch(`/topics/${id}`, payload);
   return unwrap(res);
 }
 

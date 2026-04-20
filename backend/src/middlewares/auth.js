@@ -29,6 +29,34 @@ export function authenticate(req, res, next) {
   }
 }
 
+/**
+ * Like `authenticate`, but never rejects: if a valid Bearer token is present,
+ * `req.user` is populated; otherwise the request proceeds as anonymous.
+ *
+ * Useful for endpoints that are public by default but expose extra behavior
+ * to authenticated admins (e.g. listing inactive subjects/topics).
+ */
+export function authOptional(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return next();
+  }
+  const token = header.slice(7);
+  try {
+    const payload = verifyToken(token);
+    if (payload?.sub && ROLE_VALUES.includes(payload?.role)) {
+      req.user = {
+        id: String(payload.sub),
+        role: payload.role,
+      };
+    }
+  } catch {
+    // Silently ignore a bad token — callers that need auth should use
+    // `authenticate` instead, which rejects on invalid tokens.
+  }
+  return next();
+}
+
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {

@@ -13,8 +13,8 @@ const cards = [
   },
   {
     to: '/topics',
-    title: 'Manage Topics',
-    description: 'Add, edit, or remove topics under each subject.',
+    title: 'Subjects & Topics',
+    description: 'Create subjects and add topics under them.',
   },
 ];
 
