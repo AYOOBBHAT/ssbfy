@@ -1,0 +1,235 @@
+import mongoose from 'mongoose';
+import { HTTP_STATUS } from '../constants/httpStatus.js';
+import { AppError } from '../utils/AppError.js';
+import { testRepository } from '../repositories/testRepository.js';
+import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
+import { questionRepository } from '../repositories/questionRepository.js';
+import { resultRepository } from '../repositories/resultRepository.js';
+
+const WEAK_TOPIC_LIMIT = 10;
+
+function normalizeAnswers(answers) {
+  if (!Array.isArray(answers)) {
+    return [];
+  }
+  return answers.map((a) => {
+    const raw = a.selectedOptionIndex;
+    let selectedOptionIndex =
+      raw === null || raw === undefined || raw === '' ? null : Number(raw);
+    if (selectedOptionIndex !== null && Number.isNaN(selectedOptionIndex)) {
+      selectedOptionIndex = null;
+    }
+    return {
+      questionId: new mongoose.Types.ObjectId(a.questionId),
+      selectedOptionIndex,
+    };
+  });
+}
+
+function dedupeQuestionIds(ids) {
+  const seen = new Set();
+  const out = [];
+  for (const id of ids) {
+    const s = id.toString();
+    if (!seen.has(s)) {
+      seen.add(s);
+      out.push(new mongoose.Types.ObjectId(id));
+    }
+  }
+  return out;
+}
+
+function validateAnswerCoverage(attemptQuestionIds, answers) {
+  const allowed = new Set(attemptQuestionIds.map((id) => id.toString()));
+  if (answers.length !== attemptQuestionIds.length) {
+    throw new AppError(
+      `answers must include exactly one entry per question (${attemptQuestionIds.length} required)`,
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  const seen = new Set();
+  for (const a of answers) {
+    const qid = a.questionId.toString();
+    if (!allowed.has(qid)) {
+      throw new AppError('answers contain a questionId not in this attempt', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (seen.has(qid)) {
+      throw new AppError('Duplicate questionId in answers', HTTP_STATUS.BAD_REQUEST);
+    }
+    seen.add(qid);
+  }
+  if (seen.size !== allowed.size) {
+    throw new AppError('answers must cover every question in the attempt', HTTP_STATUS.BAD_REQUEST);
+  }
+}
+
+export const testAttemptService = {
+  async start(userId, testId) {
+    const test = await testRepository.findById(testId);
+    if (!test) {
+      throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (!test.questionIds?.length) {
+      throw new AppError('Test has no questions configured', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const submitted = await testAttemptRepository.findSubmittedByUserAndTest(userId, testId);
+    if (submitted) {
+      throw new AppError('Test already completed', HTTP_STATUS.CONFLICT);
+    }
+
+    const existing = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
+    if (existing) {
+      return {
+        attempt: existing,
+        resumed: true,
+      };
+    }
+
+    const questionIds = dedupeQuestionIds(test.questionIds);
+    if (!questionIds.length) {
+      throw new AppError('Test has no questions configured', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const attempt = await testAttemptRepository.create({
+      userId,
+      testId,
+      questionIds,
+      answers: [],
+      startTime: new Date(),
+    });
+
+    return { attempt, resumed: false };
+  },
+
+  async submit(userId, testId, rawAnswers) {
+    const answers = normalizeAnswers(rawAnswers);
+    const test = await testRepository.findById(testId);
+    if (!test) {
+      throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const submitted = await testAttemptRepository.findSubmittedByUserAndTest(userId, testId);
+    if (submitted) {
+      throw new AppError('Test already submitted', HTTP_STATUS.CONFLICT);
+    }
+
+    const attempt = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
+    if (!attempt) {
+      throw new AppError('No active attempt — start the test first', HTTP_STATUS.NOT_FOUND);
+    }
+
+    if (attempt.userId.toString() !== String(userId)) {
+      throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+    }
+    if (attempt.endTime != null) {
+      throw new AppError('Test already submitted', HTTP_STATUS.CONFLICT);
+    }
+
+    const testQuestionSet = new Set(test.questionIds.map((id) => id.toString()));
+    for (const qid of attempt.questionIds) {
+      if (!testQuestionSet.has(qid.toString())) {
+        throw new AppError(
+          'Attempt snapshot no longer matches this test; start a new attempt',
+          HTTP_STATUS.CONFLICT
+        );
+      }
+    }
+
+    validateAnswerCoverage(attempt.questionIds, answers);
+
+    const questions = await questionRepository.findActiveByIds(attempt.questionIds);
+    const qMap = new Map(questions.map((q) => [q._id.toString(), q]));
+    if (questions.length !== attempt.questionIds.length) {
+      throw new AppError(
+        'Some questions are missing or inactive; cannot score this attempt',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    const answerByQ = new Map(answers.map((a) => [a.questionId.toString(), a]));
+    const negative = Number(test.negativeMarking) || 0;
+    const total = attempt.questionIds.length;
+
+    let correctCount = 0;
+    let rawScore = 0;
+    const topicMistakes = new Map();
+    const correctAnswers = [];
+
+    for (const qid of attempt.questionIds) {
+      const q = qMap.get(qid.toString());
+      if (!q) {
+        throw new AppError('Question not found for this attempt', HTTP_STATUS.BAD_REQUEST);
+      }
+      const ans = answerByQ.get(qid.toString());
+      const selected = ans.selectedOptionIndex;
+      const maxIdx = q.options.length - 1;
+      const selectionValid = Number.isInteger(selected) && selected >= 0 && selected <= maxIdx;
+      const isCorrect = selectionValid && selected === q.correctAnswerIndex;
+
+      correctAnswers.push({
+        questionId: q._id,
+        correctAnswerIndex: q.correctAnswerIndex,
+      });
+
+      if (isCorrect) {
+        correctCount += 1;
+        rawScore += 1;
+      } else {
+        rawScore -= negative;
+        const tid = q.topicId.toString();
+        topicMistakes.set(tid, (topicMistakes.get(tid) || 0) + 1);
+      }
+    }
+
+    const score = Math.max(0, rawScore);
+    const accuracy =
+      total === 0 ? 0 : Math.round(((correctCount / total) * 100 + Number.EPSILON) * 100) / 100;
+
+    const endTime = new Date();
+    const timeTaken = Math.max(
+      0,
+      Math.round((endTime.getTime() - new Date(attempt.startTime).getTime()) / 1000)
+    );
+
+    const weakTopics = [...topicMistakes.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, WEAK_TOPIC_LIMIT)
+      .map(([topicIdStr, count]) => ({
+        topicId: new mongoose.Types.ObjectId(topicIdStr),
+        mistakeCount: count,
+      }));
+
+    const weakTopicIds = weakTopics.map((w) => w.topicId);
+
+    const updated = await testAttemptRepository.finalizeAttempt(attempt._id, userId, testId, {
+      answers,
+      endTime,
+      score,
+      accuracy,
+      timeTaken,
+    });
+
+    if (!updated) {
+      throw new AppError('Test already submitted', HTTP_STATUS.CONFLICT);
+    }
+
+    await resultRepository.create({
+      userId,
+      testId,
+      score,
+      accuracy,
+      weakTopics: weakTopicIds,
+      timeTaken,
+    });
+
+    return {
+      attempt: updated,
+      score,
+      accuracy,
+      timeTaken,
+      weakTopics,
+      correctAnswers,
+    };
+  },
+};
