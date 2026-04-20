@@ -370,13 +370,15 @@ export default function ResultScreen() {
   };
 
   const renderItem = ({ item, index }) => {
-    const { question, userAnswer, correctAnswer } = item;
+    const { question, userAnswer, correctAnswer } = item || {};
     const options = Array.isArray(question?.options) ? question.options : [];
     const explanation =
       typeof question?.explanation === 'string' && question.explanation.trim()
         ? question.explanation
         : null;
     const unanswered = userAnswer == null;
+    const isValidIdx = (n) =>
+      Number.isInteger(n) && n >= 0 && n < options.length;
 
     return (
       <View style={styles.card}>
@@ -385,7 +387,7 @@ export default function ResultScreen() {
         {options.map((opt, i) => (
           <View key={i} style={[styles.optionRow, getOptionStyle(i, correctAnswer, userAnswer)]}>
             <Text style={styles.optionText}>
-              {`${String.fromCharCode(65 + i)}. ${opt}`}
+              {`${String.fromCharCode(65 + i)}. ${opt ?? ''}`}
             </Text>
           </View>
         ))}
@@ -393,13 +395,15 @@ export default function ResultScreen() {
           Your answer:{' '}
           {unanswered
             ? 'Not answered'
-            : `${String.fromCharCode(65 + userAnswer)}. ${options[userAnswer] ?? ''}`}
+            : isValidIdx(userAnswer)
+            ? `${String.fromCharCode(65 + userAnswer)}. ${options[userAnswer] ?? ''}`
+            : '—'}
         </Text>
         <Text style={styles.metaLine}>
           Correct answer:{' '}
-          {correctAnswer == null
-            ? '—'
-            : `${String.fromCharCode(65 + correctAnswer)}. ${options[correctAnswer] ?? ''}`}
+          {isValidIdx(correctAnswer)
+            ? `${String.fromCharCode(65 + correctAnswer)}. ${options[correctAnswer] ?? ''}`
+            : '—'}
         </Text>
         {explanation ? (
           <Text style={styles.explanation}>Explanation: {explanation}</Text>

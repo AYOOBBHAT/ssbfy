@@ -6,7 +6,7 @@ import api from './api.js';
  */
 export async function getDailyPractice() {
   const { data } = await api.get('/daily-practice');
-  return data.data;
+  return data?.data ?? { questions: [] };
 }
 
 /**
@@ -15,5 +15,5 @@ export async function getDailyPractice() {
  */
 export async function completeDailyPractice() {
   const { data } = await api.post('/daily-practice/complete');
-  return data.data;
+  return data?.data ?? {};
 }

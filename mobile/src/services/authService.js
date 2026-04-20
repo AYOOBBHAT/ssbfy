@@ -5,7 +5,7 @@ import api, { getApiErrorMessage } from './api.js';
  */
 export async function signup({ name, email, password }) {
   const { data } = await api.post('/auth/signup', { name, email, password });
-  return data.data;
+  return data?.data ?? {};
 }
 
 /**
@@ -13,7 +13,7 @@ export async function signup({ name, email, password }) {
  */
 export async function login({ email, password }) {
   const { data } = await api.post('/auth/login', { email, password });
-  return data.data;
+  return data?.data ?? {};
 }
 
 export { getApiErrorMessage };

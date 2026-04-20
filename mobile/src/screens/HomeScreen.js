@@ -49,15 +49,23 @@ export default function HomeScreen() {
   );
 
   const handleStartTest = async (item) => {
-    const testId = item._id;
+    const testId = item?._id;
+    if (!testId) {
+      setError('This test is unavailable.');
+      return;
+    }
     setError(null);
     setStartingId(testId);
     try {
-      const data = await startTest(testId);
+      const data = (await startTest(testId)) || {};
+      if (!data.attempt) {
+        setError('Could not start this test. Please try again.');
+        return;
+      }
       navigation.navigate('Test', {
         testId,
         attempt: data.attempt,
-        durationMinutes: item.duration,
+        durationMinutes: item?.duration,
       });
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -191,15 +199,18 @@ export default function HomeScreen() {
   );
 
   const renderTest = ({ item }) => {
+    const itemId = item?._id;
     const isStarting =
-      startingId != null && String(startingId) === String(item._id);
+      startingId != null && String(startingId) === String(itemId);
+    const title = item?.title || 'Untitled Test';
+    const duration = Number(item?.duration) || 0;
     return (
       <View style={styles.card}>
         <View style={styles.testRow}>
           <View style={styles.testInfo}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
+            <Text style={styles.cardTitle}>{title}</Text>
             <Text style={styles.cardSubtitle}>
-              Duration: {item.duration} min
+              Duration: {duration} min
             </Text>
           </View>
           <Pressable
@@ -225,7 +236,7 @@ export default function HomeScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
       data={loading ? [] : tests}
-      keyExtractor={(item) => String(item._id)}
+      keyExtractor={(item, idx) => String(item?._id ?? idx)}
       renderItem={renderTest}
       ListHeaderComponent={renderHeader}
       ListFooterComponent={renderFooter}

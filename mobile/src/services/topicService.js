@@ -24,7 +24,7 @@ export async function getTopics(opts = {}) {
   topicsInFlight = (async () => {
     try {
       const { data } = await api.get('/topics');
-      topicsCache = data.data;
+      topicsCache = data?.data ?? { topics: [] };
       return topicsCache;
     } finally {
       topicsInFlight = null;

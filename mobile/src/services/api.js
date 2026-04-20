@@ -4,7 +4,7 @@ import axios from 'axios';
  * API base URL (LAN IP + `/api`). Change once for the whole app.
  * Do not use localhost — devices cannot reach your machine's loopback.
  */
-const API_BASE_URL = 'http://192.168.1.11:5000/api';
+const API_BASE_URL = 'https://ssbfy.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -14,11 +14,16 @@ const api = axios.create({
   },
 });
 
-/** In-memory JWT; synced from AuthContext via setAuthToken. */
+/** In-memory JWT; synced from AuthContext via setAuthToken / clearAuthToken. */
 let authToken = null;
 
 export function setAuthToken(token) {
   authToken = token ?? null;
+}
+
+/** Explicit clear — preferred for logout paths for readability. */
+export function clearAuthToken() {
+  authToken = null;
 }
 
 export function getAuthToken() {

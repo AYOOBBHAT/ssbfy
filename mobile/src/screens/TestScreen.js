@@ -166,16 +166,19 @@ export default function TestScreen() {
 
   const navigateToResult = useCallback(
     (data) => {
+      const payload = data || {};
       navigation.navigate('Result', {
-        score: data.score,
-        accuracy: data.accuracy,
-        timeTaken: data.timeTaken,
-        weakTopics: data.weakTopics ?? [],
+        score: payload.score ?? 0,
+        accuracy: payload.accuracy ?? 0,
+        timeTaken: payload.timeTaken ?? 0,
+        weakTopics: Array.isArray(payload.weakTopics) ? payload.weakTopics : [],
         totalQuestions: questionIds.length,
         attemptedQuestions: attemptedCount,
         questions: questions.filter((q) => q !== undefined),
         userAnswers: answers,
-        correctAnswers: data.correctAnswers ?? [],
+        correctAnswers: Array.isArray(payload.correctAnswers)
+          ? payload.correctAnswers
+          : [],
       });
     },
     [navigation, questionIds.length, attemptedCount, questions, answers]
@@ -466,8 +469,10 @@ export default function TestScreen() {
         Question {index + 1} / {total}
       </Text>
       <ScrollView style={styles.scroll}>
-        <Text style={styles.question}>{question.questionText}</Text>
-        {Array.isArray(question.options) &&
+        <Text style={styles.question}>
+          {question?.questionText || '(question unavailable)'}
+        </Text>
+        {Array.isArray(question?.options) &&
           question.options.map((opt, i) => {
             const isSelected = selected === i;
             return (
@@ -492,7 +497,7 @@ export default function TestScreen() {
                 <Text
                   style={[styles.optionText, isSelected && styles.optionTextSelected]}
                 >
-                  {`${String.fromCharCode(65 + i)}. ${opt}`}
+                  {`${String.fromCharCode(65 + i)}. ${opt ?? ''}`}
                 </Text>
               </Pressable>
             );

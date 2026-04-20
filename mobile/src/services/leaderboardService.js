@@ -6,5 +6,5 @@ import api from './api.js';
  */
 export async function getLeaderboard() {
   const { data } = await api.get('/leaderboard');
-  return data.data;
+  return data?.data ?? { leaderboard: [] };
 }

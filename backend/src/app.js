@@ -10,7 +10,21 @@ import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
+
+// CORS — open to the world for API access.
+// - Mobile (React Native) clients do not send an Origin header at all, so CORS
+//   is effectively bypassed for them; this config is mainly for web clients.
+// - We use Bearer tokens (not cookies), so `credentials: true` is intentionally
+//   omitted — it is incompatible with origin: "*" per the CORS spec.
+// - The `cors` package handles OPTIONS preflight automatically.
+app.use(
+  cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 

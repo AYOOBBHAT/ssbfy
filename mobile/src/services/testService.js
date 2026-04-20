@@ -3,13 +3,13 @@ import api from './api.js';
 /** @returns {Promise<{ tests: object[] }>} */
 export async function getTests() {
   const { data } = await api.get('/tests');
-  return data.data;
+  return data?.data ?? { tests: [] };
 }
 
 /** @returns {Promise<{ attempt: object, resumed: boolean }>} */
 export async function startTest(testId) {
   const { data } = await api.post(`/tests/${testId}/start`);
-  return data.data;
+  return data?.data ?? {};
 }
 
 /**
@@ -19,7 +19,7 @@ export async function startTest(testId) {
  */
 export async function submitTest(testId, answers) {
   const { data } = await api.post(`/tests/${testId}/submit`, { answers });
-  return data.data;
+  return data?.data ?? {};
 }
 
 /**
@@ -32,5 +32,5 @@ export async function getQuestionsByTopic(topicId, opts = {}) {
   const { data } = await api.get('/questions', {
     params: { topicId, limit },
   });
-  return data.data;
+  return data?.data ?? { questions: [] };
 }

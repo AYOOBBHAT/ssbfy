@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import * as authService from '../services/authService';
-import api, { setAuthToken } from '../services/api';
+import api, { setAuthToken, clearAuthToken } from '../services/api';
 import { clearTopicsCache } from '../services/topicService';
 
 const STORAGE_KEY = '@ssbfy/auth_session';
@@ -62,7 +62,7 @@ export function AuthProvider({ children }) {
               await clearStoredSession();
               setToken(null);
               setUser(null);
-              setAuthToken(null);
+              clearAuthToken();
             }
           }
         }
@@ -86,7 +86,12 @@ export function AuthProvider({ children }) {
     submittingRef.current = true;
     setAuthSubmitting(true);
     try {
-      const { user: u, token: t } = await authService.login({ email, password });
+      const res = (await authService.login({ email, password })) || {};
+      const u = res.user;
+      const t = res.token;
+      if (typeof t !== 'string' || !t || !u) {
+        throw new Error('Invalid login response from server.');
+      }
       setUser(u);
       setToken(t);
       setAuthToken(t);
@@ -105,7 +110,12 @@ export function AuthProvider({ children }) {
     submittingRef.current = true;
     setAuthSubmitting(true);
     try {
-      const { user: u, token: t } = await authService.signup({ name, email, password });
+      const res = (await authService.signup({ name, email, password })) || {};
+      const u = res.user;
+      const t = res.token;
+      if (typeof t !== 'string' || !t || !u) {
+        throw new Error('Invalid signup response from server.');
+      }
       setUser(u);
       setToken(t);
       setAuthToken(t);
@@ -140,7 +150,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     setUser(null);
     setToken(null);
-    setAuthToken(null);
+    clearAuthToken();
     clearTopicsCache();
     await clearStoredSession();
   }, []);
