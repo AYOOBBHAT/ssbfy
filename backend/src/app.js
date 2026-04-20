@@ -18,6 +18,13 @@ app.get('/health', (req, res) => {
   res.status(200).json({ success: true, message: 'OK', uptime: process.uptime() });
 });
 
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'SSBFY API is running 🚀',
+  });
+});
+
 app.use('/api', apiRoutes);
 
 app.use(notFoundHandler);
