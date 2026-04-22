@@ -85,6 +85,18 @@ export async function getPosts() {
 }
 
 /**
+ * Create a new post (admin only). `slug` is optional — the server derives it
+ * from `name` when missing. Returns the created post under `{ post }`.
+ */
+export async function createPost({ name, slug, description } = {}) {
+  const payload = { name };
+  if (slug) payload.slug = slug;
+  if (description) payload.description = description;
+  const res = await api.post('/posts', payload);
+  return unwrap(res);
+}
+
+/**
  * List subjects. Pass `{ postId }` to filter by post, or nothing to list all.
  * @param {{ postId?: string }} [params]
  */

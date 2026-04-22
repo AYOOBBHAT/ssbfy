@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  createPost,
   createSubject,
   createTopic,
   getPosts,
@@ -56,6 +57,13 @@ export default function ManageTopics() {
   // Post selection drives both the "create subject under this post" form
   // and the "list subjects scoped to this post" section below.
   const [selectedPostId, setSelectedPostId] = useState('');
+
+  // ------ Create Post ------
+  const [postName, setPostName] = useState('');
+  const [postDescription, setPostDescription] = useState('');
+  const [creatingPost, setCreatingPost] = useState(false);
+  const [postMsg, setPostMsg] = useState('');
+  const [postErr, setPostErr] = useState('');
 
   // ------ Subjects (scoped to selectedPostId) ------
   const [subjects, setSubjects] = useState([]);
@@ -173,6 +181,48 @@ export default function ManageTopics() {
   );
 
   // ------ Handlers ------
+  async function handleCreatePost(e) {
+    e.preventDefault();
+    if (creatingPost) return;
+    setPostMsg('');
+    setPostErr('');
+
+    const name = postName.trim();
+    if (!name) {
+      setPostErr('Post name is required.');
+      return;
+    }
+    if (name.length < 2) {
+      setPostErr('Post name must be at least 2 characters.');
+      return;
+    }
+
+    try {
+      setCreatingPost(true);
+      const res = await createPost({
+        name,
+        description: postDescription.trim() || undefined,
+      });
+      const created = res?.post;
+
+      setPostMsg(`Post "${name}" created.`);
+      setPostName('');
+      setPostDescription('');
+
+      // Refresh the posts list so the new post appears in the dropdown
+      // immediately, then auto-select it so the admin can proceed straight
+      // to creating subjects under it.
+      await loadPosts();
+      if (created?._id) {
+        setSelectedPostId(String(created._id));
+      }
+    } catch (err) {
+      setPostErr(getApiErrorMessage(err));
+    } finally {
+      setCreatingPost(false);
+    }
+  }
+
   async function handleCreateSubject(e) {
     e.preventDefault();
     if (creatingSubject) return;
@@ -359,6 +409,46 @@ export default function ManageTopics() {
         post to create subjects under it, then add topics.
       </p>
 
+      {/* ---------------- Create Post ---------------- */}
+      <section className="card form">
+        <h2 className="section-heading">Create Post</h2>
+        <p className="helper">
+          Posts are the top level of the hierarchy (e.g. <em>JE</em>,{' '}
+          <em>Patwari</em>). Create one, then add subjects under it below.
+        </p>
+
+        {postMsg ? <div className="alert alert-success">{postMsg}</div> : null}
+        {postErr ? <div className="alert alert-error">{postErr}</div> : null}
+
+        <form onSubmit={handleCreatePost} className="inline-form">
+          <input
+            type="text"
+            className="input"
+            placeholder="Post name (e.g. JKSSB JE)"
+            value={postName}
+            onChange={(e) => setPostName(e.target.value)}
+            disabled={creatingPost}
+            maxLength={100}
+          />
+          <input
+            type="text"
+            className="input"
+            placeholder="Description (optional)"
+            value={postDescription}
+            onChange={(e) => setPostDescription(e.target.value)}
+            disabled={creatingPost}
+            maxLength={500}
+          />
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={creatingPost || !postName.trim()}
+          >
+            {creatingPost ? 'Creating…' : 'Create Post'}
+          </button>
+        </form>
+      </section>
+
       {/* ---------------- Select Post ---------------- */}
       <section className="card form">
         <h2 className="section-heading">Select Post</h2>
@@ -366,7 +456,7 @@ export default function ManageTopics() {
         {postsError ? <div className="alert alert-error">{postsError}</div> : null}
         {noPosts ? (
           <div className="alert alert-error">
-            No posts found. Seed posts first — subjects cannot exist without a
+            No posts yet. Create one above — subjects cannot exist without a
             parent post.
           </div>
         ) : null}
