@@ -1,0 +1,463 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ScrollView,
+} from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { getApiErrorMessage } from '../services/api';
+import { getPosts } from '../services/pdfService';
+import {
+  getNotes,
+  getSubjectsForPost,
+  getTopicsForSubject,
+  previewOf,
+} from '../services/noteService';
+import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
+import { colors } from '../theme/colors';
+
+/**
+ * Browse structured (text) notes.
+ *
+ * Navigation contract:
+ *   - Can be opened from Home with no params — the screen then drives a
+ *     3-step cascading picker (Post → Subject → Topic).
+ *   - Can be deep-linked with `{ postId, subjectId, topicId }` route
+ *     params to preselect any subset of the hierarchy.
+ *
+ * Data flow:
+ *   1. Load posts on mount (cached in pdfService).
+ *   2. When a post is selected, load its subjects.
+ *   3. When a subject is selected, load its topics.
+ *   4. Whenever any filter changes we call `getNotes(filter)` — the
+ *      backend does the filtering so this scales to large datasets.
+ *
+ * Tapping a note pushes `NoteDetail` with the full note object so the
+ * detail screen renders immediately without a second network round-trip.
+ */
+export default function NotesListScreen() {
+  const navigation = useNavigation();
+  const route = useRoute();
+  const initial = route?.params || {};
+
+  // ---- Selection state ----
+  const [selectedPostId, setSelectedPostId] = useState(initial.postId || '');
+  const [selectedSubjectId, setSelectedSubjectId] = useState(
+    initial.subjectId || ''
+  );
+  const [selectedTopicId, setSelectedTopicId] = useState(
+    initial.topicId || ''
+  );
+
+  // ---- Reference data ----
+  const [posts, setPosts] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [topics, setTopics] = useState([]);
+
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState(null);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+
+  // ---- Notes list ----
+  const [notes, setNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState(null);
+
+  // ---- Load posts once -------------------------------------------------
+  const loadPosts = useCallback(async () => {
+    setPostsError(null);
+    setPostsLoading(true);
+    try {
+      const data = await getPosts({ force: true });
+      const list = Array.isArray(data?.posts) ? data.posts : [];
+      setPosts(list);
+      // If nothing was preselected, pick the first post so the screen
+      // isn't a blank chip row on first open.
+      setSelectedPostId((prev) => {
+        if (prev) return prev;
+        return list[0]?._id || '';
+      });
+    } catch (e) {
+      setPostsError(getApiErrorMessage(e));
+    } finally {
+      setPostsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
+
+  // ---- Load subjects whenever post changes ----------------------------
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedPostId) {
+      setSubjects([]);
+      return undefined;
+    }
+    (async () => {
+      try {
+        setSubjectsLoading(true);
+        const data = await getSubjectsForPost(selectedPostId);
+        if (cancelled) return;
+        setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
+      } catch {
+        if (!cancelled) setSubjects([]);
+      } finally {
+        if (!cancelled) setSubjectsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPostId]);
+
+  // ---- Load topics whenever subject changes ---------------------------
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedSubjectId) {
+      setTopics([]);
+      return undefined;
+    }
+    (async () => {
+      try {
+        setTopicsLoading(true);
+        const data = await getTopicsForSubject(selectedSubjectId);
+        if (cancelled) return;
+        setTopics(Array.isArray(data?.topics) ? data.topics : []);
+      } catch {
+        if (!cancelled) setTopics([]);
+      } finally {
+        if (!cancelled) setTopicsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSubjectId]);
+
+  // ---- Load notes whenever any filter changes -------------------------
+  const loadNotes = useCallback(async () => {
+    // No post selected means no meaningful list to show yet.
+    if (!selectedPostId) {
+      setNotes([]);
+      return;
+    }
+    setNotesError(null);
+    setNotesLoading(true);
+    try {
+      const data = await getNotes({
+        postId: selectedPostId,
+        subjectId: selectedSubjectId || undefined,
+        topicId: selectedTopicId || undefined,
+      });
+      setNotes(Array.isArray(data?.notes) ? data.notes : []);
+    } catch (e) {
+      setNotesError(getApiErrorMessage(e));
+      setNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  }, [selectedPostId, selectedSubjectId, selectedTopicId]);
+
+  useEffect(() => {
+    loadNotes();
+  }, [loadNotes]);
+
+  // ---- Handlers -------------------------------------------------------
+
+  const activePosts = useMemo(
+    () => posts.filter((p) => p?.isActive !== false),
+    [posts]
+  );
+
+  function pickPost(id) {
+    setSelectedPostId(id);
+    setSelectedSubjectId('');
+    setSelectedTopicId('');
+  }
+
+  function pickSubject(id) {
+    setSelectedSubjectId((prev) => (prev === id ? '' : id));
+    setSelectedTopicId('');
+  }
+
+  function pickTopic(id) {
+    setSelectedTopicId((prev) => (prev === id ? '' : id));
+  }
+
+  const openNote = (note) => {
+    if (!note) return;
+    navigation.navigate('NoteDetail', { note });
+  };
+
+  // ---- Render helpers -------------------------------------------------
+
+  const renderChipRow = ({ label, items, selectedId, onSelect, loading, emptyText }) => {
+    if (loading) {
+      return (
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionTitle}>{label}</Text>
+          <View style={styles.chipsFallback}>
+            <LoadingState label={`Loading ${label.toLowerCase()}...`} compact />
+          </View>
+        </View>
+      );
+    }
+    if (!items || items.length === 0) {
+      return (
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionTitle}>{label}</Text>
+          <View style={styles.chipsFallback}>
+            <EmptyState title={emptyText} emoji="📭" compact />
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.sectionBlock}>
+        <Text style={styles.sectionTitle}>{label}</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
+          {items.map((it) => {
+            const active = String(it._id) === String(selectedId);
+            return (
+              <Pressable
+                key={it._id}
+                onPress={() => onSelect(it._id)}
+                style={({ pressed }) => [
+                  styles.chip,
+                  active && styles.chipActive,
+                  pressed && styles.btnPressed,
+                ]}
+              >
+                <Text
+                  style={[styles.chipText, active && styles.chipTextActive]}
+                  numberOfLines={1}
+                >
+                  {it?.name || it?.slug || 'Untitled'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderNote = ({ item }) => {
+    const title = item?.title || 'Untitled note';
+    const preview = previewOf(item?.content, 100);
+    return (
+      <Pressable
+        onPress={() => openNote(item)}
+        style={({ pressed }) => [styles.noteCard, pressed && styles.btnPressed]}
+      >
+        <Text style={styles.noteTitle} numberOfLines={2}>
+          {title}
+        </Text>
+        {preview ? (
+          <Text style={styles.notePreview} numberOfLines={2}>
+            {preview}
+          </Text>
+        ) : null}
+      </Pressable>
+    );
+  };
+
+  const renderNotesBody = () => {
+    if (!selectedPostId) {
+      return (
+        <View style={styles.card}>
+          <EmptyState
+            title="Pick a post"
+            subtitle="Select a post above to see its notes."
+            emoji="👆"
+            compact
+          />
+        </View>
+      );
+    }
+    if (notesLoading) {
+      return (
+        <View style={styles.card}>
+          <LoadingState label="Loading notes..." compact />
+        </View>
+      );
+    }
+    if (notesError) {
+      return (
+        <View style={styles.card}>
+          <ErrorState message={notesError} onRetry={loadNotes} compact />
+        </View>
+      );
+    }
+    if (notes.length === 0) {
+      return (
+        <View style={styles.card}>
+          <EmptyState
+            title="No notes available"
+            subtitle={
+              selectedTopicId
+                ? 'No notes for this topic yet.'
+                : selectedSubjectId
+                ? 'No notes for this subject yet.'
+                : 'Try narrowing the filters or check back later.'
+            }
+            emoji="📝"
+            compact
+          />
+        </View>
+      );
+    }
+    return (
+      <FlatList
+        data={notes}
+        keyExtractor={(item, idx) => String(item?._id ?? idx)}
+        renderItem={renderNote}
+        scrollEnabled={false}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        contentContainerStyle={styles.listContent}
+      />
+    );
+  };
+
+  // ---- Render ---------------------------------------------------------
+
+  // Post row gets its own error/empty fallback since it's loaded via the
+  // shared (cached) getPosts helper.
+  const renderPostRow = () => {
+    if (postsLoading) {
+      return (
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionTitle}>Post</Text>
+          <View style={styles.chipsFallback}>
+            <LoadingState label="Loading posts..." compact />
+          </View>
+        </View>
+      );
+    }
+    if (postsError) {
+      return (
+        <View style={styles.sectionBlock}>
+          <Text style={styles.sectionTitle}>Post</Text>
+          <View style={styles.chipsFallback}>
+            <ErrorState message={postsError} onRetry={loadPosts} compact />
+          </View>
+        </View>
+      );
+    }
+    return renderChipRow({
+      label: 'Post',
+      items: activePosts,
+      selectedId: selectedPostId,
+      onSelect: pickPost,
+      loading: false,
+      emptyText: 'No posts yet',
+    });
+  };
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {renderPostRow()}
+
+      {selectedPostId
+        ? renderChipRow({
+            label: 'Subject',
+            items: subjects,
+            selectedId: selectedSubjectId,
+            onSelect: pickSubject,
+            loading: subjectsLoading,
+            emptyText: 'No subjects for this post',
+          })
+        : null}
+
+      {selectedSubjectId
+        ? renderChipRow({
+            label: 'Topic',
+            items: topics,
+            selectedId: selectedTopicId,
+            onSelect: pickTopic,
+            loading: topicsLoading,
+            emptyText: 'No topics for this subject',
+          })
+        : null}
+
+      <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Notes</Text>
+      {renderNotesBody()}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: 16, paddingBottom: 32 },
+
+  sectionBlock: { marginBottom: 12 },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.muted,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Chips
+  chipsRow: { flexDirection: 'row', paddingBottom: 4 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 8,
+    maxWidth: 220,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: colors.textOnPrimary },
+  chipsFallback: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  // Note list items
+  listContent: { paddingBottom: 4 },
+  noteCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  noteTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
+  notePreview: { fontSize: 13, color: colors.muted, marginTop: 6, lineHeight: 18 },
+
+  btnPressed: { opacity: 0.8 },
+});

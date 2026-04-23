@@ -171,6 +171,41 @@ export default function HomeScreen() {
 
   const renderFooter = () => (
     <View>
+      <Text style={styles.sectionTitle}>Study Material</Text>
+      <Pressable
+        onPress={() => navigation.navigate('NotesList')}
+        style={({ pressed }) => [
+          styles.leaderboardCard,
+          pressed && styles.btnPressed,
+        ]}
+      >
+        <Text style={styles.leaderboardEmoji}>📝</Text>
+        <View style={styles.leaderboardTextBlock}>
+          <Text style={styles.leaderboardTitle}>Notes</Text>
+          <Text style={styles.leaderboardSubtitle}>
+            Read topic-wise notes by subject.
+          </Text>
+        </View>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => navigation.navigate('PdfList')}
+        style={({ pressed }) => [
+          styles.leaderboardCard,
+          pressed && styles.btnPressed,
+        ]}
+      >
+        <Text style={styles.leaderboardEmoji}>📄</Text>
+        <View style={styles.leaderboardTextBlock}>
+          <Text style={styles.leaderboardTitle}>PDF Notes</Text>
+          <Text style={styles.leaderboardSubtitle}>
+            Download full PDF study material.
+          </Text>
+        </View>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
+
       <Text style={styles.sectionTitle}>Leaderboard</Text>
       <Pressable
         onPress={() => navigation.navigate('Leaderboard')}

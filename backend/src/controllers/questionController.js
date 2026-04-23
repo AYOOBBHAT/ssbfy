@@ -23,6 +23,15 @@ export const questionController = {
     return sendSuccess(res, { question }, 'Question');
   }),
 
+  weakPractice: asyncHandler(async (req, res) => {
+    // `topicIdList` was normalised by the validator from either a
+    // comma-separated string or a repeated query param.
+    const topicIds = req.query.topicIdList || [];
+    const limit = req.query.limit ?? 10;
+    const { questions } = await questionService.weakPractice({ topicIds, limit });
+    return sendSuccess(res, { questions }, 'Weak-topic practice questions');
+  }),
+
   create: asyncHandler(async (req, res) => {
     const question = await questionService.create(req.body);
     return sendCreated(res, { question }, 'Question created');

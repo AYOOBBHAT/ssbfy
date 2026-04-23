@@ -5,6 +5,8 @@ import AdminLayout from './components/AdminLayout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import AddQuestion from './pages/AddQuestion.jsx';
+import AddNote from './pages/AddNote.jsx';
+import ManageNotes from './pages/ManageNotes.jsx';
 import CreateTest from './pages/CreateTest.jsx';
 import ManageTopics from './pages/ManageTopics.jsx';
 import './App.css';
@@ -26,6 +28,8 @@ export default function App() {
           >
             <Route path="/" element={<Dashboard />} />
             <Route path="/add-question" element={<AddQuestion />} />
+            <Route path="/add-note" element={<AddNote />} />
+            <Route path="/manage-notes" element={<ManageNotes />} />
             <Route path="/create-test" element={<CreateTest />} />
             <Route path="/topics" element={<ManageTopics />} />
           </Route>

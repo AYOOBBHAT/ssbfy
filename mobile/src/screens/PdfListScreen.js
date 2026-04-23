@@ -1,0 +1,389 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ScrollView,
+  Alert,
+} from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { useRoute } from '@react-navigation/native';
+import { getApiErrorMessage } from '../services/api';
+import {
+  formatFileSize,
+  getPdfNotes,
+  getPosts,
+  resolvePdfUrl,
+} from '../services/pdfService';
+import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
+import { colors } from '../theme/colors';
+
+/**
+ * Browse study PDFs scoped by Post.
+ *
+ * Flow:
+ *   1. Load posts → let the user pick one (or accept the `postId` passed
+ *      via route params, when we came here from an "X Notes" button).
+ *   2. Whenever the selected post changes, fetch `/notes/pdfs?postId=…`.
+ *   3. Tap a PDF → open `fileUrl` in an in-app browser via
+ *      `WebBrowser.openBrowserAsync`. On Android this uses a Chrome
+ *      Custom Tab, on iOS an SFSafariViewController — both render PDFs
+ *      inline and keep the user inside our app (the browser sheet
+ *      slides over, not replaces, the app). This avoids the native
+ *      module churn `react-native-pdf` would demand (prebuild + dev
+ *      client + loss of Expo Go support).
+ */
+export default function PdfListScreen() {
+  const route = useRoute();
+  const initialPostId = route?.params?.postId || null;
+
+  const [posts, setPosts] = useState([]);
+  const [selectedPostId, setSelectedPostId] = useState(initialPostId);
+
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState(null);
+
+  const [pdfs, setPdfs] = useState([]);
+  const [pdfsLoading, setPdfsLoading] = useState(false);
+  const [pdfsError, setPdfsError] = useState(null);
+
+  const [openingId, setOpeningId] = useState(null);
+
+  // ---- Posts -------------------------------------------------------------
+
+  const loadPosts = useCallback(async () => {
+    setPostsError(null);
+    setPostsLoading(true);
+    try {
+      const data = await getPosts({ force: true });
+      const list = Array.isArray(data?.posts) ? data.posts : [];
+      setPosts(list);
+      // Auto-select the first post the first time we see them so the
+      // screen isn't empty on mount. Route params win if present.
+      setSelectedPostId((prev) => {
+        if (prev) return prev;
+        return list[0]?._id || null;
+      });
+    } catch (e) {
+      setPostsError(getApiErrorMessage(e));
+    } finally {
+      setPostsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
+
+  // ---- PDFs --------------------------------------------------------------
+
+  const loadPdfs = useCallback(async () => {
+    // A post must be picked before we can list. This is guarded by the
+    // UI, but we no-op defensively if called without one.
+    if (!selectedPostId) {
+      setPdfs([]);
+      return;
+    }
+    setPdfsError(null);
+    setPdfsLoading(true);
+    try {
+      const data = await getPdfNotes(selectedPostId);
+      setPdfs(Array.isArray(data?.pdfs) ? data.pdfs : []);
+    } catch (e) {
+      setPdfsError(getApiErrorMessage(e));
+      setPdfs([]);
+    } finally {
+      setPdfsLoading(false);
+    }
+  }, [selectedPostId]);
+
+  useEffect(() => {
+    loadPdfs();
+  }, [loadPdfs]);
+
+  // ---- Actions -----------------------------------------------------------
+
+  /**
+   * Open the PDF inside the app using `expo-web-browser`. On Android
+   * this materialises as a Chrome Custom Tab, on iOS as an
+   * SFSafariViewController — both render Cloudinary-hosted PDFs
+   * directly, keep the user "inside" our app, and return control here
+   * when the sheet is dismissed.
+   *
+   * The toolbar colours are wired to our brand so the sheet doesn't
+   * look like a foreign window. `presentationStyle: 'pageSheet'` is an
+   * iOS-only hint that gives the modal rounded top corners on iOS 13+;
+   * it's ignored on Android.
+   */
+  const handleOpenPdf = async (pdf) => {
+    const id = pdf?._id;
+    const url = resolvePdfUrl(pdf?.fileUrl);
+    if (!url) {
+      Alert.alert('Cannot open', 'This PDF has no valid link.');
+      return;
+    }
+    setOpeningId(id);
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        toolbarColor: colors.primary,
+        controlsColor: colors.textOnPrimary,
+        // iOS reader mode is useful for HTML but irrelevant for PDFs,
+        // so we leave it off to avoid an unnecessary "AA" button.
+        enableBarCollapsing: true,
+        showTitle: true,
+        dismissButtonStyle: 'close',
+        presentationStyle:
+          WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
+      });
+    } catch (err) {
+      Alert.alert(
+        'Could not open PDF',
+        err?.message || 'Unable to open the in-app browser for this file.'
+      );
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
+  // ---- Render helpers ----------------------------------------------------
+
+  const activePosts = useMemo(
+    () => posts.filter((p) => p?.isActive !== false),
+    [posts]
+  );
+
+  const renderPostChips = () => {
+    if (postsLoading) {
+      return (
+        <View style={styles.chipsFallback}>
+          <LoadingState label="Loading posts..." compact />
+        </View>
+      );
+    }
+    if (postsError) {
+      return (
+        <View style={styles.chipsFallback}>
+          <ErrorState message={postsError} onRetry={loadPosts} compact />
+        </View>
+      );
+    }
+    if (activePosts.length === 0) {
+      return (
+        <View style={styles.chipsFallback}>
+          <EmptyState
+            title="No posts yet"
+            subtitle="Posts (exams) appear here once an admin creates them."
+            emoji="📚"
+            compact
+          />
+        </View>
+      );
+    }
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipsRow}
+      >
+        {activePosts.map((p) => {
+          const active = String(p._id) === String(selectedPostId);
+          return (
+            <Pressable
+              key={p._id}
+              onPress={() => setSelectedPostId(p._id)}
+              style={({ pressed }) => [
+                styles.chip,
+                active && styles.chipActive,
+                pressed && styles.btnPressed,
+              ]}
+            >
+              <Text
+                style={[styles.chipText, active && styles.chipTextActive]}
+                numberOfLines={1}
+              >
+                {p?.name || p?.slug || 'Untitled'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
+  const renderPdfBody = () => {
+    if (!selectedPostId) {
+      return (
+        <View style={styles.card}>
+          <EmptyState
+            title="Pick a post"
+            subtitle="Select a post above to see its PDF notes."
+            emoji="👆"
+            compact
+          />
+        </View>
+      );
+    }
+    if (pdfsLoading) {
+      return (
+        <View style={styles.card}>
+          <LoadingState label="Loading PDFs..." compact />
+        </View>
+      );
+    }
+    if (pdfsError) {
+      return (
+        <View style={styles.card}>
+          <ErrorState message={pdfsError} onRetry={loadPdfs} compact />
+        </View>
+      );
+    }
+    if (pdfs.length === 0) {
+      return (
+        <View style={styles.card}>
+          <EmptyState
+            title="No PDFs yet"
+            subtitle="Check back soon — new study material is added regularly."
+            emoji="📄"
+            compact
+          />
+        </View>
+      );
+    }
+    return (
+      <FlatList
+        data={pdfs}
+        keyExtractor={(item, idx) => String(item?._id ?? idx)}
+        renderItem={renderPdf}
+        scrollEnabled={false}
+        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+      />
+    );
+  };
+
+  const renderPdf = ({ item }) => {
+    const title = item?.title || item?.fileName || 'Untitled PDF';
+    const size = formatFileSize(item?.fileSize);
+    const isOpening = openingId != null && String(openingId) === String(item?._id);
+    return (
+      <Pressable
+        onPress={() => handleOpenPdf(item)}
+        disabled={isOpening}
+        style={({ pressed }) => [
+          styles.pdfCard,
+          pressed && styles.btnPressed,
+          isOpening && styles.btnDisabled,
+        ]}
+      >
+        <View style={styles.pdfIconWrap}>
+          <Text style={styles.pdfIcon}>📄</Text>
+        </View>
+        <View style={styles.pdfTextBlock}>
+          <Text style={styles.pdfTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={styles.pdfMeta} numberOfLines={1}>
+            {size ? `${size} • ` : ''}Tap to open
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{isOpening ? '…' : '›'}</Text>
+      </Pressable>
+    );
+  };
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.sectionTitle}>Post</Text>
+      {renderPostChips()}
+
+      <Text style={[styles.sectionTitle, styles.pdfSectionTitle]}>
+        PDF Notes
+      </Text>
+      {renderPdfBody()}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: 16, paddingBottom: 32 },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.muted,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  pdfSectionTitle: { marginTop: 20 },
+
+  // ---- Post chips ----
+  chipsRow: {
+    flexDirection: 'row',
+    paddingBottom: 4,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: 8,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: colors.textOnPrimary },
+  chipsFallback: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  // ---- PDF list ----
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  listContent: { paddingBottom: 4 },
+  pdfCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pdfIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  pdfIcon: { fontSize: 22 },
+  pdfTextBlock: { flex: 1 },
+  pdfTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
+  pdfMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
+  chevron: { fontSize: 22, color: colors.muted, marginLeft: 8 },
+
+  btnPressed: { opacity: 0.8 },
+  btnDisabled: { opacity: 0.6 },
+});

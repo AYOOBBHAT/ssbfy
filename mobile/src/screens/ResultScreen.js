@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { getQuestionsByTopic } from '../services/testService';
+import * as WebBrowser from 'expo-web-browser';
+import { getQuestionsByTopic, getWeakPractice } from '../services/testService';
 import { getTopics } from '../services/topicService';
+import { getNotes, previewOf } from '../services/noteService';
+import {
+  formatFileSize,
+  getPdfNotes,
+  resolvePdfUrl,
+} from '../services/pdfService';
 import { getApiErrorMessage } from '../services/api';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
+
+// Cap for both recommendation lists — keeps the Result screen readable
+// when the user has many weak topics / a large PDF catalog.
+const MAX_RECOMMENDATIONS = 5;
 
 const PRIMARY = colors.primary;
 const TEXT = colors.text;
@@ -163,6 +174,44 @@ export default function ResultScreen() {
   const [practiceTopicId, setPracticeTopicId] = useState(null);
   const [practiceError, setPracticeError] = useState(null);
   const [topicMap, setTopicMap] = useState({});
+  const [weakLoading, setWeakLoading] = useState(false);
+
+  // "Weak Topic Resources" recommender. Both lists are populated from a
+  // single `useEffect` (see below) that fans out to the notes and pdfs
+  // APIs in parallel after the result is rendered. Everything is capped
+  // at MAX_RECOMMENDATIONS before being committed to state.
+  const [recommendedNotes, setRecommendedNotes] = useState([]);
+  const [recommendedPdfs, setRecommendedPdfs] = useState([]);
+  const [recLoading, setRecLoading] = useState(false);
+  const [recError, setRecError] = useState(null);
+  const [openingPdfId, setOpeningPdfId] = useState(null);
+
+  // Flatten weakTopics → unique topicId strings for the combined
+  // "Practice Weak Topics" CTA. Kept as a memo so the render path and
+  // the handler see the exact same list.
+  const weakTopicIds = useMemo(() => {
+    const ids = (Array.isArray(weakTopics) ? weakTopics : [])
+      .map((t) => (t?.topicId == null ? null : String(t.topicId)))
+      .filter(Boolean);
+    return Array.from(new Set(ids));
+  }, [weakTopics]);
+
+  // Derive the test's parent post id from the questions payload. Each
+  // Question doc carries `postIds: [ObjectId]` (a question can belong to
+  // multiple exams), and every question in a given test shares at least
+  // one common post — so the first question's first postId is a safe,
+  // dependency-free source of truth. Used to scope the recommended PDF
+  // list (PDF notes are per-post, not per-topic).
+  const recommendedPostId = useMemo(() => {
+    const list = Array.isArray(questions) ? questions : [];
+    for (const q of list) {
+      const pids = Array.isArray(q?.postIds) ? q.postIds : [];
+      if (pids.length > 0 && pids[0] != null) {
+        return String(pids[0]);
+      }
+    }
+    return null;
+  }, [questions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,6 +234,139 @@ export default function ResultScreen() {
       cancelled = true;
     };
   }, []);
+
+  /**
+   * Load recommendations (notes + pdfs) whenever the pieces we need
+   * become available. The two fetches run in parallel via `allSettled`:
+   * a notes failure must not mask pdfs (and vice versa), because the
+   * user benefits from whichever list we manage to produce.
+   *
+   * Short-circuits when there are no weak topics so we don't waste a
+   * round-trip on a perfect score.
+   */
+  useEffect(() => {
+    if (weakTopicIds.length === 0) {
+      setRecommendedNotes([]);
+      setRecommendedPdfs([]);
+      setRecError(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setRecLoading(true);
+    setRecError(null);
+
+    (async () => {
+      const [notesResult, pdfsResult] = await Promise.allSettled([
+        getNotes({ topicIds: weakTopicIds }),
+        // `recommendedPostId` may legitimately be null (e.g. questions
+        // lacked postIds in a legacy record). Treat that as "no pdfs"
+        // rather than fetching every pdf in the catalog.
+        recommendedPostId ? getPdfNotes(recommendedPostId) : Promise.resolve({ pdfs: [] }),
+      ]);
+
+      if (cancelled) return;
+
+      const nextNotes =
+        notesResult.status === 'fulfilled'
+          ? (Array.isArray(notesResult.value?.notes) ? notesResult.value.notes : [])
+          : [];
+      const nextPdfs =
+        pdfsResult.status === 'fulfilled'
+          ? (Array.isArray(pdfsResult.value?.pdfs) ? pdfsResult.value.pdfs : [])
+          : [];
+
+      setRecommendedNotes(nextNotes.slice(0, MAX_RECOMMENDATIONS));
+      setRecommendedPdfs(nextPdfs.slice(0, MAX_RECOMMENDATIONS));
+
+      // Only surface an error when BOTH requests failed — a partial
+      // success is a useful recommender and we'd rather hide a pdf
+      // outage than scare the user with a red banner.
+      if (
+        notesResult.status === 'rejected' &&
+        pdfsResult.status === 'rejected'
+      ) {
+        setRecError(getApiErrorMessage(notesResult.reason));
+      }
+
+      setRecLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [weakTopicIds, recommendedPostId]);
+
+  const handleOpenNote = (note) => {
+    if (!note) return;
+    navigation.navigate('NoteDetail', { note });
+  };
+
+  /**
+   * Open a PDF in the in-app browser (Chrome Custom Tab / SFSafariView).
+   * Mirrors the behaviour of PdfListScreen so the PDF UX is consistent
+   * wherever the user encounters PDFs in the app.
+   */
+  const handleOpenPdf = async (pdf) => {
+    const id = pdf?._id;
+    const url = resolvePdfUrl(pdf?.fileUrl);
+    if (!url) return;
+    setOpeningPdfId(id);
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        toolbarColor: colors.primary,
+        controlsColor: colors.textOnPrimary,
+        showTitle: true,
+        enableBarCollapsing: true,
+        dismissButtonStyle: 'close',
+        presentationStyle:
+          WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
+      });
+    } catch {
+      // Fail quiet — the PDF list elsewhere in the app shows a richer
+      // error flow; from the result screen a silent no-op is less noisy
+      // than an alert popping over the score.
+    } finally {
+      setOpeningPdfId(null);
+    }
+  };
+
+  /**
+   * Combined weak-practice flow: pulls a random 10-question batch drawn
+   * from *all* weak topics at once via the new `/questions/weak-practice`
+   * endpoint, then hands off to `TestScreen` in practice mode (no
+   * timer, no backend submit, local answers only).
+   *
+   * We reuse the same `practiceError` slot as the per-topic Practice
+   * buttons because both failure modes are user-visible errors that
+   * belong under the Weak Topics section.
+   */
+  const handleWeakPractice = async () => {
+    if (weakLoading || practiceTopicId != null) return;
+    if (weakTopicIds.length === 0) return;
+    setPracticeError(null);
+    setWeakLoading(true);
+    try {
+      const data = await getWeakPractice(weakTopicIds, { limit: 10 });
+      const fetched = Array.isArray(data?.questions) ? data.questions : [];
+      if (fetched.length === 0) {
+        setPracticeError('No questions available for practice.');
+        return;
+      }
+      const questionIds = fetched
+        .map((q) => (q?._id == null ? '' : String(q._id)))
+        .filter(Boolean);
+      navigation.navigate('Test', {
+        mode: 'practice',
+        questions: fetched,
+        questionIds,
+      });
+    } catch (e) {
+      setPracticeError(getApiErrorMessage(e));
+    } finally {
+      setWeakLoading(false);
+    }
+  };
 
   const handlePractice = async (topicId) => {
     if (!topicId || practiceTopicId) return;
@@ -266,6 +448,21 @@ export default function ResultScreen() {
       ) : null}
 
       <Text style={styles.sectionTitle}>Weak Topics</Text>
+      {weakTopicIds.length > 0 ? (
+        <Pressable
+          onPress={handleWeakPractice}
+          disabled={weakLoading || practiceTopicId != null}
+          style={({ pressed }) => [
+            styles.weakCta,
+            pressed && styles.btnPressed,
+            (weakLoading || practiceTopicId != null) && styles.btnDisabled,
+          ]}
+        >
+          <Text style={styles.weakCtaText}>
+            {weakLoading ? 'Loading…' : '🔥 Practice Weak Topics'}
+          </Text>
+        </Pressable>
+      ) : null}
       {Array.isArray(weakTopics) && weakTopics.length > 0 ? (
         <View style={styles.sectionCard}>
           <FlatList
@@ -316,9 +513,103 @@ export default function ResultScreen() {
       )}
       {practiceError ? <Text style={styles.err}>{practiceError}</Text> : null}
 
+      {weakTopicIds.length > 0 ? renderRecommendations() : null}
+
       <Text style={styles.sectionTitle}>Review Answers</Text>
     </View>
   );
+
+  const renderRecommendations = () => {
+    const hasNotes = recommendedNotes.length > 0;
+    const hasPdfs = recommendedPdfs.length > 0;
+
+    return (
+      <View>
+        <Text style={styles.sectionTitle}>Weak Topic Resources</Text>
+        <View style={styles.sectionCard}>
+          {recLoading ? (
+            <Text style={styles.recMuted}>Finding resources…</Text>
+          ) : recError ? (
+            <Text style={styles.err}>{recError}</Text>
+          ) : !hasNotes && !hasPdfs ? (
+            <Text style={styles.recMuted}>
+              No matching study material yet. Check back later.
+            </Text>
+          ) : (
+            <>
+              {hasNotes ? (
+                <View style={styles.recBlock}>
+                  <Text style={styles.recBlockTitle}>📘 Notes</Text>
+                  {recommendedNotes.map((note) => {
+                    const id = String(note?._id ?? '');
+                    const preview = previewOf(note?.content, 80);
+                    return (
+                      <Pressable
+                        key={id || note?.title}
+                        onPress={() => handleOpenNote(note)}
+                        style={({ pressed }) => [
+                          styles.recRow,
+                          pressed && styles.btnPressed,
+                        ]}
+                      >
+                        <Text style={styles.recRowTitle} numberOfLines={2}>
+                          {note?.title || 'Untitled note'}
+                        </Text>
+                        {preview ? (
+                          <Text style={styles.recRowMeta} numberOfLines={2}>
+                            {preview}
+                          </Text>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {hasPdfs ? (
+                <View
+                  style={[
+                    styles.recBlock,
+                    hasNotes && styles.recBlockSpaced,
+                  ]}
+                >
+                  <Text style={styles.recBlockTitle}>📄 PDFs</Text>
+                  {recommendedPdfs.map((pdf) => {
+                    const id = String(pdf?._id ?? '');
+                    const opening = openingPdfId === id;
+                    const size = formatFileSize(pdf?.fileSize);
+                    return (
+                      <Pressable
+                        key={id || pdf?.title}
+                        onPress={() => handleOpenPdf(pdf)}
+                        disabled={opening}
+                        style={({ pressed }) => [
+                          styles.recRow,
+                          pressed && styles.btnPressed,
+                          opening && styles.btnDisabled,
+                        ]}
+                      >
+                        <Text style={styles.recRowTitle} numberOfLines={2}>
+                          {pdf?.title || pdf?.fileName || 'Untitled PDF'}
+                        </Text>
+                        <Text style={styles.recRowMeta} numberOfLines={1}>
+                          {opening
+                            ? 'Opening…'
+                            : size
+                            ? `${size} • Tap to open`
+                            : 'Tap to open'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   const renderFooter = () => {
     const noWrongOriginal = !isRetry && wrongQuestionIds.length === 0;
@@ -524,6 +815,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   practiceBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+
+  // Combined "🔥 Practice Weak Topics" CTA sitting above the per-topic
+  // list. Uses the accent (warm orange) palette to distinguish it from
+  // the main primary-colored Retry actions in the footer.
+  weakCta: {
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+  },
+  weakCtaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // ---- Recommendations (notes + pdfs) ----
+  recMuted: {
+    fontSize: 14,
+    color: MUTED,
+    fontStyle: 'italic',
+    paddingVertical: 4,
+  },
+  recBlock: {},
+  recBlockSpaced: { marginTop: 14 },
+  recBlockTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT,
+    marginBottom: 8,
+  },
+  recRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 8,
+  },
+  recRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primaryText,
+  },
+  recRowMeta: {
+    fontSize: 12,
+    color: MUTED,
+    marginTop: 3,
+  },
 
   err: { color: '#c00', marginTop: 4, marginBottom: 8 },
 

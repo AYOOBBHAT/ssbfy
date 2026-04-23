@@ -7,6 +7,16 @@ const cards = [
     description: 'Create a new MCQ for any subject or topic.',
   },
   {
+    to: '/add-note',
+    title: 'Add Note',
+    description: 'Write topic-wise study notes for students.',
+  },
+  {
+    to: '/manage-notes',
+    title: 'Manage Notes',
+    description: 'Filter, review, and enable/disable existing notes.',
+  },
+  {
     to: '/create-test',
     title: 'Create Test',
     description: 'Bundle questions into a timed mock test.',

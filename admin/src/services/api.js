@@ -179,4 +179,52 @@ export async function createTest(payload) {
   return unwrap(res);
 }
 
+/* ---------------- Notes ---------------- */
+
+/**
+ * List notes. Any combination of { postId, subjectId, topicId } may be
+ * passed to scope the results; omit them all for a full list.
+ */
+export async function getNotes(params = {}) {
+  const res = await api.get('/notes', { params });
+  return unwrap(res);
+}
+
+/**
+ * Create a topic-wise study note (admin only). All four ids are required
+ * by the server — the service validates that topic ⊂ subject ⊂ post.
+ */
+export async function createNote({
+  title,
+  content,
+  postId,
+  subjectId,
+  topicId,
+} = {}) {
+  const res = await api.post('/notes', {
+    title,
+    content,
+    postId,
+    subjectId,
+    topicId,
+  });
+  return unwrap(res);
+}
+
+/**
+ * Patch a note (admin only). Any subset of `title`, `content`, `isActive`
+ * may be supplied; the server rejects an empty patch. The hierarchy
+ * (post/subject/topic) is immutable on purpose — moving a note across
+ * the hierarchy is a re-create, not an edit.
+ */
+export async function updateNote(id, { title, content, isActive } = {}) {
+  if (!id) throw new Error('updateNote requires an id.');
+  const payload = {};
+  if (typeof title === 'string') payload.title = title;
+  if (typeof content === 'string') payload.content = content;
+  if (typeof isActive === 'boolean') payload.isActive = isActive;
+  const res = await api.patch(`/notes/${id}`, payload);
+  return unwrap(res);
+}
+
 export default api;

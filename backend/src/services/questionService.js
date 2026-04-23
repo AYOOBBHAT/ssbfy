@@ -185,6 +185,32 @@ export const questionService = {
     return { questions, total, limit, skip };
   },
 
+  /**
+   * Pull N random active questions scoped to a user's weak topics.
+   *
+   * The validator layer has already:
+   *   - exploded a comma-separated / repeated `topicIds` query into a
+   *     deduped string[] on `req.query.topicIdList`
+   *   - verified every id is a valid ObjectId
+   *   - clamped limit into [1, 50] (default 10)
+   *
+   * So here we only have to guard the "empty list" case (defense-in-depth
+   * in case a caller invokes this directly) and delegate.
+   */
+  async weakPractice({ topicIds, limit = 10 } = {}) {
+    if (!Array.isArray(topicIds) || topicIds.length === 0) {
+      throw new AppError('topicIds is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    const questions = await questionRepository.findRandomByTopics(
+      topicIds,
+      limit
+    );
+    // A caller with only sparse / brand-new topics might legitimately get
+    // back fewer than `limit` (or zero) questions. That's not an error —
+    // the mobile UI renders an "empty" state — so we return what we have.
+    return { questions };
+  },
+
   async getById(id) {
     const q = await questionRepository.findById(id);
     if (!q || !q.isActive) {

@@ -141,4 +141,39 @@ export const questionRepository = {
       { $sample: { size: safeLimit } },
     ]);
   },
+
+  /**
+   * Random *active* questions scoped to the given topics, used by the
+   * "weak-topic practice" endpoint. Returns plain objects with `topicId`
+   * and `subjectId` populated so the mobile client can render topic /
+   * subject labels without a second round-trip.
+   *
+   * Implementation notes:
+   *   - `$sample` is the right primitive here: on modern Mongo it uses a
+   *     pseudo-random index walk when the match ratio is high and falls
+   *     back to a collection scan otherwise. Either way it's O(size) in
+   *     result rows, not O(n).
+   *   - Aggregation returns lean plain objects, so we use `Question.populate`
+   *     (it accepts arrays of raw docs) instead of chaining `.populate()`
+   *     on a query.
+   */
+  async findRandomByTopics(topicIds, limit = 10) {
+    if (!topicIds?.length) return [];
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 50));
+    const oids = [...new Set(topicIds.map(String))].map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    const rows = await Question.aggregate([
+      { $match: { topicId: { $in: oids }, isActive: true } },
+      { $sample: { size: safeLimit } },
+    ]);
+
+    await Question.populate(rows, [
+      { path: 'topicId', select: 'name slug isActive subjectId' },
+      { path: 'subjectId', select: 'name slug isActive postId' },
+    ]);
+
+    return rows;
+  },
 };

@@ -53,6 +53,44 @@ export const createQuestionValidators = [
     .withMessage(`difficulty must be one of: ${DIFFICULTY_VALUES.join(', ')}`),
 ];
 
+/**
+ * Validators for GET /api/questions/weak-practice.
+ *
+ * Accepts `topicIds` as EITHER:
+ *   - a single comma-separated string:  `?topicIds=a,b,c`
+ *   - a repeated query param (→ array): `?topicIds=a&topicIds=b&topicIds=c`
+ *
+ * We normalise both shapes into a clean `string[]` of valid ObjectIds and
+ * stash it on `req.query.topicIdList` for the controller, so downstream code
+ * never has to re-parse.
+ */
+export const weakPracticeValidators = [
+  query('topicIds')
+    .custom((value, { req }) => {
+      const raw = Array.isArray(value) ? value : [value];
+      const tokens = raw
+        .flatMap((v) => (v == null ? [] : String(v).split(',')))
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (tokens.length === 0) {
+        throw new Error('topicIds is required');
+      }
+      const invalid = tokens.find((t) => !mongoose.isValidObjectId(t));
+      if (invalid) {
+        throw new Error(`Invalid ObjectId in topicIds: ${invalid}`);
+      }
+
+      req.query.topicIdList = Array.from(new Set(tokens));
+      return true;
+    }),
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 50 })
+    .withMessage('limit must be an integer between 1 and 50')
+    .toInt(),
+];
+
 export const updateQuestionValidators = [
   body('questionText').optional().trim().notEmpty(),
   body('options')

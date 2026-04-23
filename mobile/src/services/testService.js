@@ -34,3 +34,32 @@ export async function getQuestionsByTopic(topicId, opts = {}) {
   });
   return data?.data ?? { questions: [] };
 }
+
+/**
+ * Fetch a random batch of questions drawn from the user's weak topics,
+ * for the "🔥 Practice Weak Topics" flow on `ResultScreen`.
+ *
+ * The backend accepts either `topicIds=a,b,c` or repeated `topicIds=a&
+ * topicIds=b` — we deliberately send the CSV form so the URL stays
+ * compact even when the user has many weak topics. Invalid / empty ids
+ * are filtered client-side so we never send `topicIds=` (which would
+ * trip the validator).
+ *
+ * @param {Array<string|number>} topicIds
+ * @param {{ limit?: number }} [opts]
+ * @returns {Promise<{ questions: object[] }>}
+ */
+export async function getWeakPractice(topicIds, opts = {}) {
+  const ids = Array.isArray(topicIds)
+    ? topicIds.map((t) => (t == null ? '' : String(t).trim())).filter(Boolean)
+    : [];
+  if (ids.length === 0) {
+    return { questions: [] };
+  }
+  const limit =
+    Number.isInteger(opts.limit) && opts.limit > 0 ? opts.limit : 10;
+  const { data } = await api.get('/questions/weak-practice', {
+    params: { topicIds: ids.join(','), limit },
+  });
+  return data?.data ?? { questions: [] };
+}

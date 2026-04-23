@@ -32,6 +32,9 @@
         "projectId": "2e3b7e02-f1df-461b-9d2a-071b1481d8d1"
       }
     },
-    "owner": "ayoobbhat"
+    "owner": "ayoobbhat",
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

@@ -7,6 +7,9 @@ import HomeScreen from '../screens/HomeScreen';
 import TestScreen from '../screens/TestScreen';
 import ResultScreen from '../screens/ResultScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
+import PdfListScreen from '../screens/PdfListScreen';
+import NotesListScreen from '../screens/NotesListScreen';
+import NoteDetailScreen from '../screens/NoteDetailScreen';
 import { colors, brand } from '../theme/colors';
 
 const Stack = createNativeStackNavigator();
@@ -49,6 +52,21 @@ export default function AppNavigator() {
             name="Leaderboard"
             component={LeaderboardScreen}
             options={{ title: 'Leaderboard' }}
+          />
+          <Stack.Screen
+            name="PdfList"
+            component={PdfListScreen}
+            options={{ title: 'PDF Notes' }}
+          />
+          <Stack.Screen
+            name="NotesList"
+            component={NotesListScreen}
+            options={{ title: 'Study Notes' }}
+          />
+          <Stack.Screen
+            name="NoteDetail"
+            component={NoteDetailScreen}
+            options={{ title: 'Note' }}
           />
         </>
       ) : (

@@ -7,6 +7,7 @@ import {
   listQuestionsQueryValidators,
   questionIdParam,
   updateQuestionValidators,
+  weakPracticeValidators,
 } from '../validators/questionValidators.js';
 
 const router = Router();
@@ -18,6 +19,15 @@ router.get(
   listQuestionsQueryValidators,
   validateRequest,
   questionController.list
+);
+
+// MUST come before GET /:id — otherwise Express would try to treat
+// "weak-practice" as an ObjectId and the route would 400.
+router.get(
+  '/weak-practice',
+  weakPracticeValidators,
+  validateRequest,
+  questionController.weakPractice
 );
 
 router.post(
