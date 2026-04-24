@@ -9,22 +9,101 @@ import { testService } from './testService.js';
 
 const WEAK_TOPIC_LIMIT = 10;
 
-function normalizeAnswers(answers) {
-  if (!Array.isArray(answers)) {
-    return [];
-  }
-  return answers.map((a) => {
-    const raw = a.selectedOptionIndex;
-    let selectedOptionIndex =
-      raw === null || raw === undefined || raw === '' ? null : Number(raw);
-    if (selectedOptionIndex !== null && Number.isNaN(selectedOptionIndex)) {
-      selectedOptionIndex = null;
+/**
+ * Coerce one answer payload into the canonical shape used inside the
+ * scoring loop. Accepts either the new array form (`selectedOptionIndexes`)
+ * or the legacy scalar (`selectedOptionIndex`); the array always wins when
+ * both are present.
+ *
+ * Returns:
+ *   {
+ *     questionId,
+ *     selectedOptionIndexes: number[]  // sorted, deduped, possibly empty
+ *     selectedOptionIndex:    number|null  // legacy mirror; arr[0] or null
+ *   }
+ *
+ * Empty array means "unanswered" — explicitly preserved (not coerced into
+ * an arbitrary index) so the scorer can treat it as wrong / missing rather
+ * than guessing the user picked option A.
+ */
+function normalizeOneAnswer(a) {
+  const out = {
+    questionId: new mongoose.Types.ObjectId(a.questionId),
+    selectedOptionIndexes: [],
+    selectedOptionIndex: null,
+  };
+
+  let arr = null;
+  if (Array.isArray(a.selectedOptionIndexes) && a.selectedOptionIndexes.length > 0) {
+    arr = a.selectedOptionIndexes;
+  } else if (
+    a.selectedOptionIndex !== null &&
+    a.selectedOptionIndex !== undefined &&
+    a.selectedOptionIndex !== ''
+  ) {
+    const n = Number(a.selectedOptionIndex);
+    if (Number.isInteger(n) && n >= 0) {
+      arr = [n];
     }
-    return {
-      questionId: new mongoose.Types.ObjectId(a.questionId),
-      selectedOptionIndex,
-    };
-  });
+  }
+
+  if (!arr) return out;
+
+  const cleaned = [];
+  for (const raw of arr) {
+    const n = Number(raw);
+    if (Number.isInteger(n) && n >= 0) cleaned.push(n);
+  }
+  if (cleaned.length === 0) return out;
+
+  const dedupSorted = Array.from(new Set(cleaned)).sort((a, b) => a - b);
+  out.selectedOptionIndexes = dedupSorted;
+  out.selectedOptionIndex = dedupSorted[0];
+  return out;
+}
+
+function normalizeAnswers(answers) {
+  if (!Array.isArray(answers)) return [];
+  return answers.map(normalizeOneAnswer);
+}
+
+/**
+ * Read a question's canonical correct-answer set, transparently handling
+ * legacy docs that only have `correctAnswerIndex`. Returns a deduped sorted
+ * array (possibly empty for malformed docs — caller should treat empty as
+ * "no question can be scored correct").
+ */
+function getCorrectIndexSet(q) {
+  if (Array.isArray(q?.correctAnswers) && q.correctAnswers.length > 0) {
+    return Array.from(new Set(q.correctAnswers.map(Number))).sort((a, b) => a - b);
+  }
+  if (typeof q?.correctAnswerIndex === 'number' && Number.isInteger(q.correctAnswerIndex)) {
+    return [q.correctAnswerIndex];
+  }
+  return [];
+}
+
+/**
+ * Order-independent set equality on already-sorted-deduped index arrays.
+ *
+ * Multi-correct scoring rule (from the spec):
+ *   correctAnswers = [0, 2]
+ *     [0,2]   → correct
+ *     [2,0]   → correct (sorted before compare)
+ *     [0]     → wrong  (length differs)
+ *     [0,1,2] → wrong  (length differs)
+ *     [1,2]   → wrong  (same length, different members)
+ *
+ * Both inputs MUST already be sorted+deduped (callers do this above), so
+ * this is a tight O(n) walk with no allocation.
+ */
+function indexSetsEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 function dedupeQuestionIds(ids) {
@@ -164,14 +243,40 @@ export const testAttemptService = {
         throw new AppError('Question not found for this attempt', HTTP_STATUS.BAD_REQUEST);
       }
       const ans = answerByQ.get(qid.toString());
-      const selected = ans.selectedOptionIndex;
-      const maxIdx = q.options.length - 1;
-      const selectionValid = Number.isInteger(selected) && selected >= 0 && selected <= maxIdx;
-      const isCorrect = selectionValid && selected === q.correctAnswerIndex;
+
+      const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
+      const maxIdx = optionsLen - 1;
+
+      // Normalize selection — drop any index that points outside the
+      // question's options. A malformed selection is treated the same way
+      // as "unanswered" rather than throwing, so one bad payload can't
+      // poison the whole submit.
+      const selectedSet = (ans.selectedOptionIndexes || []).filter(
+        (i) => Number.isInteger(i) && i >= 0 && i <= maxIdx
+      );
+
+      const correctSet = getCorrectIndexSet(q);
+
+      // Order-independent set comparison. This is the SINGLE scoring rule
+      // for every question type:
+      //   - single_correct / image_based: correctSet has length 1, so the
+      //     user's selectedSet must also be exactly [thatIndex].
+      //   - multiple_correct: correctSet has length >=2; user must have
+      //     selected exactly the same set (no missing, no extra).
+      // This is identical to the single-index `selected === correctIndex`
+      // check for legacy single-correct questions, so existing scoring is
+      // unchanged for the old data path.
+      const isCorrect =
+        correctSet.length > 0 && indexSetsEqual(selectedSet, correctSet);
 
       correctAnswers.push({
         questionId: q._id,
-        correctAnswerIndex: q.correctAnswerIndex,
+        // Legacy mirror for any client still reading the scalar field.
+        correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
+        // New canonical shape — full set of correct option indexes.
+        correctAnswers: correctSet,
+        // Useful for the result screen so it doesn't have to re-classify.
+        questionType: q.questionType || 'single_correct',
       });
 
       if (isCorrect) {

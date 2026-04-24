@@ -2,6 +2,29 @@ import mongoose from 'mongoose';
 import { body, param, query } from 'express-validator';
 import { DIFFICULTY_VALUES } from '../constants/difficulty.js';
 import { QUESTION_SORT_VALUES } from '../constants/questionSort.js';
+import { QUESTION_TYPE_VALUES } from '../models/Question.js';
+
+/**
+ * Cross-field check: at least one of `correctAnswers` (new) or
+ * `correctAnswerIndex` (legacy) must be present. We can't express this
+ * with field-level chains, so it runs as a top-level body check.
+ *
+ * Returning `true` on success is required by express-validator; throwing
+ * surfaces the message into the validation-error array.
+ */
+function ensureSomeAnswerForm(val) {
+  const hasArray = Array.isArray(val?.correctAnswers) && val.correctAnswers.length > 0;
+  const idx = val?.correctAnswerIndex;
+  const hasIndex =
+    idx !== undefined &&
+    idx !== null &&
+    idx !== '' &&
+    Number.isInteger(Number(idx));
+  if (!hasArray && !hasIndex) {
+    throw new Error('Either correctAnswers or correctAnswerIndex is required');
+  }
+  return true;
+}
 
 export const questionIdParam = [
   param('id').isMongoId().withMessage('Invalid question id'),
@@ -36,11 +59,39 @@ export const createQuestionValidators = [
     .isArray({ min: 2 })
     .withMessage('options must be an array with at least 2 items'),
   body('options.*').trim().notEmpty().withMessage('Each option must be a non-empty string'),
+
+  // NEW fields — all optional because the service layer applies defaults
+  // and enforces the per-type arity rules.
+  body('questionType')
+    .optional()
+    .isIn(QUESTION_TYPE_VALUES)
+    .withMessage(`questionType must be one of: ${QUESTION_TYPE_VALUES.join(', ')}`),
+  body('questionImage')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isURL({ protocols: ['http', 'https'], require_protocol: true })
+    .withMessage('questionImage must be a valid http(s) URL'),
+  body('correctAnswers')
+    .optional()
+    .isArray({ min: 1 })
+    .withMessage('correctAnswers must be a non-empty array of option indexes'),
+  body('correctAnswers.*')
+    .isInt({ min: 0 })
+    .withMessage('Each correctAnswers entry must be a non-negative integer')
+    .toInt(),
+
+  // Legacy single-answer fields. `correctAnswerIndex` is now OPTIONAL —
+  // the cross-field check below ensures the payload carries *some* answer
+  // form (either the array or the legacy scalar).
   body('correctAnswerIndex')
+    .optional({ nullable: true })
     .isInt({ min: 0 })
     .withMessage('correctAnswerIndex must be a non-negative integer')
     .toInt(),
   body('correctAnswerValue').optional().trim().notEmpty(),
+  body().custom(ensureSomeAnswerForm),
+
   body('explanation').optional().isString(),
   body('subjectId').isMongoId().withMessage('Valid subjectId is required'),
   body('topicId').isMongoId().withMessage('Valid topicId is required'),
@@ -98,6 +149,26 @@ export const updateQuestionValidators = [
     .isArray({ min: 2 })
     .withMessage('options must be an array with at least 2 items'),
   body('options.*').optional().trim().notEmpty(),
+
+  body('questionType')
+    .optional()
+    .isIn(QUESTION_TYPE_VALUES)
+    .withMessage(`questionType must be one of: ${QUESTION_TYPE_VALUES.join(', ')}`),
+  body('questionImage')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isURL({ protocols: ['http', 'https'], require_protocol: true })
+    .withMessage('questionImage must be a valid http(s) URL'),
+  body('correctAnswers')
+    .optional()
+    .isArray({ min: 1 })
+    .withMessage('correctAnswers must be a non-empty array of option indexes'),
+  body('correctAnswers.*')
+    .isInt({ min: 0 })
+    .withMessage('Each correctAnswers entry must be a non-negative integer')
+    .toInt(),
+
   body('correctAnswerIndex').optional().isInt({ min: 0 }).toInt(),
   body('correctAnswerValue').optional().trim().notEmpty(),
   body('explanation').optional().isString(),

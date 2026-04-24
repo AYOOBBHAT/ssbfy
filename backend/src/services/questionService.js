@@ -7,36 +7,184 @@ import { questionRepository } from '../repositories/questionRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
+import { QUESTION_TYPES, QUESTION_TYPE_VALUES } from '../models/Question.js';
 
-function assertOptionsAndIndex(options, correctAnswerIndex) {
-  if (!Array.isArray(options) || options.length < 2) {
-    throw new AppError('At least two options are required', HTTP_STATUS.BAD_REQUEST);
-  }
-  if (
-    typeof correctAnswerIndex !== 'number' ||
-    !Number.isInteger(correctAnswerIndex) ||
-    correctAnswerIndex < 0 ||
-    correctAnswerIndex >= options.length
-  ) {
-    throw new AppError('correctAnswerIndex must be a valid index into options', HTTP_STATUS.BAD_REQUEST);
+function isValidHttpUrl(s) {
+  if (typeof s !== 'string' || s.trim() === '') return false;
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
   }
 }
 
-function deriveAnswerFields(options, correctAnswerIndex, correctAnswerValue) {
-  assertOptionsAndIndex(options, correctAnswerIndex);
-  const derived = String(options[correctAnswerIndex]).trim();
-  if (correctAnswerValue !== undefined && correctAnswerValue !== null && correctAnswerValue !== '') {
-    if (String(correctAnswerValue).trim() !== derived) {
+/**
+ * Normalize the grab-bag of answer fields that may arrive in a create/update
+ * payload into the canonical shape we want to hand to Mongoose.
+ *
+ * Accepted input shapes (all equivalent for a single-correct question):
+ *   { correctAnswers: [2] }                        // new API
+ *   { correctAnswerIndex: 2 }                      // legacy API
+ *   { correctAnswers: [2], correctAnswerIndex: 2 } // both, must agree
+ *
+ * For multiple_correct, only `correctAnswers` is meaningful:
+ *   { correctAnswers: [0, 2], questionType: 'multiple_correct' }
+ *
+ * Returns { correctAnswers, correctAnswerIndex, correctAnswerValue } with
+ * the legacy fields synced off `correctAnswers[0]` so existing consumers
+ * (scoring, reporting) keep working unchanged.
+ */
+function normalizeAnswerPayload({
+  options,
+  questionType = QUESTION_TYPES.SINGLE_CORRECT,
+  correctAnswers,
+  correctAnswerIndex,
+  correctAnswerValue,
+}) {
+  if (!Array.isArray(options) || options.length < 2) {
+    throw new AppError('At least two options are required', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (!QUESTION_TYPE_VALUES.includes(questionType)) {
+    throw new AppError(
+      `questionType must be one of: ${QUESTION_TYPE_VALUES.join(', ')}`,
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  const n = options.length;
+
+  // Resolve the authoritative answer list. Array form wins; if it's missing
+  // or empty, fall back to the legacy scalar. This is the single place where
+  // "old payload" → "new payload" translation happens.
+  let answers;
+  if (Array.isArray(correctAnswers) && correctAnswers.length > 0) {
+    answers = correctAnswers;
+  } else if (
+    typeof correctAnswerIndex === 'number' &&
+    Number.isInteger(correctAnswerIndex)
+  ) {
+    answers = [correctAnswerIndex];
+  } else {
+    throw new AppError(
+      'Either correctAnswers (array of option indexes) or correctAnswerIndex is required',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  const cleaned = [];
+  for (const raw of answers) {
+    const v = Number(raw);
+    if (!Number.isInteger(v) || v < 0 || v >= n) {
       throw new AppError(
-        'correctAnswerValue must match the text at options[correctAnswerIndex]',
+        `correctAnswers contains an invalid option index: ${raw}`,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    cleaned.push(v);
+  }
+  const dedup = Array.from(new Set(cleaned));
+
+  // If the caller sent BOTH forms, they must agree on the primary index —
+  // otherwise we'd silently pick one and confuse whoever debugs the payload.
+  if (
+    typeof correctAnswerIndex === 'number' &&
+    Number.isInteger(correctAnswerIndex) &&
+    !dedup.includes(correctAnswerIndex)
+  ) {
+    throw new AppError(
+      'correctAnswerIndex must be one of the values in correctAnswers',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  if (questionType === QUESTION_TYPES.SINGLE_CORRECT) {
+    if (dedup.length !== 1) {
+      throw new AppError(
+        'single_correct questions must have exactly one correct answer',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+  } else if (questionType === QUESTION_TYPES.MULTIPLE_CORRECT) {
+    if (dedup.length < 2) {
+      throw new AppError(
+        'multiple_correct questions require at least two correct answers',
         HTTP_STATUS.BAD_REQUEST
       );
     }
   }
+
+  const primary = dedup[0];
+  const primaryValue = String(options[primary]).trim();
+
+  if (
+    correctAnswerValue !== undefined &&
+    correctAnswerValue !== null &&
+    correctAnswerValue !== ''
+  ) {
+    if (String(correctAnswerValue).trim() !== primaryValue) {
+      throw new AppError(
+        'correctAnswerValue must match the text at options[correctAnswers[0]]',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+  }
+
   return {
-    correctAnswerIndex,
-    correctAnswerValue: derived,
+    correctAnswers: dedup,
+    correctAnswerIndex: primary,
+    correctAnswerValue: primaryValue,
   };
+}
+
+/**
+ * Validate questionImage for a create/update payload.
+ *   - `image_based` questions MUST have a URL.
+ *   - Any type MAY have a URL, but if present it must be http(s).
+ */
+function assertImage(questionType, questionImage) {
+  if (questionType === QUESTION_TYPES.IMAGE_BASED) {
+    if (!questionImage || typeof questionImage !== 'string') {
+      throw new AppError(
+        'image_based questions require a questionImage URL',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+  }
+  if (questionImage && !isValidHttpUrl(questionImage)) {
+    throw new AppError(
+      'questionImage must be a valid http(s) URL',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+}
+
+/**
+ * Normalize a question as returned from the repository so every response
+ * carries the new canonical shape, even for documents written before the
+ * multi-answer upgrade.
+ *
+ * Key guarantee: `correctAnswers` is ALWAYS present and non-empty on an
+ * otherwise-valid question. Old docs that only have `correctAnswerIndex`
+ * are projected as `correctAnswers: [correctAnswerIndex]`.
+ */
+function projectQuestion(q) {
+  if (!q) return q;
+  const hasArr = Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0;
+  const correctAnswers = hasArr
+    ? q.correctAnswers.map((n) => Number(n))
+    : typeof q.correctAnswerIndex === 'number'
+    ? [q.correctAnswerIndex]
+    : [];
+  return {
+    ...q,
+    questionType: q.questionType || QUESTION_TYPES.SINGLE_CORRECT,
+    questionImage: q.questionImage || '',
+    correctAnswers,
+  };
+}
+
+function projectQuestions(list) {
+  return Array.isArray(list) ? list.map(projectQuestion) : list;
 }
 
 /**
@@ -144,7 +292,9 @@ export const questionService = {
         throw new AppError(`Invalid question id in ids: ${id}`, HTTP_STATUS.BAD_REQUEST);
       }
     }
-    const questions = await questionRepository.findActiveByIds(idTokens);
+    const questions = projectQuestions(
+      await questionRepository.findActiveByIds(idTokens)
+    );
     return { questions, total: questions.length, limit: questions.length, skip: 0 };
   },
 
@@ -182,7 +332,7 @@ export const questionService = {
       questionRepository.findAll(filter, { limit, skip, sort }),
     ]);
 
-    return { questions, total, limit, skip };
+    return { questions: projectQuestions(questions), total, limit, skip };
   },
 
   /**
@@ -201,9 +351,8 @@ export const questionService = {
     if (!Array.isArray(topicIds) || topicIds.length === 0) {
       throw new AppError('topicIds is required', HTTP_STATUS.BAD_REQUEST);
     }
-    const questions = await questionRepository.findRandomByTopics(
-      topicIds,
-      limit
+    const questions = projectQuestions(
+      await questionRepository.findRandomByTopics(topicIds, limit)
     );
     // A caller with only sparse / brand-new topics might legitimately get
     // back fewer than `limit` (or zero) questions. That's not an error —
@@ -216,13 +365,16 @@ export const questionService = {
     if (!q || !q.isActive) {
       throw new AppError('Question not found', HTTP_STATUS.NOT_FOUND);
     }
-    return q;
+    return projectQuestion(q);
   },
 
   async create(body) {
     const {
       questionText,
       options,
+      questionType = QUESTION_TYPES.SINGLE_CORRECT,
+      questionImage = '',
+      correctAnswers,
       correctAnswerIndex,
       correctAnswerValue,
       explanation = '',
@@ -233,7 +385,15 @@ export const questionService = {
       difficulty,
     } = body;
 
-    const answerFields = deriveAnswerFields(options, correctAnswerIndex, correctAnswerValue);
+    assertImage(questionType, questionImage);
+    const answerFields = normalizeAnswerPayload({
+      options,
+      questionType,
+      correctAnswers,
+      correctAnswerIndex,
+      correctAnswerValue,
+    });
+
     const { subject } = await resolveHierarchy(subjectId, topicId);
     const reconciledPostIds = reconcilePostIds(postIds, subject.postId);
     await assertPostIds(reconciledPostIds);
@@ -241,6 +401,8 @@ export const questionService = {
     const payload = {
       questionText,
       options,
+      questionType,
+      questionImage: questionImage || '',
       ...answerFields,
       explanation,
       subjectId,
@@ -253,7 +415,8 @@ export const questionService = {
       payload.difficulty = difficulty;
     }
 
-    return questionRepository.create(payload);
+    const created = await questionRepository.create(payload);
+    return projectQuestion(created);
   },
 
   async update(id, patch) {
@@ -268,11 +431,11 @@ export const questionService = {
     if (patch.options !== undefined) {
       doc.options = patch.options;
     }
-    if (patch.correctAnswerIndex !== undefined) {
-      doc.correctAnswerIndex = patch.correctAnswerIndex;
+    if (patch.questionType !== undefined) {
+      doc.questionType = patch.questionType;
     }
-    if (patch.correctAnswerValue !== undefined) {
-      doc.correctAnswerValue = patch.correctAnswerValue;
+    if (patch.questionImage !== undefined) {
+      doc.questionImage = patch.questionImage;
     }
     if (patch.explanation !== undefined) {
       doc.explanation = patch.explanation;
@@ -293,11 +456,39 @@ export const questionService = {
       doc.difficulty = patch.difficulty;
     }
 
-    const fields = deriveAnswerFields(
-      doc.options,
-      doc.correctAnswerIndex,
-      patch.correctAnswerValue !== undefined ? patch.correctAnswerValue : undefined
-    );
+    // Recompute answer fields from whatever combination of options/type/
+    // correctAnswers/correctAnswerIndex is now effective on the document.
+    // If the caller didn't touch any answer field, we re-feed the doc's own
+    // current values so the pipeline stays idempotent (and repairs any
+    // legacy doc that previously had only `correctAnswerIndex`).
+    const effectiveType = doc.questionType || QUESTION_TYPES.SINGLE_CORRECT;
+    assertImage(effectiveType, doc.questionImage);
+
+    const incomingAnswers =
+      patch.correctAnswers !== undefined
+        ? patch.correctAnswers
+        : Array.isArray(doc.correctAnswers) && doc.correctAnswers.length > 0
+        ? doc.correctAnswers.map((n) => Number(n))
+        : undefined;
+    const incomingIndex =
+      patch.correctAnswerIndex !== undefined
+        ? patch.correctAnswerIndex
+        : typeof doc.correctAnswerIndex === 'number'
+        ? doc.correctAnswerIndex
+        : undefined;
+    const incomingValue =
+      patch.correctAnswerValue !== undefined
+        ? patch.correctAnswerValue
+        : undefined;
+
+    const fields = normalizeAnswerPayload({
+      options: doc.options,
+      questionType: effectiveType,
+      correctAnswers: incomingAnswers,
+      correctAnswerIndex: incomingIndex,
+      correctAnswerValue: incomingValue,
+    });
+    doc.correctAnswers = fields.correctAnswers;
     doc.correctAnswerIndex = fields.correctAnswerIndex;
     doc.correctAnswerValue = fields.correctAnswerValue;
 
@@ -313,7 +504,8 @@ export const questionService = {
       await assertPostIds(doc.postIds);
     }
 
-    return questionRepository.saveDocument(doc);
+    const saved = await questionRepository.saveDocument(doc);
+    return projectQuestion(saved);
   },
 
   async softDelete(id) {
@@ -322,6 +514,6 @@ export const questionService = {
       throw new AppError('Question not found', HTTP_STATUS.NOT_FOUND);
     }
     const updated = await questionRepository.softDeleteById(id);
-    return updated;
+    return projectQuestion(updated);
   },
 };

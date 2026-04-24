@@ -21,6 +21,54 @@ function formatMmSs(totalSeconds) {
   return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
+/**
+ * Coerce whatever shape we got (legacy scalar, new array, undefined) into a
+ * deduped, sorted, NUMBER array. Empty array means "unanswered" — kept as a
+ * single canonical representation across the screen.
+ */
+function toIndexArray(raw) {
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  const cleaned = [];
+  for (const v of list) {
+    if (v === null || v === undefined || v === '') continue;
+    const n = Number(v);
+    if (Number.isInteger(n) && n >= 0) cleaned.push(n);
+  }
+  return Array.from(new Set(cleaned)).sort((a, b) => a - b);
+}
+
+/**
+ * Order-independent set equality on two index arrays. Mirrors the backend's
+ * scoring rule exactly so daily-practice (scored locally) agrees with what
+ * the server would have computed.
+ */
+function indexSetsEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort((x, y) => x - y);
+  const sb = [...b].sort((x, y) => x - y);
+  for (let i = 0; i < sa.length; i += 1) {
+    if (sa[i] !== sb[i]) return false;
+  }
+  return true;
+}
+
+/** Read a question's canonical correct-index set, handling legacy docs. */
+function getQuestionCorrectSet(q) {
+  if (Array.isArray(q?.correctAnswers) && q.correctAnswers.length > 0) {
+    return [...q.correctAnswers].map(Number).sort((a, b) => a - b);
+  }
+  if (typeof q?.correctAnswerIndex === 'number') {
+    return [q.correctAnswerIndex];
+  }
+  return [];
+}
+
+function isMultiCorrectQuestion(q) {
+  return q?.questionType === 'multiple_correct';
+}
+
 export default function TestScreen() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -58,11 +106,25 @@ export default function TestScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [index, setIndex] = useState(0);
+  // Canonical shape: answers[qid] is ALWAYS a sorted, deduped Number[].
+  // Empty array means "unanswered". For single-correct questions the array
+  // has length 0 or 1; for multi-correct it can be longer.
   const [answers, setAnswers] = useState(() => {
     const m = {};
     if (!isLocal && Array.isArray(attempt?.answers)) {
       for (const a of attempt.answers) {
-        m[String(a.questionId)] = a.selectedOptionIndex;
+        // Resumed in-progress attempts may carry either the new array
+        // form or the legacy scalar (older mobile builds). Coerce both
+        // through `toIndexArray` so the rest of the screen never has to
+        // know about the wire shape.
+        const raw =
+          a.selectedOptionIndexes !== undefined
+            ? a.selectedOptionIndexes
+            : a.selectedOptionIndex;
+        const arr = toIndexArray(raw);
+        if (arr.length > 0) {
+          m[String(a.questionId)] = arr;
+        }
       }
     }
     return m;
@@ -145,10 +207,37 @@ export default function TestScreen() {
   const total = questions.length;
   const question = questions[index];
   const currentId = question ? String(question._id) : null;
+  const isMulti = isMultiCorrectQuestion(question);
 
+  /**
+   * Toggle an option as selected for the current question.
+   *   - multi-correct: tap toggles membership (checkbox behavior); the
+   *     stored array is sorted+deduped so the preview/submit are stable.
+   *   - single-answer types (single_correct / image_based): tap replaces
+   *     (radio behavior). Re-tapping the SAME option clears it so the user
+   *     can change their mind to "unanswered" without exiting the screen.
+   */
   const selectOption = (optionIndex) => {
     if (!currentId) return;
-    setAnswers((prev) => ({ ...prev, [currentId]: optionIndex }));
+    setAnswers((prev) => {
+      const current = Array.isArray(prev[currentId]) ? prev[currentId] : [];
+      let next;
+      if (isMulti) {
+        const set = new Set(current);
+        if (set.has(optionIndex)) set.delete(optionIndex);
+        else set.add(optionIndex);
+        next = Array.from(set).sort((a, b) => a - b);
+      } else {
+        next = current.length === 1 && current[0] === optionIndex ? [] : [optionIndex];
+      }
+      const out = { ...prev };
+      if (next.length === 0) {
+        delete out[currentId];
+      } else {
+        out[currentId] = next;
+      }
+      return out;
+    });
   };
 
   const goNext = () => {
@@ -160,7 +249,11 @@ export default function TestScreen() {
   };
 
   const attemptedCount = useMemo(
-    () => questionIds.filter((qid) => answers[String(qid)] !== undefined).length,
+    () =>
+      questionIds.filter((qid) => {
+        const v = answers[String(qid)];
+        return Array.isArray(v) && v.length > 0;
+      }).length,
     [questionIds, answers]
   );
 
@@ -207,22 +300,34 @@ export default function TestScreen() {
           return;
         }
 
+        // Build one wire-shape per question. We always send BOTH forms:
+        //   - selectedOptionIndexes: new canonical array (length 0 = unanswered)
+        //   - selectedOptionIndex:   legacy scalar (= arr[0] or null)
+        // so an older/newer backend version can read whichever it knows
+        // about. The backend's normalizer prefers the array when both
+        // are present.
+        const buildAnswerEntry = (qid) => {
+          const arr = Array.isArray(answers[String(qid)]) ? answers[String(qid)] : [];
+          return {
+            questionId: String(qid),
+            selectedOptionIndexes: arr,
+            selectedOptionIndex: arr.length > 0 ? arr[0] : null,
+          };
+        };
+
         let payload;
         if (autoSubmit) {
-          payload = questionIds.map((qid) => ({
-            questionId: String(qid),
-            selectedOptionIndex: answers[String(qid)] ?? null,
-          }));
+          payload = questionIds.map(buildAnswerEntry);
         } else {
-          const unanswered = questionIds.filter((qid) => answers[String(qid)] === undefined);
+          const unanswered = questionIds.filter((qid) => {
+            const v = answers[String(qid)];
+            return !Array.isArray(v) || v.length === 0;
+          });
           if (unanswered.length > 0) {
             setSubmitError('Please answer every question before submitting.');
             return;
           }
-          payload = Object.entries(answers).map(([questionId, selectedOptionIndex]) => ({
-            questionId,
-            selectedOptionIndex,
-          }));
+          payload = questionIds.map(buildAnswerEntry);
         }
 
         const data = await submitTest(testId, payload);
@@ -265,25 +370,42 @@ export default function TestScreen() {
       setSubmitError(null);
       try {
         const validQuestions = questions.filter((q) => q !== undefined);
-        const correctAnswers = validQuestions.map((q) => ({
-          questionId: String(q._id),
-          correctAnswerIndex: q.correctAnswerIndex,
-        }));
+
+        // Build the same `correctAnswers` shape the backend's submit endpoint
+        // returns, so ResultScreen renders daily-practice and real-test
+        // results through identical code paths.
+        const correctAnswers = validQuestions.map((q) => {
+          const correctSet = getQuestionCorrectSet(q);
+          return {
+            questionId: String(q._id),
+            correctAnswers: correctSet,
+            correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
+            questionType: q.questionType || 'single_correct',
+          };
+        });
+
         let correctCount = 0;
         const weakTopicsMap = new Map();
         for (const q of validQuestions) {
           const qid = String(q._id);
-          const userAns = answers[qid];
-          const correctIdx = q.correctAnswerIndex;
-          if (userAns != null && userAns === correctIdx) {
+          const userArr = Array.isArray(answers[qid]) ? answers[qid] : [];
+          const correctSet = getQuestionCorrectSet(q);
+          const isCorrect =
+            correctSet.length > 0 && indexSetsEqual(userArr, correctSet);
+          if (isCorrect) {
             correctCount += 1;
-          } else if (userAns != null && userAns !== correctIdx && q.topicId) {
+          } else if (userArr.length > 0 && q.topicId) {
+            // Only count as a "weak topic mistake" if the user actually
+            // attempted it. Skipping a question doesn't make the topic
+            // weak — it makes the user lazy on that one question.
             const tid = String(q.topicId);
             weakTopicsMap.set(tid, (weakTopicsMap.get(tid) || 0) + 1);
           }
         }
         const total = validQuestions.length;
-        const attemptedQuestions = Object.keys(answers).length;
+        const attemptedQuestions = Object.keys(answers).filter(
+          (k) => Array.isArray(answers[k]) && answers[k].length > 0
+        ).length;
         const accuracy =
           total === 0
             ? 0
@@ -374,7 +496,9 @@ export default function TestScreen() {
   const timerLabel =
     initialSeconds > 0 ? `Time Left: ${formatMmSs(timeLeft)}` : null;
   const showTimerWarning = initialSeconds > 0 && timeLeft <= 60;
-  const attempted = Object.keys(answers).length;
+  const attempted = Object.keys(answers).filter(
+    (k) => Array.isArray(answers[k]) && answers[k].length > 0
+  ).length;
   const totalQuestionsCount = questionIds.length;
   const attemptSummaryLabel = `Attempted: ${attempted} / ${totalQuestionsCount}`;
 
@@ -453,7 +577,14 @@ export default function TestScreen() {
     );
   }
 
-  const selected = currentId != null ? answers[currentId] : undefined;
+  const selectedSet = currentId != null && Array.isArray(answers[currentId])
+    ? answers[currentId]
+    : [];
+  const typeHelperText = isMulti
+    ? 'Select ALL correct options.'
+    : question?.questionType === 'image_based'
+    ? 'Image-based question — pick the correct option.'
+    : null;
 
   return (
     <View style={styles.container}>
@@ -472,9 +603,12 @@ export default function TestScreen() {
         <Text style={styles.question}>
           {question?.questionText || '(question unavailable)'}
         </Text>
+        {typeHelperText ? (
+          <Text style={styles.typeHelper}>{typeHelperText}</Text>
+        ) : null}
         {Array.isArray(question?.options) &&
           question.options.map((opt, i) => {
-            const isSelected = selected === i;
+            const isSelected = selectedSet.includes(i);
             return (
               <Pressable
                 key={i}
@@ -489,10 +623,17 @@ export default function TestScreen() {
                 <View
                   style={[
                     styles.optionIndicator,
+                    isMulti && styles.optionIndicatorSquare,
                     isSelected && styles.optionIndicatorSelected,
                   ]}
                 >
-                  {isSelected ? <View style={styles.optionIndicatorDot} /> : null}
+                  {isSelected ? (
+                    isMulti ? (
+                      <Text style={styles.optionIndicatorCheck}>✓</Text>
+                    ) : (
+                      <View style={styles.optionIndicatorDot} />
+                    )
+                  ) : null}
                 </View>
                 <Text
                   style={[styles.optionText, isSelected && styles.optionTextSelected]}
@@ -582,11 +723,26 @@ const styles = StyleSheet.create({
   optionIndicatorSelected: {
     borderColor: colors.primary,
   },
+  optionIndicatorSquare: {
+    borderRadius: 4,
+  },
   optionIndicatorDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: colors.primary,
+  },
+  optionIndicatorCheck: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.primary,
+    lineHeight: 16,
+  },
+  typeHelper: {
+    fontSize: 13,
+    color: colors.muted,
+    fontStyle: 'italic',
+    marginBottom: 10,
   },
   optionText: { fontSize: 16, color: colors.text, flex: 1 },
   optionTextSelected: { fontWeight: '600', color: colors.primaryText },

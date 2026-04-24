@@ -36,18 +36,66 @@ function getPerformanceTier(accuracy) {
   return TIER_LOW;
 }
 
-function getOptionStyle(optionIndex, correctAnswer, userAnswer) {
-  if (correctAnswer != null && optionIndex === correctAnswer) {
+/**
+ * Coerce any answer/correct shape we might receive (legacy scalar, new
+ * array, undefined) into a deduped, sorted Number[]. Centralizing this
+ * means the rest of the screen never has to branch on the wire shape.
+ */
+function toIndexArray(raw) {
+  if (raw === undefined || raw === null) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  const out = [];
+  for (const v of list) {
+    if (v === null || v === undefined || v === '') continue;
+    const n = Number(v);
+    if (Number.isInteger(n) && n >= 0) out.push(n);
+  }
+  return Array.from(new Set(out)).sort((a, b) => a - b);
+}
+
+/** Order-independent set equality on two index arrays. */
+function indexSetsEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort((x, y) => x - y);
+  const sb = [...b].sort((x, y) => x - y);
+  for (let i = 0; i < sa.length; i += 1) {
+    if (sa[i] !== sb[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Decide how to color a single option in the review card.
+ *   - In `correctSet` → green (the right answer, regardless of selection)
+ *   - User picked but NOT in `correctSet` → red (a wrong selection)
+ *   - Otherwise → neutral
+ *
+ * For multi-correct this paints every correct option green and every
+ * wrongly-selected option red — which is exactly what the user needs to
+ * see to learn from the mistake.
+ */
+function getOptionStyle(optionIndex, correctSet, userSet) {
+  const correctSetSafe = Array.isArray(correctSet) ? correctSet : [];
+  const userSetSafe = Array.isArray(userSet) ? userSet : [];
+  if (correctSetSafe.includes(optionIndex)) {
     return styles.optionCorrect;
   }
-  if (
-    userAnswer != null &&
-    optionIndex === userAnswer &&
-    userAnswer !== correctAnswer
-  ) {
+  if (userSetSafe.includes(optionIndex)) {
     return styles.optionWrong;
   }
   return styles.optionDefault;
+}
+
+function formatIndexList(indexes, options) {
+  const arr = Array.isArray(indexes) ? indexes : [];
+  if (arr.length === 0) return '—';
+  return arr
+    .map((i) => {
+      if (!Number.isInteger(i) || i < 0 || i >= options.length) return '—';
+      return `${String.fromCharCode(65 + i)}. ${options[i] ?? ''}`;
+    })
+    .join('  •  ');
 }
 
 export default function ResultScreen() {
@@ -71,42 +119,71 @@ export default function ResultScreen() {
   } = params || {};
   const isRetry = !!retry;
 
+  /**
+   * Map questionId → canonical Number[] of correct option indexes.
+   *
+   * Backed by `correctAnswers` server payload; we accept BOTH the new
+   * `correctAnswers: [n,...]` array and the legacy `correctAnswerIndex: n`
+   * scalar so this screen renders correctly whether the answer came from
+   * an upgraded backend, an old backend, or the local daily-practice path.
+   *
+   * Falls back to the question doc itself (`q.correctAnswers` /
+   * `q.correctAnswerIndex`) when the payload is missing entries — this is
+   * what makes the screen survive a stale response from a legacy server.
+   */
   const correctAnswerMap = useMemo(() => {
     const m = new Map();
     if (Array.isArray(correctAnswers)) {
       for (const c of correctAnswers) {
-        if (c?.questionId != null) {
-          m.set(String(c.questionId), c.correctAnswerIndex);
-        }
+        if (c?.questionId == null) continue;
+        const arr = toIndexArray(
+          Array.isArray(c.correctAnswers) && c.correctAnswers.length > 0
+            ? c.correctAnswers
+            : c.correctAnswerIndex
+        );
+        m.set(String(c.questionId), arr);
       }
     }
     return m;
   }, [correctAnswers]);
 
+  function getCorrectSetFor(questionId, questionDoc) {
+    const fromMap = correctAnswerMap.get(String(questionId));
+    if (Array.isArray(fromMap) && fromMap.length > 0) return fromMap;
+    return toIndexArray(
+      Array.isArray(questionDoc?.correctAnswers) && questionDoc.correctAnswers.length > 0
+        ? questionDoc.correctAnswers
+        : questionDoc?.correctAnswerIndex
+    );
+  }
+
   const reviewItems = useMemo(() => {
     return (Array.isArray(questions) ? questions : []).map((q) => {
       const qid = String(q?._id ?? '');
-      const userRaw = userAnswers ? userAnswers[qid] : undefined;
-      const userAnswer = userRaw === undefined ? null : userRaw;
-      const correctAnswer = correctAnswerMap.has(qid)
-        ? correctAnswerMap.get(qid)
-        : null;
+      const userArr = toIndexArray(userAnswers ? userAnswers[qid] : undefined);
+      const correctArr = getCorrectSetFor(qid, q);
       return {
         key: qid,
         question: q,
-        userAnswer,
-        correctAnswer,
+        userSet: userArr,
+        correctSet: correctArr,
       };
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions, userAnswers, correctAnswerMap]);
 
   const wrongQuestions = useMemo(() => {
     return (Array.isArray(questions) ? questions : []).filter((q) => {
       const qid = String(q?._id ?? '');
-      const userAnswer = userAnswers ? userAnswers[qid] : undefined;
-      const correct = correctAnswerMap.has(qid) ? correctAnswerMap.get(qid) : undefined;
-      return correct != null && userAnswer !== correct;
+      const userArr = toIndexArray(userAnswers ? userAnswers[qid] : undefined);
+      const correctArr = getCorrectSetFor(qid, q);
+      // Treat unattempted as not-eligible-for-retry so the retry batch only
+      // contains questions where the user actually tried and got it wrong.
+      if (userArr.length === 0) return false;
+      if (correctArr.length === 0) return false;
+      return !indexSetsEqual(userArr, correctArr);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions, userAnswers, correctAnswerMap]);
 
   const wrongQuestionIds = useMemo(
@@ -121,13 +198,9 @@ export default function ResultScreen() {
     let correct = 0;
     for (const q of list) {
       const qid = String(q?._id ?? '');
-      const userAnswer = retryAnswers ? retryAnswers[qid] : undefined;
-      const correctAnswer = correctAnswerMap.has(qid) ? correctAnswerMap.get(qid) : undefined;
-      if (
-        userAnswer != null &&
-        correctAnswer != null &&
-        userAnswer === correctAnswer
-      ) {
+      const userArr = toIndexArray(retryAnswers ? retryAnswers[qid] : undefined);
+      const correctArr = getCorrectSetFor(qid, q);
+      if (userArr.length > 0 && correctArr.length > 0 && indexSetsEqual(userArr, correctArr)) {
         correct += 1;
       }
     }
@@ -136,16 +209,20 @@ export default function ResultScreen() {
         ? 0
         : Math.round(((correct / total) * 100 + Number.EPSILON) * 100) / 100;
     return { correct, total, accuracyPct };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRetry, retryQuestions, retryAnswers, correctAnswerMap]);
 
   const retryWrongQuestions = useMemo(() => {
     if (!isRetry) return [];
     return (Array.isArray(retryQuestions) ? retryQuestions : []).filter((q) => {
       const qid = String(q?._id ?? '');
-      const userAnswer = retryAnswers ? retryAnswers[qid] : undefined;
-      const correct = correctAnswerMap.has(qid) ? correctAnswerMap.get(qid) : undefined;
-      return correct != null && userAnswer !== correct;
+      const userArr = toIndexArray(retryAnswers ? retryAnswers[qid] : undefined);
+      const correctArr = getCorrectSetFor(qid, q);
+      if (userArr.length === 0) return false;
+      if (correctArr.length === 0) return false;
+      return !indexSetsEqual(userArr, correctArr);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRetry, retryQuestions, retryAnswers, correctAnswerMap]);
 
   const retryWrongQuestionIds = useMemo(
@@ -661,40 +738,65 @@ export default function ResultScreen() {
   };
 
   const renderItem = ({ item, index }) => {
-    const { question, userAnswer, correctAnswer } = item || {};
+    const { question, userSet, correctSet } = item || {};
     const options = Array.isArray(question?.options) ? question.options : [];
     const explanation =
       typeof question?.explanation === 'string' && question.explanation.trim()
         ? question.explanation
         : null;
-    const unanswered = userAnswer == null;
-    const isValidIdx = (n) =>
-      Number.isInteger(n) && n >= 0 && n < options.length;
+    const unanswered = !Array.isArray(userSet) || userSet.length === 0;
+    const isMulti =
+      question?.questionType === 'multiple_correct' ||
+      (Array.isArray(correctSet) && correctSet.length > 1);
+    const isOverallCorrect =
+      Array.isArray(correctSet) &&
+      correctSet.length > 0 &&
+      indexSetsEqual(userSet, correctSet);
 
     return (
       <View style={styles.card}>
-        <Text style={styles.qIndex}>Q{index + 1}</Text>
+        <View style={styles.qHeaderRow}>
+          <Text style={styles.qIndex}>Q{index + 1}</Text>
+          {isMulti ? (
+            <View style={styles.multiBadge}>
+              <Text style={styles.multiBadgeText}>Multiple Correct</Text>
+            </View>
+          ) : null}
+          {!unanswered ? (
+            <View
+              style={[
+                styles.verdictBadge,
+                isOverallCorrect ? styles.verdictBadgeOk : styles.verdictBadgeBad,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.verdictBadgeText,
+                  isOverallCorrect
+                    ? styles.verdictBadgeTextOk
+                    : styles.verdictBadgeTextBad,
+                ]}
+              >
+                {isOverallCorrect ? 'Correct' : 'Wrong'}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.qText}>{question?.questionText ?? '(missing question)'}</Text>
         {options.map((opt, i) => (
-          <View key={i} style={[styles.optionRow, getOptionStyle(i, correctAnswer, userAnswer)]}>
+          <View key={i} style={[styles.optionRow, getOptionStyle(i, correctSet, userSet)]}>
             <Text style={styles.optionText}>
               {`${String.fromCharCode(65 + i)}. ${opt ?? ''}`}
             </Text>
           </View>
         ))}
         <Text style={styles.metaLine}>
-          Your answer:{' '}
-          {unanswered
-            ? 'Not answered'
-            : isValidIdx(userAnswer)
-            ? `${String.fromCharCode(65 + userAnswer)}. ${options[userAnswer] ?? ''}`
-            : '—'}
+          Your answer{userSet?.length > 1 ? 's' : ''}:{' '}
+          {unanswered ? 'Not answered' : formatIndexList(userSet, options)}
         </Text>
         <Text style={styles.metaLine}>
-          Correct answer:{' '}
-          {isValidIdx(correctAnswer)
-            ? `${String.fromCharCode(65 + correctAnswer)}. ${options[correctAnswer] ?? ''}`
-            : '—'}
+          Correct answer{correctSet?.length > 1 ? 's' : ''}:{' '}
+          {formatIndexList(correctSet, options)}
         </Text>
         {explanation ? (
           <Text style={styles.explanation}>Explanation: {explanation}</Text>
@@ -875,7 +977,45 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
-  qIndex: { fontSize: 13, color: MUTED, marginBottom: 4, fontWeight: '600' },
+  qHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  qIndex: { fontSize: 13, color: MUTED, fontWeight: '600' },
+  multiBadge: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  multiBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primaryText,
+    letterSpacing: 0.3,
+  },
+  verdictBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
+  verdictBadgeOk: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
+  },
+  verdictBadgeBad: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.danger,
+  },
+  verdictBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  verdictBadgeTextOk: { color: colors.success },
+  verdictBadgeTextBad: { color: colors.danger },
   qText: { fontSize: 16, color: TEXT, marginBottom: 10, lineHeight: 22 },
   optionRow: {
     paddingVertical: 10,
