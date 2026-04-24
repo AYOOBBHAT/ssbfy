@@ -10,6 +10,7 @@ import LeaderboardScreen from '../screens/LeaderboardScreen';
 import PdfListScreen from '../screens/PdfListScreen';
 import NotesListScreen from '../screens/NotesListScreen';
 import NoteDetailScreen from '../screens/NoteDetailScreen';
+import PremiumScreen from '../screens/PremiumScreen';
 import { colors, brand } from '../theme/colors';
 
 const Stack = createNativeStackNavigator();
@@ -67,6 +68,11 @@ export default function AppNavigator() {
             name="NoteDetail"
             component={NoteDetailScreen}
             options={{ title: 'Note' }}
+          />
+          <Stack.Screen
+            name="Premium"
+            component={PremiumScreen}
+            options={{ title: 'Premium' }}
           />
         </>
       ) : (

@@ -1,4 +1,5 @@
 import api from './api.js';
+import { getDeviceId } from '../utils/deviceId.js';
 
 /** @returns {Promise<{ tests: object[] }>} */
 export async function getTests() {
@@ -8,7 +9,8 @@ export async function getTests() {
 
 /** @returns {Promise<{ attempt: object, resumed: boolean }>} */
 export async function startTest(testId) {
-  const { data } = await api.post(`/tests/${testId}/start`);
+  const deviceId = await getDeviceId();
+  const { data } = await api.post(`/tests/${testId}/start`, { deviceId });
   return data?.data ?? {};
 }
 

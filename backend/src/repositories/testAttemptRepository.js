@@ -30,6 +30,18 @@ export const testAttemptRepository = {
       .exec();
   },
 
+  /**
+   * Removes an in-progress attempt when free-tier enforcement fails after
+   * the attempt row was created (device slot could not be consumed).
+   */
+  async deleteOpenAttemptByIdForUser(attemptId, userId) {
+    return TestAttempt.deleteOne({
+      _id: attemptId,
+      userId,
+      endTime: null,
+    }).exec();
+  },
+
   async finalizeAttempt(attemptId, userId, testId, payload) {
     return TestAttempt.findOneAndUpdate(
       {

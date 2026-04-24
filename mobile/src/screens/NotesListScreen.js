@@ -8,7 +8,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage } from '../services/api';
+import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getPosts } from '../services/pdfService';
 import {
   getNotes,
@@ -41,7 +43,9 @@ import { colors } from '../theme/colors';
 export default function NotesListScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { user } = useAuth();
   const initial = route?.params || {};
+  const showPremiumUpsell = !userHasPremiumAccess(user);
 
   // ---- Selection state ----
   const [selectedPostId, setSelectedPostId] = useState(initial.postId || '');
@@ -370,6 +374,17 @@ export default function NotesListScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      {showPremiumUpsell ? (
+        <Pressable
+          onPress={() => navigation.navigate('Premium', { from: 'notes' })}
+          style={({ pressed }) => [styles.premiumUpsell, pressed && styles.btnPressed]}
+        >
+          <Text style={styles.premiumUpsellTitle}>Premium topic-wise notes</Text>
+          <Text style={styles.premiumUpsellSub}>
+            Unlock depth, filters, and full study mode — Go Premium
+          </Text>
+        </Pressable>
+      ) : null}
       {renderPostRow()}
 
       {selectedPostId
@@ -403,6 +418,27 @@ export default function NotesListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
+
+  premiumUpsell: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  premiumUpsellTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.primaryText,
+  },
+  premiumUpsellSub: {
+    fontSize: 13,
+    color: colors.primaryText,
+    marginTop: 4,
+    lineHeight: 18,
+    opacity: 0.9,
+  },
 
   sectionBlock: { marginBottom: 12 },
   sectionTitle: {

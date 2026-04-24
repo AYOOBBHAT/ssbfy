@@ -9,3 +9,4 @@ export { Result } from './Result.js';
 export { Payment } from './Payment.js';
 export { Note } from './Note.js';
 export { PdfNote } from './PdfNote.js';
+export { DeviceUsage } from './DeviceUsage.js';

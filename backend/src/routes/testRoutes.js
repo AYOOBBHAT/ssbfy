@@ -4,7 +4,11 @@ import { authenticate } from '../middlewares/auth.js';
 import { adminChain } from '../middlewares/adminGuard.js';
 import { checkTestAccess } from '../middlewares/checkTestAccess.js';
 import { validateRequest } from '../middlewares/validate.js';
-import { submitTestValidators, testIdParam } from '../validators/testAttemptValidators.js';
+import {
+  startTestValidators,
+  submitTestValidators,
+  testIdParam,
+} from '../validators/testAttemptValidators.js';
 import { createTestValidators } from '../validators/testValidators.js';
 
 const router = Router();
@@ -13,6 +17,7 @@ router.post(
   '/:id/start',
   authenticate,
   ...testIdParam,
+  startTestValidators,
   validateRequest,
   checkTestAccess,
   testController.start

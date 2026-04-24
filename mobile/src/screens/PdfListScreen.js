@@ -9,8 +9,10 @@ import {
   Alert,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage } from '../services/api';
+import { userHasPremiumAccess } from '../utils/premiumAccess';
 import {
   formatFileSize,
   getPdfNotes,
@@ -37,7 +39,10 @@ import { colors } from '../theme/colors';
  */
 export default function PdfListScreen() {
   const route = useRoute();
+  const navigation = useNavigation();
+  const { user } = useAuth();
   const initialPostId = route?.params?.postId || null;
+  const showPremiumUpsell = !userHasPremiumAccess(user);
 
   const [posts, setPosts] = useState([]);
   const [selectedPostId, setSelectedPostId] = useState(initialPostId);
@@ -299,6 +304,17 @@ export default function PdfListScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      {showPremiumUpsell ? (
+        <Pressable
+          onPress={() => navigation.navigate('Premium', { from: 'pdf' })}
+          style={({ pressed }) => [styles.premiumUpsell, pressed && styles.btnPressed]}
+        >
+          <Text style={styles.premiumUpsellTitle}>Full PDF notes library</Text>
+          <Text style={styles.premiumUpsellSub}>
+            Go Premium for unlimited access to every PDF on this device.
+          </Text>
+        </Pressable>
+      ) : null}
       <Text style={styles.sectionTitle}>Post</Text>
       {renderPostChips()}
 
@@ -313,6 +329,27 @@ export default function PdfListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
+
+  premiumUpsell: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  premiumUpsellTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.primaryText,
+  },
+  premiumUpsellSub: {
+    fontSize: 13,
+    color: colors.primaryText,
+    marginTop: 4,
+    lineHeight: 18,
+    opacity: 0.9,
+  },
 
   sectionTitle: {
     fontSize: 14,

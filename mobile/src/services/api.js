@@ -68,3 +68,12 @@ export function getApiErrorMessage(error) {
   }
   return 'Something went wrong';
 }
+
+/** Mirrors backend `AppError` copy for free-tier blocks (403). */
+export const FREE_TEST_LIMIT_MESSAGE =
+  'Free test limit reached. Upgrade to continue.';
+
+export function isFreeTestLimitError(error) {
+  if (error?.response?.status !== 403) return false;
+  return getApiErrorMessage(error) === FREE_TEST_LIMIT_MESSAGE;
+}

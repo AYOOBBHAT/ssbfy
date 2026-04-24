@@ -1,7 +1,14 @@
+import { HTTP_STATUS } from '../constants/httpStatus.js';
+import { env } from '../config/env.js';
 import { testService } from '../services/testService.js';
 import { testAttemptService } from '../services/testAttemptService.js';
+import { userRepository } from '../repositories/userRepository.js';
+import { deviceUsageRepository } from '../repositories/deviceUsageRepository.js';
+import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
+import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
+import { FREE_TEST_LIMIT_MESSAGE, isPremiumUser } from '../utils/freeTierAccess.js';
 
 export const testController = {
   list: asyncHandler(async (req, res) => {
@@ -20,10 +27,47 @@ export const testController = {
   }),
 
   start: asyncHandler(async (req, res) => {
-    const { attempt, resumed } = await testAttemptService.start(req.user.id, req.params.id);
+    const userId = req.user.id;
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const { attempt, resumed } = await testAttemptService.start(userId, req.params.id);
+
     if (resumed) {
       return sendSuccess(res, { attempt, resumed: true }, 'Test attempt resumed');
     }
+
+    if (isPremiumUser(user)) {
+      return sendCreated(res, { attempt, resumed: false }, 'Test attempt started');
+    }
+
+    const deviceId =
+      typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
+    if (!deviceId || deviceId.length < 4) {
+      await testAttemptRepository.deleteOpenAttemptByIdForUser(attempt._id, userId);
+      throw new AppError('deviceId is required', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const updatedDevice = await deviceUsageRepository.consumeOneIfUnderLimit(
+      deviceId,
+      userId,
+      env.freeTestLimit
+    );
+    if (!updatedDevice) {
+      await testAttemptRepository.deleteOpenAttemptByIdForUser(attempt._id, userId);
+      throw new AppError(FREE_TEST_LIMIT_MESSAGE, HTTP_STATUS.FORBIDDEN);
+    }
+
+    await userRepository.incrementFreeAttemptsUsed(userId);
+
+    console.log('[ACCESS] Device free attempt consumed (post-start):', {
+      deviceId: deviceId.slice(0, 12),
+      freeAttemptsUsed: updatedDevice.freeAttemptsUsed,
+      userId: String(userId),
+    });
+
     return sendCreated(res, { attempt, resumed: false }, 'Test attempt started');
   }),
 

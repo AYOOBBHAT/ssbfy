@@ -8,11 +8,16 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { getApiErrorMessage } from '../services/api';
+import {
+  getApiErrorMessage,
+  isFreeTestLimitError,
+  FREE_TEST_LIMIT_MESSAGE,
+} from '../services/api';
 import { getTests, startTest } from '../services/testService';
 import { getDailyPractice } from '../services/dailyPracticeService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors, brand } from '../theme/colors';
+import { userHasPremiumAccess } from '../utils/premiumAccess';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -20,6 +25,7 @@ export default function HomeScreen() {
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [mockStartError, setMockStartError] = useState(null);
   const [startingId, setStartingId] = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyError, setDailyError] = useState(null);
@@ -54,12 +60,12 @@ export default function HomeScreen() {
       setError('This test is unavailable.');
       return;
     }
-    setError(null);
+    setMockStartError(null);
     setStartingId(testId);
     try {
       const data = (await startTest(testId)) || {};
       if (!data.attempt) {
-        setError('Could not start this test. Please try again.');
+        setMockStartError('Could not start this test. Please try again.');
         return;
       }
       navigation.navigate('Test', {
@@ -68,7 +74,11 @@ export default function HomeScreen() {
         durationMinutes: item?.duration,
       });
     } catch (e) {
-      setError(getApiErrorMessage(e));
+      setMockStartError(
+        isFreeTestLimitError(e)
+          ? FREE_TEST_LIMIT_MESSAGE
+          : getApiErrorMessage(e)
+      );
     } finally {
       setStartingId(null);
     }
@@ -92,7 +102,11 @@ export default function HomeScreen() {
         questions,
       });
     } catch (e) {
-      setDailyError(getApiErrorMessage(e));
+      setDailyError(
+        isFreeTestLimitError(e)
+          ? FREE_TEST_LIMIT_MESSAGE
+          : getApiErrorMessage(e)
+      );
     } finally {
       setDailyLoading(false);
     }
@@ -101,6 +115,7 @@ export default function HomeScreen() {
   const name = user?.name || 'there';
   const streak = Number(user?.streakCount) || 0;
   const streakLabel = streak === 1 ? 'day' : 'days';
+  const isPremium = userHasPremiumAccess(user);
 
   const renderHeader = () => (
     <View>
@@ -108,6 +123,21 @@ export default function HomeScreen() {
         <Text style={styles.brandName}>{brand.name}</Text>
         <Text style={styles.brandTagline}>{brand.tagline}</Text>
       </View>
+
+      {isPremium ? (
+        <View style={styles.premiumStatusBar}>
+          <Text style={styles.premiumStatusText}>Premium Active ✅</Text>
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => navigation.navigate('Premium', { from: 'home' })}
+          style={({ pressed }) => [styles.premiumBanner, pressed && styles.btnPressed]}
+        >
+          <Text style={styles.premiumBannerText}>
+            Unlock Unlimited Practice → Go Premium
+          </Text>
+        </Pressable>
+      )}
 
       <View style={styles.greetingBlock}>
         <Text style={styles.greeting}>Welcome back,</Text>
@@ -131,7 +161,24 @@ export default function HomeScreen() {
         <Text style={styles.cardSubtitle}>
           Build your streak with a quick daily drill.
         </Text>
-        {dailyError ? <Text style={styles.err}>{dailyError}</Text> : null}
+        {dailyError ? (
+          <View style={styles.inlineAlert}>
+            <Text style={styles.err}>{dailyError}</Text>
+            {dailyError === FREE_TEST_LIMIT_MESSAGE ? (
+              <Text style={styles.limitHint}>
+                Upgrade to premium for unlimited practice on this device.
+              </Text>
+            ) : null}
+            {dailyError === FREE_TEST_LIMIT_MESSAGE ? (
+              <Pressable
+                onPress={() => navigation.navigate('Premium', { from: 'daily' })}
+                style={({ pressed }) => [styles.upgradeLink, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.upgradeLinkText}>See plans & upgrade</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         <Pressable
           onPress={handleStartDailyPractice}
           disabled={dailyLoading}
@@ -148,6 +195,25 @@ export default function HomeScreen() {
       </View>
 
       <Text style={styles.sectionTitle}>Mock Tests</Text>
+      {mockStartError ? (
+        <View style={styles.card}>
+          <Text style={styles.limitTitle}>Free tier limit</Text>
+          <Text style={styles.limitBody}>{mockStartError}</Text>
+          {mockStartError === FREE_TEST_LIMIT_MESSAGE ? (
+            <Text style={styles.limitHint}>
+              Upgrade to premium for unlimited mock tests and full access on this device.
+            </Text>
+          ) : null}
+          {mockStartError === FREE_TEST_LIMIT_MESSAGE ? (
+            <Pressable
+              onPress={() => navigation.navigate('Premium', { from: 'limit' })}
+              style={({ pressed }) => [styles.upgradeLink, pressed && styles.btnPressed]}
+            >
+              <Text style={styles.upgradeLinkText}>See plans & upgrade</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {loading ? (
         <View style={styles.card}>
           <LoadingState label="Loading tests..." compact />
@@ -305,6 +371,37 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  premiumBanner: {
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+  },
+  premiumBannerText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  premiumStatusBar: {
+    backgroundColor: colors.successSoft,
+    borderWidth: 1,
+    borderColor: colors.success,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+  },
+  premiumStatusText: {
+    color: colors.success,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+
   greetingBlock: { marginBottom: 16 },
   greeting: { fontSize: 14, color: colors.muted },
   name: { fontSize: 24, fontWeight: '700', color: colors.text, marginTop: 2 },
@@ -408,4 +505,31 @@ const styles = StyleSheet.create({
   loader: { marginVertical: 16 },
   muted: { color: colors.muted, fontSize: 14 },
   err: { color: colors.danger, marginTop: 8, marginBottom: 4, fontSize: 13 },
+  inlineAlert: { marginTop: 8 },
+  limitTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  limitBody: { fontSize: 14, color: colors.danger, fontWeight: '600' },
+  limitHint: {
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  upgradeLink: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  upgradeLinkText: {
+    color: colors.textOnPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });

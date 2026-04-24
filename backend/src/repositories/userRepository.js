@@ -35,6 +35,15 @@ export const userRepository = {
       .exec();
   },
 
+  /**
+   * Unconditional +1 on freeAttemptsUsed (analytics). Used when a device
+   * slot is consumed for a new mock test — device collection enforces the
+   * cap; user field is no longer the gate.
+   */
+  async incrementFreeAttemptsUsed(userId) {
+    return User.updateOne({ _id: userId }, { $inc: { freeAttemptsUsed: 1 } }).exec();
+  },
+
   async findLeaderboard(limit = 20) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
     return User.find({})

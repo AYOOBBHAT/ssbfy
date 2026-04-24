@@ -29,6 +29,12 @@ export const env = {
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || '',
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || '',
   pdfMaxSizeMb: Number(process.env.PDF_MAX_SIZE_MB) || 25,
+
+  /**
+   * Max free mock-test starts per device for non-premium users.
+   * Override with FREE_TEST_LIMIT in .env (falls back to 3).
+   */
+  freeTestLimit: Math.max(1, Number(process.env.FREE_TEST_LIMIT) || 3),
 };
 
 export const isProd = env.nodeEnv === 'production';

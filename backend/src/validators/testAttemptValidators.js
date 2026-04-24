@@ -4,6 +4,15 @@ export const testIdParam = [
   param('id').isMongoId().withMessage('Invalid test id'),
 ];
 
+/** POST /tests/:id/start — device id is mandatory for free-tier enforcement. */
+export const startTestValidators = [
+  body('deviceId')
+    .isString()
+    .trim()
+    .isLength({ min: 4, max: 256 })
+    .withMessage('deviceId must be a non-empty string (4–256 chars)'),
+];
+
 export const submitTestValidators = [
   body('answers').isArray().withMessage('answers must be an array'),
   body('answers.*.questionId').isMongoId().withMessage('Each answer needs a valid questionId'),
