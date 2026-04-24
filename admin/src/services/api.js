@@ -227,4 +227,57 @@ export async function updateNote(id, { title, content, isActive } = {}) {
   return unwrap(res);
 }
 
+/* ---------------- PDF Notes ---------------- */
+
+/**
+ * List uploaded PDF notes. Pass `{ postId }` to scope to a post and
+ * `{ includeInactive: true }` to include disabled uploads (admin-only
+ * on the server; the server silently drops the flag for non-admins).
+ */
+export async function getPdfNotes(params = {}) {
+  const query = {};
+  if (params.postId) query.postId = params.postId;
+  if (params.includeInactive) query.includeInactive = 'true';
+  const res = await api.get('/notes/pdfs', { params: query });
+  return unwrap(res);
+}
+
+/**
+ * Upload a PDF note (admin only). `file` must be a `File`/`Blob` from
+ * an <input type="file">. The request uses multipart/form-data so the
+ * axios JSON defaults are overridden with `Content-Type: undefined`,
+ * which lets the browser set the correct boundary header.
+ */
+export async function uploadPdfNote({ title, postId, file } = {}) {
+  if (!title) throw new Error('title is required to upload a PDF.');
+  if (!postId) throw new Error('postId is required to upload a PDF.');
+  if (!file) throw new Error('file is required to upload a PDF.');
+
+  const formData = new FormData();
+  formData.append('title', title);
+  formData.append('postId', postId);
+  formData.append('file', file);
+
+  const res = await api.post('/notes/upload-pdf', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    // PDFs can be large and Render cold starts are slow; give the
+    // upload generous head-room so a slow connection doesn't fail.
+    timeout: 120000,
+  });
+  return unwrap(res);
+}
+
+/**
+ * Patch a PDF note (admin only). Today only `isActive` is patchable —
+ * file content is immutable and moving a PDF across posts is a
+ * re-upload.
+ */
+export async function updatePdfNote(id, { isActive } = {}) {
+  if (!id) throw new Error('updatePdfNote requires an id.');
+  const payload = {};
+  if (typeof isActive === 'boolean') payload.isActive = isActive;
+  const res = await api.patch(`/notes/pdfs/${id}`, payload);
+  return unwrap(res);
+}
+
 export default api;

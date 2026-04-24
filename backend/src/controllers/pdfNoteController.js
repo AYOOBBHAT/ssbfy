@@ -4,13 +4,42 @@ import { sendSuccess, sendCreated } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { destroyPdfAsset } from '../config/cloudinary.js';
+import { ROLES } from '../constants/roles.js';
+
+/**
+ * Admin-only bypass: an authenticated admin may pass `includeInactive=true`
+ * on the GET to see disabled PDFs in the management UI. Anyone else
+ * (anonymous or authenticated non-admin) always gets the active-only
+ * list, even if they try to sneak the flag.
+ */
+function shouldIncludeInactive(req) {
+  const wanted = String(req.query.includeInactive || '').toLowerCase() === 'true';
+  return wanted && req.user?.role === ROLES.ADMIN;
+}
 
 export const pdfNoteController = {
-  /** GET /api/notes/pdfs?postId= */
+  /** GET /api/notes/pdfs?postId=&includeInactive= */
   list: asyncHandler(async (req, res) => {
     const { postId } = req.query;
-    const pdfs = await pdfNoteService.list({ postId });
+    const pdfs = await pdfNoteService.list({
+      postId,
+      includeInactive: shouldIncludeInactive(req),
+    });
     return sendSuccess(res, { pdfs }, 'PDF notes');
+  }),
+
+  /** PATCH /api/notes/pdfs/:id — admin only. Partial update. */
+  update: asyncHandler(async (req, res) => {
+    const { isActive } = req.body;
+    const pdf = await pdfNoteService.update(
+      req.params.id,
+      { isActive },
+      req.user
+    );
+    if (!pdf) {
+      throw new AppError('PDF note not found', HTTP_STATUS.NOT_FOUND);
+    }
+    return sendSuccess(res, { pdf }, 'PDF note updated');
   }),
 
   /**

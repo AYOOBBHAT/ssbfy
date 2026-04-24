@@ -17,6 +17,16 @@ const cards = [
     description: 'Filter, review, and enable/disable existing notes.',
   },
   {
+    to: '/upload-pdf',
+    title: 'Upload PDF',
+    description: 'Upload a PDF resource scoped to a post.',
+  },
+  {
+    to: '/manage-pdfs',
+    title: 'Manage PDFs',
+    description: 'Browse uploaded PDFs and enable/disable them.',
+  },
+  {
     to: '/create-test',
     title: 'Create Test',
     description: 'Bundle questions into a timed mock test.',

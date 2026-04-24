@@ -22,4 +22,13 @@ export const pdfNoteRepository = {
     });
     return doc.toObject();
   },
+
+  async updateById(id, patch) {
+    return PdfNote.findByIdAndUpdate(id, patch, {
+      new: true,
+      runValidators: true,
+    })
+      .lean()
+      .exec();
+  },
 };

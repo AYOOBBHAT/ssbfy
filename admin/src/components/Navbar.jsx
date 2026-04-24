@@ -6,6 +6,8 @@ const links = [
   { to: '/add-question', label: 'Add Question' },
   { to: '/add-note', label: 'Add Note' },
   { to: '/manage-notes', label: 'Manage Notes' },
+  { to: '/upload-pdf', label: 'Upload PDF' },
+  { to: '/manage-pdfs', label: 'Manage PDFs' },
   { to: '/create-test', label: 'Create Test' },
   { to: '/topics', label: 'Subjects & Topics' },
 ];

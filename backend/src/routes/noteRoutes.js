@@ -13,6 +13,7 @@ import {
 import {
   uploadPdfNoteValidators,
   listPdfNotesValidators,
+  updatePdfNoteValidators,
 } from '../validators/pdfNoteValidators.js';
 
 const router = Router();
@@ -22,11 +23,23 @@ const router = Router();
 // Declared BEFORE the text-note routes because `GET /pdfs` must not be
 // captured by any `/:id` pattern on text notes below.
 
+// `authOptional` so an authenticated admin can pass `includeInactive=true`
+// from the management UI; anonymous callers always get the active-only
+// list (the controller gates the flag on role).
 router.get(
   '/pdfs',
+  authOptional,
   listPdfNotesValidators,
   validateRequest,
   pdfNoteController.list
+);
+
+router.patch(
+  '/pdfs/:id',
+  ...adminChain,
+  updatePdfNoteValidators,
+  validateRequest,
+  pdfNoteController.update
 );
 
 /**

@@ -60,4 +60,46 @@ export const pdfNoteService = {
       uploadedBy,
     });
   },
+
+  /**
+   * Partial update. Currently only `isActive` is patchable — moving a PDF
+   * across posts is a re-upload, not an edit, and the file body itself
+   * is immutable once stored in Cloudinary.
+   *
+   * `actor` is the authenticated admin; used for the audit log line so
+   * disables are traceable in Render logs.
+   */
+  async update(id, patch = {}, actor = null) {
+    const before = await pdfNoteRepository.findById(id);
+    if (!before) {
+      throw new AppError('PDF note not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const update = {};
+    if (typeof patch.isActive === 'boolean') {
+      update.isActive = patch.isActive;
+    }
+
+    if (Object.keys(update).length === 0) {
+      throw new AppError(
+        'No valid fields provided to update',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    const updated = await pdfNoteRepository.updateById(id, update);
+
+    if (
+      typeof update.isActive === 'boolean' &&
+      update.isActive !== before.isActive
+    ) {
+      const actorId = actor?.id ? String(actor.id) : 'unknown';
+      console.log(
+        `[ADMIN] PDF note ${update.isActive ? 'enabled' : 'disabled'}:`,
+        { id: String(id), userId: actorId }
+      );
+    }
+
+    return updated;
+  },
 };
