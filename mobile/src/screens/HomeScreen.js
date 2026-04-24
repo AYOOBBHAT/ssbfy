@@ -194,6 +194,25 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
+      <Text style={styles.sectionTitle}>Practice by Topic</Text>
+      <Pressable
+        onPress={() => navigation.navigate('SmartPractice')}
+        style={({ pressed }) => [
+          styles.smartPracticeCard,
+          pressed && styles.btnPressed,
+        ]}
+      >
+        <Text style={styles.smartPracticeEmoji}>🔥</Text>
+        <View style={styles.smartPracticeTextBlock}>
+          <Text style={styles.smartPracticeTitle}>Practice by Topic</Text>
+          <Text style={styles.smartPracticeSubtitle}>
+            Select a subject or topic and start targeted practice. No timer—
+            practice only.
+          </Text>
+        </View>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
+
       <Text style={styles.sectionTitle}>Mock Tests</Text>
       {mockStartError ? (
         <View style={styles.card}>
@@ -455,6 +474,31 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   primaryBtnText: { color: colors.textOnPrimary, fontSize: 15, fontWeight: '600' },
+
+  smartPracticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  smartPracticeEmoji: { fontSize: 28, marginRight: 12 },
+  smartPracticeTextBlock: { flex: 1 },
+  smartPracticeTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.primaryText,
+  },
+  smartPracticeSubtitle: {
+    fontSize: 13,
+    color: colors.primaryText,
+    marginTop: 4,
+    lineHeight: 18,
+    opacity: 0.9,
+  },
 
   secondaryBtn: {
     backgroundColor: colors.primary,

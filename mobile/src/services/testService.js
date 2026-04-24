@@ -51,6 +51,16 @@ export async function getQuestionsByTopic(topicId, opts = {}) {
  * @param {{ limit?: number }} [opts]
  * @returns {Promise<{ questions: object[] }>}
  */
+/**
+ * Custom topic-wise mock: random active questions matching filters.
+ * @param {{ postId?: string, subjectId?: string, topicId?: string, difficulty?: string, limit?: number }} body
+ * @returns {Promise<{ questions: object[] }>}
+ */
+export async function postSmartPractice(body) {
+  const { data } = await api.post('/questions/smart-practice', body);
+  return data?.data ?? { questions: [] };
+}
+
 export async function getWeakPractice(topicIds, opts = {}) {
   const ids = Array.isArray(topicIds)
     ? topicIds.map((t) => (t == null ? '' : String(t).trim())).filter(Boolean)

@@ -115,6 +115,41 @@ export const createQuestionValidators = [
  * stash it on `req.query.topicIdList` for the controller, so downstream code
  * never has to re-parse.
  */
+/**
+ * POST /questions/smart-practice — authenticated custom mock generation.
+ * At least one of postId, subjectId, topicId required (cross-field check).
+ */
+export const smartPracticeBodyValidators = [
+  body('postId').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid postId'),
+  body('subjectId')
+    .optional({ checkFalsy: true })
+    .isMongoId()
+    .withMessage('Invalid subjectId'),
+  body('topicId').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid topicId'),
+  body('difficulty')
+    .optional({ checkFalsy: true })
+    .isIn([...DIFFICULTY_VALUES, 'all'])
+    .withMessage(`difficulty must be one of: all, ${DIFFICULTY_VALUES.join(', ')}`),
+  body('limit')
+    .optional()
+    .isInt({ min: 1, max: 50 })
+    .withMessage('limit must be an integer from 1 to 50')
+    .toInt(),
+  body().custom((val) => {
+    const p = val?.postId;
+    const s = val?.subjectId;
+    const t = val?.topicId;
+    const has =
+      (p != null && String(p).trim() !== '') ||
+      (s != null && String(s).trim() !== '') ||
+      (t != null && String(t).trim() !== '');
+    if (!has) {
+      throw new Error('At least one of postId, subjectId, or topicId is required');
+    }
+    return true;
+  }),
+];
+
 export const weakPracticeValidators = [
   query('topicIds')
     .custom((value, { req }) => {

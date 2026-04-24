@@ -20,7 +20,7 @@ import { colors } from '../theme/colors';
 
 const BENEFITS = [
   'Unlimited Mock Tests',
-  'Weak Topic Smart Practice',
+  'Practice weak topics',
   'Full PDF Notes Access',
   'Premium Topic-wise Notes',
   'Advanced Performance Tracking',

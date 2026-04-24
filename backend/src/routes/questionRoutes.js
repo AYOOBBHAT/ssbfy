@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { questionController } from '../controllers/questionController.js';
 import { validateRequest } from '../middlewares/validate.js';
+import { authenticate } from '../middlewares/auth.js';
 import { adminChain } from '../middlewares/adminGuard.js';
 import {
   createQuestionValidators,
   listQuestionsQueryValidators,
   questionIdParam,
+  smartPracticeBodyValidators,
   updateQuestionValidators,
   weakPracticeValidators,
 } from '../validators/questionValidators.js';
@@ -28,6 +30,14 @@ router.get(
   weakPracticeValidators,
   validateRequest,
   questionController.weakPractice
+);
+
+router.post(
+  '/smart-practice',
+  authenticate,
+  smartPracticeBodyValidators,
+  validateRequest,
+  questionController.smartPractice
 );
 
 router.post(

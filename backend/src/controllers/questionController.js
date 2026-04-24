@@ -32,6 +32,18 @@ export const questionController = {
     return sendSuccess(res, { questions }, 'Weak-topic practice questions');
   }),
 
+  smartPractice: asyncHandler(async (req, res) => {
+    const { postId, subjectId, topicId, difficulty, limit } = req.body || {};
+    const { questions } = await questionService.smartPractice({
+      postId,
+      subjectId,
+      topicId,
+      difficulty,
+      limit: limit ?? 10,
+    });
+    return sendSuccess(res, { questions }, 'Smart practice questions');
+  }),
+
   create: asyncHandler(async (req, res) => {
     const question = await questionService.create(req.body);
     return sendCreated(res, { question }, 'Question created');

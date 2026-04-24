@@ -11,6 +11,7 @@ import PdfListScreen from '../screens/PdfListScreen';
 import NotesListScreen from '../screens/NotesListScreen';
 import NoteDetailScreen from '../screens/NoteDetailScreen';
 import PremiumScreen from '../screens/PremiumScreen';
+import SmartPracticeScreen from '../screens/SmartPracticeScreen';
 import { colors, brand } from '../theme/colors';
 
 const Stack = createNativeStackNavigator();
@@ -73,6 +74,11 @@ export default function AppNavigator() {
             name="Premium"
             component={PremiumScreen}
             options={{ title: 'Premium' }}
+          />
+          <Stack.Screen
+            name="SmartPractice"
+            component={SmartPracticeScreen}
+            options={{ title: 'Practice by Topic' }}
           />
         </>
       ) : (

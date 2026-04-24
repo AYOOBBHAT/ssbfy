@@ -176,4 +176,23 @@ export const questionRepository = {
 
     return rows;
   },
+
+  /**
+   * Random active questions for smart-practice: caller supplies a fully-built
+   * `$match` object (must include `isActive: true` and at least one scope
+   * field). Uses `$sample` like weak-practice; returns fewer than `limit`
+   * when the pool is smaller — never throws.
+   */
+  async findRandomSmartPractice(match, limit = 10) {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 50));
+    const rows = await Question.aggregate([
+      { $match: match },
+      { $sample: { size: safeLimit } },
+    ]);
+    await Question.populate(rows, [
+      { path: 'topicId', select: 'name slug isActive subjectId' },
+      { path: 'subjectId', select: 'name slug isActive postId' },
+    ]);
+    return rows;
+  },
 };

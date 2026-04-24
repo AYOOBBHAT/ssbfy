@@ -360,6 +360,38 @@ export const questionService = {
     return { questions };
   },
 
+  /**
+   * Topic-wise (or broader) custom mock generation: random active questions
+   * matching optional post / subject / topic / difficulty. At least one of
+   * postId, subjectId, topicId must be present (validated upstream).
+   * `difficulty: 'all'` or omit → no difficulty filter.
+   */
+  async smartPractice({ postId, subjectId, topicId, difficulty, limit = 10 } = {}) {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 50));
+    const match = { isActive: true };
+
+    if (postId) {
+      match.postIds = new mongoose.Types.ObjectId(String(postId));
+    }
+    if (subjectId) {
+      match.subjectId = new mongoose.Types.ObjectId(String(subjectId));
+    }
+    if (topicId) {
+      match.topicId = new mongoose.Types.ObjectId(String(topicId));
+    }
+
+    const d = difficulty != null ? String(difficulty).trim().toLowerCase() : '';
+    if (d && d !== 'all') {
+      if (!DIFFICULTY_VALUES.includes(d)) {
+        throw new AppError('Invalid difficulty', HTTP_STATUS.BAD_REQUEST);
+      }
+      match.difficulty = d;
+    }
+
+    const raw = await questionRepository.findRandomSmartPractice(match, safeLimit);
+    return { questions: projectQuestions(raw) };
+  },
+
   async getById(id) {
     const q = await questionRepository.findById(id);
     if (!q || !q.isActive) {
