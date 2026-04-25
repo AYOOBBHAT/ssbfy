@@ -65,31 +65,53 @@ export async function destroyPdfAsset(publicId) {
 }
 
 /**
+ * `multer-storage-cloudinary` sets `file.filename` to the upload response
+ * `public_id`. Cloudinary may return either the full id (`ssbfy/pdf-notes/pdf-…`)
+ * or the bare id we asked for (`pdf-…`). The delivery URL and destroy API
+ * need the same full path. Never treat `originalname` (e.g. "notes.pdf") as
+ * public_id.
+ */
+export function ensureCanonicalRawPublicId(multerPublicId) {
+  if (multerPublicId == null) return null;
+  const s = String(multerPublicId).trim();
+  if (!s) return null;
+  if (s.includes('/')) {
+    return s;
+  }
+  // Our uploads use public_id: `pdf-${Date.now()}-<12 hex>` under PDF_CLOUDINARY_FOLDER
+  if (/^pdf-\d+-[a-f0-9]+$/i.test(s)) {
+    return `${PDF_CLOUDINARY_FOLDER}/${s}`;
+  }
+  return s;
+}
+
+/**
  * Public HTTPS delivery URL for a `resource_type: 'raw'` PDF asset.
  *
- * Multer stores `file.path` from the upload API's `secure_url` — that is
- * the correct value. This helper re-applies the official `cloudinary.url()`
- * builder when the upload path is missing, non-HTTPS, or not a res.cloudinary.com
- * URL, so we never persist a hand-built or broken delivery link.
+ * Prefer the official `cloudinary.url(canonical public_id, …)` so the link
+ * always matches the stored asset. Fallback to the upload `secure_url` only
+ * when we have no public_id to rebuild (legacy rows).
  */
 export function rawAssetDeliveryUrl(secureUrlFromUpload, publicId) {
   const fromApi = typeof secureUrlFromUpload === 'string' ? secureUrlFromUpload.trim() : '';
+  const canonical = ensureCanonicalRawPublicId(publicId);
+
+  if (canonical) {
+    try {
+      return cloudinary.url(canonical, {
+        resource_type: 'raw',
+        secure: true,
+      });
+    } catch {
+      // e.g. missing cloud_name in local dev — fall back below
+    }
+  }
   if (
     fromApi &&
     /^https:\/\//i.test(fromApi) &&
     fromApi.includes('res.cloudinary.com')
   ) {
     return fromApi;
-  }
-  if (publicId) {
-    try {
-      return cloudinary.url(String(publicId), {
-        resource_type: 'raw',
-        secure: true,
-      });
-    } catch {
-      return fromApi;
-    }
   }
   return fromApi;
 }

@@ -3,7 +3,11 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
-import { destroyPdfAsset, rawAssetDeliveryUrl } from '../config/cloudinary.js';
+import {
+  destroyPdfAsset,
+  ensureCanonicalRawPublicId,
+  rawAssetDeliveryUrl,
+} from '../config/cloudinary.js';
 import { ROLES } from '../constants/roles.js';
 
 /**
@@ -71,15 +75,15 @@ export const pdfNoteController = {
     try {
       const { title, postId, postIds } = req.body;
 
+      const publicId = ensureCanonicalRawPublicId(file.filename) ?? file.filename;
       const note = await pdfNoteService.create({
         title,
         postId,
         postIds,
-        fileUrl: rawAssetDeliveryUrl(file.path, file.filename),
+        fileUrl: rawAssetDeliveryUrl(file.path, publicId),
         fileName: file.originalname,
-        // Cloudinary public_id — persisted so we can delete, rebuild
-        // `secure_url`, or re-sign without parsing stored URLs.
-        storedName: file.filename,
+        // True Cloudinary public_id (e.g. ssbfy/pdf-notes/pdf-…), not original filename
+        storedName: publicId,
         fileSize: Number(file.size) || 0,
         mimeType: file.mimetype || 'application/pdf',
         uploadedBy: req.user?.id || null,
@@ -90,7 +94,8 @@ export const pdfNoteController = {
       // Tear down the already-uploaded Cloudinary asset so a rejected
       // request doesn't leave a dangling blob in our account. This is
       // best-effort — `destroyPdfAsset` never throws.
-      await destroyPdfAsset(file.filename);
+      const publicId = ensureCanonicalRawPublicId(file.filename) ?? file.filename;
+      await destroyPdfAsset(publicId);
       throw err;
     }
   }),

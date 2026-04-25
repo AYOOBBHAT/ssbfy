@@ -124,14 +124,25 @@ export default function PdfListScreen() {
    */
   const handleOpenPdf = async (pdf) => {
     const id = pdf?._id;
-    const url = resolvePdfUrl(pdf?.fileUrl);
-    if (!url) {
+    const finalUrl = resolvePdfUrl(pdf?.fileUrl);
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('PDF API RESPONSE (open):', {
+        _id: pdf?._id,
+        fileUrl: pdf?.fileUrl,
+        storedName: pdf?.storedName,
+        fileName: pdf?.fileName,
+      });
+      // eslint-disable-next-line no-console
+      console.log('FINAL PDF URL:', finalUrl);
+    }
+    if (!finalUrl) {
       Alert.alert('Cannot open', 'This PDF has no valid link.');
       return;
     }
     setOpeningId(id);
     try {
-      await WebBrowser.openBrowserAsync(url, {
+      await WebBrowser.openBrowserAsync(finalUrl, {
         toolbarColor: colors.primary,
         controlsColor: colors.textOnPrimary,
         // iOS reader mode is useful for HTML but irrelevant for PDFs,
