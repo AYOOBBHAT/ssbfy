@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 const links = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/add-question', label: 'Add Question' },
+  { to: '/manage-questions', label: 'Manage Questions' },
   { to: '/add-note', label: 'Add Note' },
   { to: '/manage-notes', label: 'Manage Notes' },
   { to: '/upload-pdf', label: 'Upload PDF' },

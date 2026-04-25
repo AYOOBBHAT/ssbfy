@@ -7,6 +7,11 @@ const cards = [
     description: 'Create a new MCQ for any subject or topic.',
   },
   {
+    to: '/manage-questions',
+    title: 'Manage Questions',
+    description: 'Search, filter, edit, and enable or disable questions.',
+  },
+  {
     to: '/add-note',
     title: 'Add Note',
     description: 'Write topic-wise study notes for students.',

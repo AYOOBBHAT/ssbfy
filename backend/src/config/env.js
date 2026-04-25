@@ -22,12 +22,13 @@ export const env = {
   /** Default order amount in INR (integer) for create-order when body omits amount */
   razorpayDefaultAmountInr: Number(process.env.RAZORPAY_DEFAULT_AMOUNT_INR) || 99,
 
-  // Cloudinary — PDF storage. The SDK tolerates missing credentials at
-  // boot (we only warn) so a dev without an account can still run the
-  // rest of the app; the upload endpoint itself will 500 until set.
-  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
-  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || '',
-  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || '',
+  /**
+   * Supabase (PDF notes only — public bucket, server uses service role).
+   * Service role key must never be sent to the client; backend only.
+   */
+  supabaseUrl: process.env.SUPABASE_URL || '',
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  supabaseStorageBucket: process.env.SUPABASE_STORAGE_BUCKET || 'pdf-notes',
   pdfMaxSizeMb: Number(process.env.PDF_MAX_SIZE_MB) || 25,
 
   /**

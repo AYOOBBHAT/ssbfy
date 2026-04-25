@@ -82,6 +82,24 @@ export const questionRepository = {
     return Question.countDocuments(filter).exec();
   },
 
+  /**
+   * Admin list: paged, sorted newest first, with subject/topic/post labels.
+   */
+  async findForAdminList(filter = {}, options = {}) {
+    const { limit = 20, skip = 0 } = options;
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
+    const safeSkip = Math.max(Number(skip) || 0, 0);
+    return Question.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(safeSkip)
+      .limit(safeLimit)
+      .populate('subjectId', 'name isActive postId')
+      .populate('topicId', 'name isActive subjectId')
+      .populate('postIds', 'name slug isActive')
+      .lean()
+      .exec();
+  },
+
   async findAll(filter = {}, options = {}) {
     const { limit = 50, skip = 0, sort = QUESTION_SORT.LATEST } = options;
     const safeLimit = Math.min(Number(limit) || 50, 100);

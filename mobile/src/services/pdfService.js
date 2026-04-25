@@ -20,19 +20,16 @@ function apiOrigin() {
 }
 
 /**
- * Ensure a PDF URL is absolute and HTTPS-reachable from the device.
+ * Ensure a PDF URL is absolute and loadable in WebBrowser.
  *
- * The admin-side uploader stores `fileUrl` as a relative path when the
- * backend is running without PUBLIC_BASE_URL (common in dev). Devices
- * can't fetch a path without an origin, so we prepend the API origin.
+ * Full public URLs (https://) from Supabase, Cloudinary, or any CDN are
+ * returned unchanged — do not modify them.
+ * Relative paths (legacy) get the API origin prepended.
  */
 export function resolvePdfUrl(fileUrl) {
   if (!fileUrl || typeof fileUrl !== 'string') return '';
   const raw = fileUrl.trim();
-  // Cloudinary and some SDKs return protocol-relative "cdn" URLs. Our
-  // dev fallback prepends the API origin to paths; if we treated "//…"
-  // as a path, we'd produce https://api…//res.cloudinary.com/… (broken;
-  // ERR_INVALID_RESPONSE in WebBrowser).
+  // Protocol-relative URLs //host/...  →  https://host/...
   if (raw.startsWith('//')) {
     return `https:${raw}`;
   }

@@ -3,6 +3,16 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
 
 export const questionController = {
+  adminList: asyncHandler(async (req, res) => {
+    const payload = await questionService.adminList(req.query);
+    return sendSuccess(res, payload, 'Questions');
+  }),
+
+  getByIdForAdmin: asyncHandler(async (req, res) => {
+    const question = await questionService.getByIdForAdmin(req.params.id);
+    return sendSuccess(res, { question }, 'Question');
+  }),
+
   list: asyncHandler(async (req, res) => {
     const rawIds = req.query.ids;
     if (rawIds !== undefined && rawIds !== null && String(rawIds).trim() !== '') {

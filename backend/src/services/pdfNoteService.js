@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
-import { rawAssetDeliveryUrl } from '../config/cloudinary.js';
 import { pdfNoteRepository } from '../repositories/pdfNoteRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
 
@@ -91,11 +90,15 @@ function normalizePdfNoteDoc(doc) {
         ? uniqueObjectIds([doc.postId])
         : [];
 
+  // New rows store a full public HTTPS URL (Supabase). Legacy rows may be
+  // Cloudinary or relative paths — never run Cloudinary/Supabase URL rebuilds;
+  // pass through absolute URLs as-is so old PDFs keep working.
+  const url = typeof doc.fileUrl === 'string' ? doc.fileUrl.trim() : '';
   return {
     ...doc,
     postIds: effective,
     postId: doc.postId ?? effective[0] ?? null,
-    fileUrl: rawAssetDeliveryUrl(doc.fileUrl, doc.storedName),
+    fileUrl: url,
   };
 }
 

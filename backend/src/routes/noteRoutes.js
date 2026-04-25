@@ -48,10 +48,10 @@ router.patch(
  * Middleware order matters:
  *   1. adminChain   — auth + role first; we don't want anonymous callers
  *                     writing files to disk.
- *   2. handlePdfUpload — parses multipart and saves the file; after this,
- *                     `req.body` is populated so validators can run.
- *   3. validators   — now that req.body exists.
- *   4. controller   — persists metadata, cleans up on failure.
+ *   2. handlePdfUpload — parses multipart, writes a temp PDF on disk, then
+ *                     `req.body` is populated for validators.
+ *   3. validators
+ *   4. controller   — Supabase upload + DB row + temp file cleanup.
  */
 router.post(
   '/upload-pdf',

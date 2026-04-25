@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   createQuestion,
+  getQuestionForAdmin,
   getSubjects,
   getTopics,
   getApiErrorMessage,
+  updateQuestion,
 } from '../services/api';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
@@ -53,7 +56,18 @@ const initialForm = {
   explanation: '',
 };
 
+function normalizeOptionsFromServer(raw) {
+  const o = Array.isArray(raw) ? raw.map((x) => String(x ?? '')) : [];
+  const padded = o.slice(0, OPTION_COUNT);
+  while (padded.length < OPTION_COUNT) padded.push('');
+  return padded;
+}
+
 export default function AddQuestion() {
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit')?.trim() || '';
+  const isEdit = Boolean(editId);
+
   const [form, setForm] = useState(initialForm);
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
@@ -61,10 +75,13 @@ export default function AddQuestion() {
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [metaError, setMetaError] = useState('');
+  const [loadingEdit, setLoadingEdit] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  /** Increment in edit mode to re-fetch the question (Reset) without full page reload. */
+  const [editVersion, setEditVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +89,7 @@ export default function AddQuestion() {
       try {
         setLoadingSubjects(true);
         setMetaError('');
-        const subjectsRes = await getSubjects();
+        const subjectsRes = await getSubjects({ includeInactive: true });
         if (cancelled) return;
         setSubjects(
           Array.isArray(subjectsRes)
@@ -99,7 +116,7 @@ export default function AddQuestion() {
     (async () => {
       try {
         setLoadingTopics(true);
-        const res = await getTopics({ subjectId: form.subjectId });
+        const res = await getTopics({ subjectId: form.subjectId, includeInactive: true });
         if (cancelled) return;
         const list = Array.isArray(res) ? res : res?.topics || [];
         setTopics(list);
@@ -116,6 +133,45 @@ export default function AddQuestion() {
       cancelled = true;
     };
   }, [form.subjectId]);
+
+  useEffect(() => {
+    if (!editId) return undefined;
+    let cancelled = false;
+    (async () => {
+      setLoadingEdit(true);
+      setErrorMsg('');
+      setSuccessMsg('');
+      try {
+        const res = await getQuestionForAdmin(editId);
+        const q = res?.question || res;
+        if (cancelled || !q) return;
+        const answers = Array.isArray(q.correctAnswers)
+          ? q.correctAnswers.map((n) => Number(n))
+          : [0];
+        setForm({
+          questionType: q.questionType || 'single_correct',
+          questionText: q.questionText || '',
+          options: normalizeOptionsFromServer(q.options),
+          correctAnswers: answers,
+          questionImage: q.questionImage || '',
+          subjectId: String(q.subjectId || ''),
+          topicId: String(q.topicId || ''),
+          difficulty: q.difficulty || 'medium',
+          explanation: q.explanation || '',
+        });
+      } catch (e) {
+        if (!cancelled) {
+          setErrorMsg(getApiErrorMessage(e));
+          setForm({ ...initialForm, options: emptyOptions(), correctAnswers: [0] });
+        }
+      } finally {
+        if (!cancelled) setLoadingEdit(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, editVersion]);
 
   function updateField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -176,6 +232,12 @@ export default function AddQuestion() {
   }
 
   function resetForm() {
+    if (isEdit) {
+      setErrorMsg('');
+      setSuccessMsg('');
+      setEditVersion((v) => v + 1);
+      return;
+    }
     setForm({ ...initialForm, options: emptyOptions(), correctAnswers: [0] });
   }
 
@@ -244,7 +306,9 @@ export default function AddQuestion() {
       topicId: form.topicId,
       difficulty: form.difficulty,
     };
-    if (form.questionImage.trim()) {
+    if (isEdit) {
+      payload.questionImage = form.questionImage.trim();
+    } else if (form.questionImage.trim()) {
       payload.questionImage = form.questionImage.trim();
     }
     if (form.explanation.trim()) {
@@ -253,9 +317,14 @@ export default function AddQuestion() {
 
     try {
       setSubmitting(true);
-      await createQuestion(payload);
-      setSuccessMsg('Question added successfully ✅');
-      resetForm();
+      if (isEdit) {
+        await updateQuestion(editId, payload);
+        setSuccessMsg('Changes saved successfully.');
+      } else {
+        await createQuestion(payload);
+        setSuccessMsg('Question added successfully ✅');
+        setForm({ ...initialForm, options: emptyOptions(), correctAnswers: [0] });
+      }
     } catch (err) {
       setErrorMsg(getApiErrorMessage(err));
     } finally {
@@ -281,10 +350,26 @@ export default function AddQuestion() {
 
   return (
     <div>
-      <h1 className="page-title">Add Question</h1>
+      <h1 className="page-title">{isEdit ? 'Edit Question' : 'Add Question'}</h1>
       <p className="page-subtitle">
-        Create a new question. Fields marked * are required.
+        {isEdit
+          ? 'Update this question. Fields marked * are required.'
+          : 'Create a new question. Fields marked * are required.'}
+        {isEdit ? (
+          <>
+            {' '}
+            <Link to="/manage-questions" className="card-cta" style={{ fontWeight: 600 }}>
+              Back to Manage Questions
+            </Link>
+          </>
+        ) : null}
       </p>
+
+      {isEdit && loadingEdit ? (
+        <div className="card">
+          <p className="muted">Loading question…</p>
+        </div>
+      ) : null}
 
       {loadingSubjects ? (
         <div className="card">
@@ -299,7 +384,11 @@ export default function AddQuestion() {
         </div>
       ) : null}
 
-      <form className="card form" onSubmit={handleSubmit}>
+      <form
+        className="card form"
+        onSubmit={handleSubmit}
+        style={isEdit && loadingEdit ? { display: 'none' } : undefined}
+      >
         {successMsg ? (
           <div className="alert alert-success">{successMsg}</div>
         ) : null}
@@ -512,21 +601,22 @@ export default function AddQuestion() {
             type="button"
             className="btn btn-secondary"
             onClick={resetForm}
-            disabled={submitting}
+            disabled={submitting || (isEdit && loadingEdit)}
           >
             Reset
           </button>
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={submitting || loadingSubjects}
+            disabled={submitting || loadingSubjects || (isEdit && loadingEdit)}
           >
-            {submitting ? 'Saving…' : 'Create Question'}
+            {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create Question'}
           </button>
         </div>
       </form>
 
       {/* Live preview — updates as the admin types. */}
+      {!(isEdit && loadingEdit) ? (
       <div className="preview">
         <h2 className="preview-heading">Preview</h2>
         <div className="card preview-card">
@@ -575,6 +665,7 @@ export default function AddQuestion() {
           ) : null}
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

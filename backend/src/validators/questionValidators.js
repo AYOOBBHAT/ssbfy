@@ -30,6 +30,57 @@ export const questionIdParam = [
   param('id').isMongoId().withMessage('Invalid question id'),
 ];
 
+/** Query params for GET /api/questions/admin */
+export const adminListQuestionsQueryValidators = [
+  query('search').optional().isString().trim(),
+  query('postId')
+    .optional({ checkFalsy: true })
+    .isMongoId()
+    .withMessage('Invalid postId'),
+  query('subjectId')
+    .optional({ checkFalsy: true })
+    .isMongoId()
+    .withMessage('Invalid subjectId'),
+  query('topicId')
+    .optional({ checkFalsy: true })
+    .isMongoId()
+    .withMessage('Invalid topicId'),
+  query('difficulty')
+    .optional({ checkFalsy: true })
+    .isIn(DIFFICULTY_VALUES)
+    .withMessage(`difficulty must be one of: ${DIFFICULTY_VALUES.join(', ')}`),
+  query('questionType')
+    .optional({ checkFalsy: true })
+    .isIn(QUESTION_TYPE_VALUES)
+    .withMessage(`questionType must be one of: ${QUESTION_TYPE_VALUES.join(', ')}`),
+  query('year')
+    .optional({ checkFalsy: true })
+    .isInt({ min: 1900, max: 2100 })
+    .toInt(),
+  query('includeInactive').optional().isIn(['true', 'false', '1', '0']),
+  query('isActive').optional().isIn(['true', 'false']),
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('page must be a positive integer')
+    .toInt(),
+  query('pageSize')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('pageSize must be from 1 to 100')
+    .toInt(),
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('limit must be from 1 to 100')
+    .toInt(),
+  query('skip')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('skip must be a non-negative integer')
+    .toInt(),
+];
+
 export const listQuestionsQueryValidators = [
   query('ids')
     .optional({ checkFalsy: true })
@@ -177,7 +228,16 @@ export const weakPracticeValidators = [
     .toInt(),
 ];
 
+function requireAtLeastOneUpdateField(_value, { req }) {
+  const b = req.body;
+  if (!b || typeof b !== 'object' || Object.keys(b).length === 0) {
+    throw new Error('At least one field is required to update a question');
+  }
+  return true;
+}
+
 export const updateQuestionValidators = [
+  body().custom(requireAtLeastOneUpdateField),
   body('questionText').optional().trim().notEmpty(),
   body('options')
     .optional()
@@ -211,9 +271,14 @@ export const updateQuestionValidators = [
   body('topicId').optional().isMongoId(),
   body('postIds').optional().isArray(),
   body('postIds.*').optional().isMongoId(),
+  body('postId')
+    .optional({ checkFalsy: true })
+    .isMongoId()
+    .withMessage('postId must be a valid id'),
   body('year').optional({ nullable: true }).isInt({ min: 1900, max: 2100 }),
   body('difficulty')
     .optional()
     .isIn(DIFFICULTY_VALUES)
     .withMessage(`difficulty must be one of: ${DIFFICULTY_VALUES.join(', ')}`),
+  body('isActive').optional().isBoolean().toBoolean(),
 ];

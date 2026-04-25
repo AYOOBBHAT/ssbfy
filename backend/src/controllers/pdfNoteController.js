@@ -3,11 +3,8 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
-import {
-  destroyPdfAsset,
-  ensureCanonicalRawPublicId,
-  rawAssetDeliveryUrl,
-} from '../config/cloudinary.js';
+import { uploadTempPdfToSupabase, removePdfObjectFromSupabase } from '../services/pdfSupabaseStorage.js';
+import { unlinkTempFile } from '../middlewares/upload.js';
 import { ROLES } from '../constants/roles.js';
 
 /**
@@ -48,20 +45,12 @@ export const pdfNoteController = {
 
   /**
    * POST /api/notes/upload-pdf — multipart/form-data with fields:
-   *   - file   (required, PDF, <= PDF_MAX_SIZE_MB)
+   *   - file   (required, PDF) — written to a temp file by multer
    *   - title  (required)
-   *   - postIds (JSON array in multipart) and/or postId (legacy) — at least
-   *     one; all referenced posts must exist and be active.
+   *   - postIds (JSON) and/or postId (legacy)
    *
-   * multer-storage-cloudinary populates:
-   *   - file.path     → upload result `secure_url` (HTTPS delivery URL)
-   *   - file.filename → `public_id` (used to rebuild URL if needed)
-   *   - file.size     → byte size (may be missing for some streams,
-   *                     so we fall back to 0)
-   *
-   * If the DB write fails AFTER the asset was already uploaded to
-   * Cloudinary, we destroy it so we don't accumulate orphans in the
-   * `ssbfy/pdf-notes/` folder.
+   * Flow: temp file → Supabase Storage (public URL) → MongoDB metadata →
+   * delete temp file. If DB write fails, remove the Storage object and temp file.
    */
   upload: asyncHandler(async (req, res) => {
     const file = req.file;
@@ -72,18 +61,22 @@ export const pdfNoteController = {
       );
     }
 
+    const localPath = file.path;
+    let supabaseObjectPath = null;
+
     try {
+      const { fileUrl, storedName } = await uploadTempPdfToSupabase(localPath);
+      supabaseObjectPath = storedName;
+
       const { title, postId, postIds } = req.body;
 
-      const publicId = ensureCanonicalRawPublicId(file.filename) ?? file.filename;
       const note = await pdfNoteService.create({
         title,
         postId,
         postIds,
-        fileUrl: rawAssetDeliveryUrl(file.path, publicId),
+        fileUrl,
         fileName: file.originalname,
-        // True Cloudinary public_id (e.g. ssbfy/pdf-notes/pdf-…), not original filename
-        storedName: publicId,
+        storedName,
         fileSize: Number(file.size) || 0,
         mimeType: file.mimetype || 'application/pdf',
         uploadedBy: req.user?.id || null,
@@ -91,12 +84,10 @@ export const pdfNoteController = {
 
       return sendCreated(res, { pdf: note }, 'PDF uploaded');
     } catch (err) {
-      // Tear down the already-uploaded Cloudinary asset so a rejected
-      // request doesn't leave a dangling blob in our account. This is
-      // best-effort — `destroyPdfAsset` never throws.
-      const publicId = ensureCanonicalRawPublicId(file.filename) ?? file.filename;
-      await destroyPdfAsset(publicId);
+      await removePdfObjectFromSupabase(supabaseObjectPath);
       throw err;
+    } finally {
+      unlinkTempFile(localPath);
     }
   }),
 };

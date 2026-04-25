@@ -4,6 +4,7 @@ import { validateRequest } from '../middlewares/validate.js';
 import { authenticate } from '../middlewares/auth.js';
 import { adminChain } from '../middlewares/adminGuard.js';
 import {
+  adminListQuestionsQueryValidators,
   createQuestionValidators,
   listQuestionsQueryValidators,
   questionIdParam,
@@ -32,6 +33,22 @@ router.get(
   questionController.weakPractice
 );
 
+router.get(
+  '/admin',
+  ...adminChain,
+  adminListQuestionsQueryValidators,
+  validateRequest,
+  questionController.adminList
+);
+
+router.get(
+  '/admin/:id',
+  ...adminChain,
+  ...questionIdParam,
+  validateRequest,
+  questionController.getByIdForAdmin
+);
+
 router.post(
   '/smart-practice',
   authenticate,
@@ -51,6 +68,15 @@ router.post(
 router.get('/:id', questionIdParam, validateRequest, questionController.getById);
 
 router.put(
+  '/:id',
+  ...adminChain,
+  ...questionIdParam,
+  updateQuestionValidators,
+  validateRequest,
+  questionController.update
+);
+
+router.patch(
   '/:id',
   ...adminChain,
   ...questionIdParam,

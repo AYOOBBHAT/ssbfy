@@ -267,6 +267,27 @@ function parsePagination(query) {
   return { limit, skip };
 }
 
+/** Admin list: page (1-based) + pageSize, or limit/skip. */
+function parseAdminPagination(query) {
+  const pageSize = Math.min(
+    Math.max(Number(query.pageSize) || Number(query.limit) || 20, 1),
+    100
+  );
+  if (query.page != null && String(query.page).trim() !== '') {
+    const page = Math.max(Number(query.page) || 1, 1);
+    const skip = (page - 1) * pageSize;
+    return { limit: pageSize, skip, page, pageSize };
+  }
+  const limit = pageSize;
+  const skip = Math.max(Number(query.skip) || 0, 0);
+  const page = Math.floor(skip / limit) + 1;
+  return { limit, skip, page, pageSize: limit };
+}
+
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function parseSort(query) {
   const raw = query.sort;
   if (raw === undefined || raw === '') {
@@ -333,6 +354,128 @@ export const questionService = {
     ]);
 
     return { questions: projectQuestions(questions), total, limit, skip };
+  },
+
+  /**
+   * Admin-only: list questions with search, filters, optional inactive rows,
+   * populated subject/topic/posts, pagination.
+   */
+  async adminList(query) {
+    const filter = {};
+
+    const includeInactive = String(query.includeInactive || '').toLowerCase() === 'true';
+    const isActiveQ = query.isActive;
+    if (isActiveQ === 'true' || isActiveQ === true) {
+      filter.isActive = true;
+    } else if (isActiveQ === 'false' || isActiveQ === false) {
+      filter.isActive = false;
+    } else if (!includeInactive) {
+      filter.isActive = true;
+    }
+
+    if (query.subjectId) {
+      if (!mongoose.isValidObjectId(String(query.subjectId))) {
+        throw new AppError('Invalid subjectId', HTTP_STATUS.BAD_REQUEST);
+      }
+      filter.subjectId = new mongoose.Types.ObjectId(String(query.subjectId));
+    }
+    if (query.topicId) {
+      if (!mongoose.isValidObjectId(String(query.topicId))) {
+        throw new AppError('Invalid topicId', HTTP_STATUS.BAD_REQUEST);
+      }
+      filter.topicId = new mongoose.Types.ObjectId(String(query.topicId));
+    }
+    if (query.postId) {
+      if (!mongoose.isValidObjectId(String(query.postId))) {
+        throw new AppError('Invalid postId', HTTP_STATUS.BAD_REQUEST);
+      }
+      filter.postIds = new mongoose.Types.ObjectId(String(query.postId));
+    }
+    if (query.difficulty !== undefined && query.difficulty !== '') {
+      if (!DIFFICULTY_VALUES.includes(query.difficulty)) {
+        throw new AppError('Invalid difficulty filter', HTTP_STATUS.BAD_REQUEST);
+      }
+      filter.difficulty = query.difficulty;
+    }
+    if (query.questionType !== undefined && query.questionType !== '') {
+      if (!QUESTION_TYPE_VALUES.includes(query.questionType)) {
+        throw new AppError('Invalid questionType filter', HTTP_STATUS.BAD_REQUEST);
+      }
+      filter.questionType = query.questionType;
+    }
+    if (query.year !== undefined && query.year !== '') {
+      const y = Number(query.year);
+      if (!Number.isFinite(y)) {
+        throw new AppError('Invalid year filter', HTTP_STATUS.BAD_REQUEST);
+      }
+      filter.year = y;
+    }
+
+    const search = typeof query.search === 'string' ? query.search.trim() : '';
+    if (search) {
+      filter.questionText = { $regex: escapeRegex(search), $options: 'i' };
+    }
+
+    const { limit, skip, page, pageSize } = parseAdminPagination(query);
+
+    const [total, raw] = await Promise.all([
+      questionRepository.countDocuments(filter),
+      questionRepository.findForAdminList(filter, { limit, skip }),
+    ]);
+
+    const questions = (raw || []).map((row) => {
+      const subj = row.subjectId && typeof row.subjectId === 'object' ? row.subjectId : null;
+      const top = row.topicId && typeof row.topicId === 'object' ? row.topicId : null;
+      const rowForProject = {
+        ...row,
+        subjectId: subj?._id ?? row.subjectId,
+        topicId: top?._id ?? row.topicId,
+        postIds: Array.isArray(row.postIds)
+          ? row.postIds.map((p) => (p && typeof p === 'object' ? p._id : p))
+          : row.postIds,
+      };
+      const proj = projectQuestion(rowForProject);
+      const posts = Array.isArray(row.postIds)
+        ? row.postIds
+            .map((p) =>
+              p && typeof p === 'object' && p._id
+                ? { _id: p._id, name: p.name, slug: p.slug }
+                : null
+            )
+            .filter(Boolean)
+        : [];
+      return {
+        ...proj,
+        subject: subj ? { _id: subj._id, name: subj.name } : null,
+        topic: top ? { _id: top._id, name: top.name } : null,
+        posts,
+      };
+    });
+
+    const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+
+    return {
+      questions,
+      pagination: {
+        total,
+        page,
+        pageSize,
+        totalPages,
+        skip,
+        limit,
+      },
+    };
+  },
+
+  /**
+   * Admin fetch: question may be inactive (for edit form).
+   */
+  async getByIdForAdmin(id) {
+    const q = await questionRepository.findById(id);
+    if (!q) {
+      throw new AppError('Question not found', HTTP_STATUS.NOT_FOUND);
+    }
+    return projectQuestion(q);
   },
 
   /**
@@ -451,10 +594,15 @@ export const questionService = {
     return projectQuestion(created);
   },
 
-  async update(id, patch) {
+  async update(id, rawPatch) {
     const doc = await questionRepository.findByIdForUpdate(id);
     if (!doc) {
       throw new AppError('Question not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const patch = { ...rawPatch };
+    if (rawPatch?.postId !== undefined && rawPatch?.postIds === undefined) {
+      patch.postIds = [rawPatch.postId];
     }
 
     if (patch.questionText !== undefined) {
@@ -487,6 +635,9 @@ export const questionService = {
     if (patch.difficulty !== undefined) {
       doc.difficulty = patch.difficulty;
     }
+    if (patch.isActive !== undefined) {
+      doc.isActive = Boolean(patch.isActive);
+    }
 
     // Recompute answer fields from whatever combination of options/type/
     // correctAnswers/correctAnswerIndex is now effective on the document.
@@ -497,20 +648,20 @@ export const questionService = {
     assertImage(effectiveType, doc.questionImage);
 
     const incomingAnswers =
-      patch.correctAnswers !== undefined
-        ? patch.correctAnswers
+      rawPatch.correctAnswers !== undefined
+        ? rawPatch.correctAnswers
         : Array.isArray(doc.correctAnswers) && doc.correctAnswers.length > 0
         ? doc.correctAnswers.map((n) => Number(n))
         : undefined;
     const incomingIndex =
-      patch.correctAnswerIndex !== undefined
-        ? patch.correctAnswerIndex
+      rawPatch.correctAnswerIndex !== undefined
+        ? rawPatch.correctAnswerIndex
         : typeof doc.correctAnswerIndex === 'number'
         ? doc.correctAnswerIndex
         : undefined;
     const incomingValue =
-      patch.correctAnswerValue !== undefined
-        ? patch.correctAnswerValue
+      rawPatch.correctAnswerValue !== undefined
+        ? rawPatch.correctAnswerValue
         : undefined;
 
     const fields = normalizeAnswerPayload({
@@ -529,7 +680,8 @@ export const questionService = {
     const hierarchyTouched =
       patch.subjectId !== undefined ||
       patch.topicId !== undefined ||
-      patch.postIds !== undefined;
+      patch.postIds !== undefined ||
+      rawPatch?.postId !== undefined;
     if (hierarchyTouched) {
       const { subject } = await resolveHierarchy(doc.subjectId, doc.topicId);
       doc.postIds = reconcilePostIds(doc.postIds, subject.postId);

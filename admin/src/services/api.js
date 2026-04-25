@@ -171,6 +171,33 @@ export async function getQuestions(params = {}) {
 }
 
 /**
+ * Admin: paginated list with search and filters. Supports `includeInactive`,
+ * `isActive`, `search`, `postId`, `subjectId`, `topicId`, `difficulty`,
+ * `questionType`, `page`, `pageSize`.
+ */
+export async function listQuestionsAdmin(params = {}) {
+  const res = await api.get('/questions/admin', { params });
+  return unwrap(res);
+}
+
+/** Admin: load one question (active or inactive) for edit. */
+export async function getQuestionForAdmin(id) {
+  if (!id) throw new Error('getQuestionForAdmin requires an id.');
+  const res = await api.get(`/questions/admin/${id}`);
+  return unwrap(res);
+}
+
+/**
+ * Update an existing question (admin). Uses PATCH; server mirrors PUT
+ * semantics. Send only fields to change, or a full form payload for edit.
+ */
+export async function updateQuestion(id, payload) {
+  if (!id) throw new Error('updateQuestion requires an id.');
+  const res = await api.patch(`/questions/${id}`, payload);
+  return unwrap(res);
+}
+
+/**
  * Create a new test (admin only).
  * @param {object} payload  title, type, questionIds, duration, negativeMarking
  */
