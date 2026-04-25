@@ -265,10 +265,10 @@ export async function uploadPdfNote({ title, postId, postIds, file } = {}) {
   formData.append('postIds', JSON.stringify(ids));
   formData.append('file', file);
 
+  // Do not set Content-Type. The runtime must set
+  // `multipart/form-data; boundary=----…` or the body will not parse and
+  // multer will see no file/fields (500 / broken uploads on Render).
   const res = await api.post('/notes/upload-pdf', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    // PDFs can be large and Render cold starts are slow; give the
-    // upload generous head-room so a slow connection doesn't fail.
     timeout: 120000,
   });
   return unwrap(res);

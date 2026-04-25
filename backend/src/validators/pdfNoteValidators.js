@@ -41,7 +41,7 @@ export const uploadPdfNoteValidators = [
         throw new Error('postIds must be a non-empty array when provided');
       }
       for (const id of raw) {
-        if (typeof id !== 'string' || !/^[a-f0-9]{24}$/i.test(id)) {
+        if (!/^[a-f0-9]{24}$/i.test(String(id))) {
           throw new Error('Each postIds entry must be a valid Mongo id');
         }
       }

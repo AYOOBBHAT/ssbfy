@@ -18,13 +18,35 @@ function uniqueObjectIds(input) {
 }
 
 /**
+ * Multipart text fields are often strings. `postIds` may be a JSON string
+ * (`JSON.stringify` from the admin) even after validation — always coerce.
+ */
+function coalescePostIdsField(postIds) {
+  if (Array.isArray(postIds)) {
+    return postIds;
+  }
+  if (typeof postIds === 'string' && postIds.trim() !== '') {
+    try {
+      const parsed = JSON.parse(postIds);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/**
  * Accept `postId` and/or `postIds` and return a non-empty, de-duplicated
  * array of ObjectIds. Legacy single `postId` is converted to `[postId]`.
  */
 function resolveInputPostIds({ postId, postIds } = {}) {
   const raw = [];
-  if (Array.isArray(postIds) && postIds.length) {
-    for (const id of postIds) raw.push(id);
+  const arr = coalescePostIdsField(postIds);
+  if (arr.length) {
+    for (const id of arr) {
+      if (id != null && id !== '') raw.push(id);
+    }
   }
   if (postId != null && postId !== '') {
     raw.push(postId);
