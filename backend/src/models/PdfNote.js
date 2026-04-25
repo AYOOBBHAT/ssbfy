@@ -5,21 +5,29 @@ import mongoose from 'mongoose';
  *
  * Deliberately kept separate from `Note` because the two have different
  * invariants: a text `Note` requires subject + topic + content, while a
- * PDF note is a top-level resource scoped only to a Post (e.g. "Patwari
- * Syllabus.pdf"). Forcing both shapes into one model would either loosen
- * Note's required fields or require a discriminator that every read path
- * would have to branch on.
+ * PDF note is a top-level resource attached to one or more Posts (e.g. the
+ * same "Reasoning Notes" PDF for JKSSB, Banking, and SSC). The canonical
+ * field is `postIds`; `postId` is kept for legacy documents and is mirrored
+ * to `postIds[0]` on new writes.
  */
 const pdfNoteSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
 
+    /** @deprecated Use `postIds`. Kept for legacy rows and as a quick alias for `postIds[0]`. */
     postId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Post',
-      required: true,
+      required: false,
       index: true,
     },
+
+    postIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Post',
+      },
+    ],
 
     // Public URL the clients actually fetch. For local disk storage this
     // is something like "/uploads/pdfs/abc123.pdf"; for a future S3 or
@@ -51,7 +59,8 @@ const pdfNoteSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Common listing: "active PDFs under this post, newest first".
+// Common listing: "active PDFs for this post" (array membership or legacy postId).
+pdfNoteSchema.index({ postIds: 1, isActive: 1, createdAt: -1 });
 pdfNoteSchema.index({ postId: 1, isActive: 1, createdAt: -1 });
 
 export const PdfNote = mongoose.model('PdfNote', pdfNoteSchema);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getApiErrorMessage,
   getPosts,
@@ -30,13 +30,13 @@ const MAX_SIZE_MB = 25;
 /**
  * Admin page to upload a PDF note.
  *
- * Fields are minimal on purpose: title + post + file. The backend stores
- * the file in Cloudinary and persists only metadata, so this form maps
- * one-to-one with `POST /api/notes/upload-pdf`.
+ * One upload can be attached to multiple posts (e.g. same PDF for
+ * several exams) via `postIds` — no duplicate file uploads.
  */
 export default function UploadPdfNote() {
   const [title, setTitle] = useState('');
-  const [postId, setPostId] = useState('');
+  /** @type {string[]} */
+  const [postIds, setPostIds] = useState([]);
   const [file, setFile] = useState(null);
 
   const [posts, setPosts] = useState([]);
@@ -47,8 +47,12 @@ export default function UploadPdfNote() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Used to reset the native <input type="file"> which is uncontrolled.
   const fileInputRef = useRef(null);
+
+  const selectablePosts = useMemo(
+    () => posts.filter((p) => p && p.isActive !== false),
+    [posts]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +73,13 @@ export default function UploadPdfNote() {
       cancelled = true;
     };
   }, []);
+
+  function togglePost(id) {
+    const sid = String(id);
+    setPostIds((prev) =>
+      prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid]
+    );
+  }
 
   function handleFileChange(e) {
     const picked = e.target.files?.[0] || null;
@@ -94,7 +105,7 @@ export default function UploadPdfNote() {
 
   function resetForm() {
     setTitle('');
-    setPostId('');
+    setPostIds([]);
     setFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -104,7 +115,7 @@ export default function UploadPdfNote() {
     if (title.trim().length < 2) {
       return 'Title must be at least 2 characters.';
     }
-    if (!postId) return 'Please select a post.';
+    if (!postIds.length) return 'Select at least one applicable post.';
     if (!file) return 'Please select a PDF file.';
     if (!isPdf(file)) return 'Only PDF files are allowed.';
     return null;
@@ -126,7 +137,7 @@ export default function UploadPdfNote() {
       setSubmitting(true);
       await uploadPdfNote({
         title: title.trim(),
-        postId,
+        postIds,
         file,
       });
       setSuccessMsg('PDF uploaded successfully.');
@@ -142,8 +153,8 @@ export default function UploadPdfNote() {
     <div>
       <h1 className="page-title">Upload PDF Note</h1>
       <p className="page-subtitle">
-        Upload a PDF resource scoped to a post. Files are stored on
-        Cloudinary and served over HTTPS.
+        Upload a PDF once and link it to one or more exams. Files are stored
+        on Cloudinary and served over HTTPS.
       </p>
 
       {metaError ? <div className="alert alert-error">{metaError}</div> : null}
@@ -164,41 +175,60 @@ export default function UploadPdfNote() {
             className="input"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Patwari Syllabus 2025"
+            placeholder="e.g. Reasoning Master Notes"
             disabled={submitting}
             maxLength={200}
           />
         </div>
 
         <div className="form-row">
-          <label className="label" htmlFor="pdf-post">
-            Post *
-          </label>
-          <select
-            id="pdf-post"
-            className="input"
-            value={postId}
-            onChange={(e) => setPostId(e.target.value)}
-            disabled={submitting || loadingPosts || posts.length === 0}
-          >
-            <option value="">
-              {loadingPosts
-                ? 'Loading posts…'
-                : posts.length === 0
-                ? 'No posts yet'
-                : '— Select post —'}
-            </option>
-            {posts.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name || p.slug || p._id}
-              </option>
-            ))}
-          </select>
-          {!loadingPosts && posts.length === 0 ? (
+          <span className="label">Applicable posts *</span>
+          {loadingPosts ? (
+            <p className="helper">Loading posts…</p>
+          ) : selectablePosts.length === 0 ? (
             <p className="helper">
-              Create a post in <strong>Subjects &amp; Topics</strong> first.
+              No active posts yet. Create a post in{' '}
+              <strong>Subjects &amp; Topics</strong> first.
             </p>
-          ) : null}
+          ) : (
+            <div
+              className="card"
+              style={{
+                maxHeight: 220,
+                overflowY: 'auto',
+                padding: 12,
+                border: '1px solid var(--border)',
+              }}
+            >
+              {selectablePosts.map((p) => {
+                const id = String(p._id);
+                const checked = postIds.includes(id);
+                return (
+                  <label
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 0',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePost(id)}
+                      disabled={submitting}
+                    />
+                    <span>{p.name || p.slug || id}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <p className="helper">
+            Select all exams that should list this PDF (no duplicate uploads).
+          </p>
         </div>
 
         <div className="form-row">
@@ -219,9 +249,7 @@ export default function UploadPdfNote() {
               Selected: <strong>{file.name}</strong> ({formatSize(file.size)})
             </p>
           ) : (
-            <p className="helper">
-              PDF only. Max {MAX_SIZE_MB} MB.
-            </p>
+            <p className="helper">PDF only. Max {MAX_SIZE_MB} MB.</p>
           )}
         </div>
 

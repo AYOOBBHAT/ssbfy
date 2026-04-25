@@ -9,6 +9,14 @@ export const postRepository = {
     return Post.findById(id).lean().exec();
   },
 
+  /** For validating PDF attachments — returns all posts matching ids (may be fewer than `ids` if some missing). */
+  async findByIds(ids) {
+    if (!Array.isArray(ids) || !ids.length) {
+      return [];
+    }
+    return Post.find({ _id: { $in: ids } }).lean().exec();
+  },
+
   /**
    * Case-insensitive name lookup — used by the service layer for pre-insert
    * duplicate checks so we can return a friendly 409 before the unique

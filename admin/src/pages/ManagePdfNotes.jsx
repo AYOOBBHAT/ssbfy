@@ -12,7 +12,6 @@ function asArray(res, key) {
   return [];
 }
 
-/** Consistent disable prompt — matches the Notes page wording. */
 function confirmDisable(title) {
   if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
     return true;
@@ -40,13 +39,24 @@ function formatDate(value) {
   });
 }
 
+/** Ids the PDF is attached to (new `postIds` or legacy `postId`). */
+function effectivePostIdList(pdf) {
+  if (Array.isArray(pdf?.postIds) && pdf.postIds.length > 0) {
+    return pdf.postIds.map((id) => String(id));
+  }
+  if (pdf?.postId) return [String(pdf.postId)];
+  return [];
+}
+
+function postNamesForPdf(pdf, postsById) {
+  return effectivePostIdList(pdf).map((id) => {
+    const p = postsById.get(id);
+    return p?.name || p?.slug || id;
+  });
+}
+
 /**
  * Admin UI for uploaded PDF notes.
- *
- * - Loads posts once for both the filter dropdown and the per-row label.
- * - Fetches PDFs with `includeInactive=true` so disabled uploads stay
- *   visible to admins (the server gates this on role).
- * - Enable/Disable is optimistic with rollback, mirroring ManageNotes.
  */
 export default function ManagePdfNotes() {
   const [filterPostId, setFilterPostId] = useState('');
@@ -63,7 +73,11 @@ export default function ManagePdfNotes() {
   const [toggleMsg, setToggleMsg] = useState('');
   const [toggleErr, setToggleErr] = useState('');
 
-  // ---- Load posts once -------------------------------------------------
+  const [editPdf, setEditPdf] = useState(null);
+  const [editPostIds, setEditPostIds] = useState([]);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editErr, setEditErr] = useState('');
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -90,7 +104,11 @@ export default function ManagePdfNotes() {
     return m;
   }, [posts]);
 
-  // ---- Load PDFs whenever the filter changes --------------------------
+  const selectablePosts = useMemo(
+    () => posts.filter((p) => p && p.isActive !== false),
+    [posts]
+  );
+
   const loadPdfs = useCallback(async () => {
     setPdfsError('');
     setPdfsLoading(true);
@@ -111,9 +129,54 @@ export default function ManagePdfNotes() {
     loadPdfs();
   }, [loadPdfs]);
 
-  // ---- Handlers -------------------------------------------------------
   function handleClearFilters() {
     setFilterPostId('');
+  }
+
+  function openEdit(pdf) {
+    setEditErr('');
+    setEditPdf(pdf);
+    setEditPostIds(effectivePostIdList(pdf));
+  }
+
+  function closeEdit() {
+    if (editSubmitting) return;
+    setEditPdf(null);
+    setEditPostIds([]);
+    setEditErr('');
+  }
+
+  function toggleEditPost(id) {
+    const sid = String(id);
+    setEditPostIds((prev) =>
+      prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid]
+    );
+  }
+
+  async function saveEdit() {
+    if (!editPdf?._id) return;
+    if (!editPostIds.length) {
+      setEditErr('Select at least one post.');
+      return;
+    }
+    setEditSubmitting(true);
+    setEditErr('');
+    try {
+      const res = await updatePdfNote(editPdf._id, { postIds: editPostIds });
+      const updated = res?.pdf || res;
+      if (updated && updated._id) {
+        setPdfs((prev) =>
+          prev.map((p) =>
+            String(p._id) === String(updated._id) ? { ...p, ...updated } : p
+          )
+        );
+      }
+      closeEdit();
+    } catch (e) {
+      setEditErr(getApiErrorMessage(e));
+    } finally {
+      setEditSubmitting(false);
+    }
   }
 
   async function handleToggle(pdf) {
@@ -156,25 +219,18 @@ export default function ManagePdfNotes() {
     }
   }
 
-  function postName(id) {
-    if (!id) return '—';
-    const p = postsById.get(String(id));
-    return p?.name || p?.slug || '—';
-  }
-
   const hasActiveFilters = Boolean(filterPostId);
 
   return (
     <div>
       <h1 className="page-title">Manage PDF Notes</h1>
       <p className="page-subtitle">
-        Review uploaded PDFs and enable/disable individual files. Students
-        only see active PDFs.
+        Review uploaded PDFs, which posts they apply to, and enable/disable
+        individual files. Students only see active PDFs.
       </p>
 
       {refError ? <div className="alert alert-error">{refError}</div> : null}
 
-      {/* ---------- Filters ---------- */}
       <div className="card form" style={{ marginBottom: 16 }}>
         <div className="form-grid">
           <div className="form-row">
@@ -218,7 +274,6 @@ export default function ManagePdfNotes() {
         </div>
       </div>
 
-      {/* ---------- Feedback ---------- */}
       {toggleMsg ? (
         <div className="alert alert-success">{toggleMsg}</div>
       ) : null}
@@ -229,7 +284,6 @@ export default function ManagePdfNotes() {
         <div className="alert alert-error">{pdfsError}</div>
       ) : null}
 
-      {/* ---------- List ---------- */}
       <div className="card">
         {pdfsLoading ? (
           <p className="helper">Loading PDFs…</p>
@@ -244,6 +298,7 @@ export default function ManagePdfNotes() {
             {pdfs.map((pdf) => {
               const active = pdf.isActive !== false;
               const isToggling = String(togglingId) === String(pdf._id);
+              const names = postNamesForPdf(pdf, postsById);
               return (
                 <li
                   key={pdf._id}
@@ -265,11 +320,11 @@ export default function ManagePdfNotes() {
                       {pdf.title || pdf.fileName || 'Untitled PDF'}
                     </div>
                     <div className="helper">
-                      {postName(pdf.postId)}
-                      {' · '}
-                      {formatSize(pdf.fileSize)}
-                      {' · '}
-                      {formatDate(pdf.createdAt)}
+                      <strong>Attached posts:</strong>{' '}
+                      {names.length ? names.join(', ') : '—'}
+                    </div>
+                    <div className="helper" style={{ opacity: 0.9 }}>
+                      {formatSize(pdf.fileSize)} · {formatDate(pdf.createdAt)}
                     </div>
                     {pdf.fileUrl ? (
                       <a
@@ -292,20 +347,126 @@ export default function ManagePdfNotes() {
                     {active ? 'Active' : 'Inactive'}
                   </span>
 
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-small"
-                    onClick={() => handleToggle(pdf)}
-                    disabled={isToggling}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'stretch',
+                      gap: 6,
+                    }}
                   >
-                    {isToggling ? '…' : active ? 'Disable' : 'Enable'}
-                  </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-small"
+                      onClick={() => openEdit(pdf)}
+                    >
+                      Edit posts
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-small"
+                      onClick={() => handleToggle(pdf)}
+                      disabled={isToggling}
+                    >
+                      {isToggling ? '…' : active ? 'Disable' : 'Enable'}
+                    </button>
+                  </div>
                 </li>
               );
             })}
           </ul>
         )}
       </div>
+
+      {editPdf ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-pdf-posts-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={closeEdit}
+        >
+          <div
+            className="card form"
+            style={{ maxWidth: 440, width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="edit-pdf-posts-title" className="page-title" style={{ fontSize: 18 }}>
+              Applicable posts
+            </h2>
+            <p className="helper" style={{ marginTop: 0 }}>
+              {editPdf.title || 'PDF'}
+            </p>
+            {editErr ? <div className="alert alert-error">{editErr}</div> : null}
+            <div
+              className="card"
+              style={{
+                maxHeight: 220,
+                overflowY: 'auto',
+                padding: 12,
+                border: '1px solid var(--border)',
+                marginBottom: 12,
+              }}
+            >
+              {selectablePosts.length === 0 ? (
+                <p className="helper">No active posts available.</p>
+              ) : (
+                selectablePosts.map((p) => {
+                  const id = String(p._id);
+                  const checked = editPostIds.includes(id);
+                  return (
+                    <label
+                      key={id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 0',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleEditPost(id)}
+                        disabled={editSubmitting}
+                      />
+                      <span>{p.name || p.slug || id}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeEdit}
+                disabled={editSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={saveEdit}
+                disabled={editSubmitting}
+              >
+                {editSubmitting ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

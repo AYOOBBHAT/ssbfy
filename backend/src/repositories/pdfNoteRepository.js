@@ -12,6 +12,7 @@ export const pdfNoteRepository = {
   async create(data) {
     const doc = await PdfNote.create({
       title: data.title,
+      postIds: data.postIds,
       postId: data.postId,
       fileUrl: data.fileUrl,
       fileName: data.fileName,

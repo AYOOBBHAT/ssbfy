@@ -30,10 +30,10 @@ export const pdfNoteController = {
 
   /** PATCH /api/notes/pdfs/:id — admin only. Partial update. */
   update: asyncHandler(async (req, res) => {
-    const { isActive } = req.body;
+    const { isActive, postIds } = req.body;
     const pdf = await pdfNoteService.update(
       req.params.id,
-      { isActive },
+      { isActive, postIds },
       req.user
     );
     if (!pdf) {
@@ -46,7 +46,8 @@ export const pdfNoteController = {
    * POST /api/notes/upload-pdf — multipart/form-data with fields:
    *   - file   (required, PDF, <= PDF_MAX_SIZE_MB)
    *   - title  (required)
-   *   - postId (required, must ref an active Post)
+   *   - postIds (JSON array in multipart) and/or postId (legacy) — at least
+   *     one; all referenced posts must exist and be active.
    *
    * multer-storage-cloudinary populates:
    *   - file.path     → Cloudinary `secure_url` (HTTPS CDN URL)
@@ -68,11 +69,12 @@ export const pdfNoteController = {
     }
 
     try {
-      const { title, postId } = req.body;
+      const { title, postId, postIds } = req.body;
 
       const note = await pdfNoteService.create({
         title,
         postId,
+        postIds,
         fileUrl: file.path,
         fileName: file.originalname,
         // Cloudinary public_id — persisted so we can delete or re-sign

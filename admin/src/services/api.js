@@ -233,6 +233,7 @@ export async function updateNote(id, { title, content, isActive } = {}) {
  * List uploaded PDF notes. Pass `{ postId }` to scope to a post and
  * `{ includeInactive: true }` to include disabled uploads (admin-only
  * on the server; the server silently drops the flag for non-admins).
+ * PDFs with `postIds` containing that post are included.
  */
 export async function getPdfNotes(params = {}) {
   const query = {};
@@ -244,18 +245,24 @@ export async function getPdfNotes(params = {}) {
 
 /**
  * Upload a PDF note (admin only). `file` must be a `File`/`Blob` from
- * an <input type="file">. The request uses multipart/form-data so the
- * axios JSON defaults are overridden with `Content-Type: undefined`,
- * which lets the browser set the correct boundary header.
+ * an <input type="file">. Send `postIds` (string ids) for applicable
+ * posts, or legacy single `postId`. The request uses multipart/form-data.
  */
-export async function uploadPdfNote({ title, postId, file } = {}) {
+export async function uploadPdfNote({ title, postId, postIds, file } = {}) {
   if (!title) throw new Error('title is required to upload a PDF.');
-  if (!postId) throw new Error('postId is required to upload a PDF.');
   if (!file) throw new Error('file is required to upload a PDF.');
+
+  const ids =
+    Array.isArray(postIds) && postIds.length > 0
+      ? postIds
+      : postId
+        ? [postId]
+        : [];
+  if (!ids.length) throw new Error('Select at least one post for this PDF.');
 
   const formData = new FormData();
   formData.append('title', title);
-  formData.append('postId', postId);
+  formData.append('postIds', JSON.stringify(ids));
   formData.append('file', file);
 
   const res = await api.post('/notes/upload-pdf', formData, {
@@ -268,14 +275,17 @@ export async function uploadPdfNote({ title, postId, file } = {}) {
 }
 
 /**
- * Patch a PDF note (admin only). Today only `isActive` is patchable —
- * file content is immutable and moving a PDF across posts is a
- * re-upload.
+ * Patch a PDF note (admin only). Toggle `isActive` and/or replace
+ * the full `postIds` list. File content is not modified here.
  */
-export async function updatePdfNote(id, { isActive } = {}) {
+export async function updatePdfNote(id, { isActive, postIds } = {}) {
   if (!id) throw new Error('updatePdfNote requires an id.');
   const payload = {};
   if (typeof isActive === 'boolean') payload.isActive = isActive;
+  if (Array.isArray(postIds) && postIds.length > 0) payload.postIds = postIds;
+  if (Object.keys(payload).length === 0) {
+    throw new Error('updatePdfNote requires isActive and/or postIds.');
+  }
   const res = await api.patch(`/notes/pdfs/${id}`, payload);
   return unwrap(res);
 }
