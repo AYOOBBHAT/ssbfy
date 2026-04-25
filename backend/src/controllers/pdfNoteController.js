@@ -3,7 +3,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
-import { destroyPdfAsset } from '../config/cloudinary.js';
+import { destroyPdfAsset, rawAssetDeliveryUrl } from '../config/cloudinary.js';
 import { ROLES } from '../constants/roles.js';
 
 /**
@@ -50,8 +50,8 @@ export const pdfNoteController = {
    *     one; all referenced posts must exist and be active.
    *
    * multer-storage-cloudinary populates:
-   *   - file.path     → Cloudinary `secure_url` (HTTPS CDN URL)
-   *   - file.filename → the `public_id` we generated
+   *   - file.path     → upload result `secure_url` (HTTPS delivery URL)
+   *   - file.filename → `public_id` (used to rebuild URL if needed)
    *   - file.size     → byte size (may be missing for some streams,
    *                     so we fall back to 0)
    *
@@ -75,10 +75,10 @@ export const pdfNoteController = {
         title,
         postId,
         postIds,
-        fileUrl: file.path,
+        fileUrl: rawAssetDeliveryUrl(file.path, file.filename),
         fileName: file.originalname,
-        // Cloudinary public_id — persisted so we can delete or re-sign
-        // the asset later without parsing URLs.
+        // Cloudinary public_id — persisted so we can delete, rebuild
+        // `secure_url`, or re-sign without parsing stored URLs.
         storedName: file.filename,
         fileSize: Number(file.size) || 0,
         mimeType: file.mimetype || 'application/pdf',

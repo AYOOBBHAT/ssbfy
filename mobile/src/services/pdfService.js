@@ -28,12 +28,20 @@ function apiOrigin() {
  */
 export function resolvePdfUrl(fileUrl) {
   if (!fileUrl || typeof fileUrl !== 'string') return '';
-  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+  const raw = fileUrl.trim();
+  // Cloudinary and some SDKs return protocol-relative "cdn" URLs. Our
+  // dev fallback prepends the API origin to paths; if we treated "//…"
+  // as a path, we'd produce https://api…//res.cloudinary.com/… (broken;
+  // ERR_INVALID_RESPONSE in WebBrowser).
+  if (raw.startsWith('//')) {
+    return `https:${raw}`;
+  }
+  if (/^https?:\/\//i.test(raw)) return raw;
   const origin = apiOrigin();
-  if (!origin) return fileUrl;
-  return fileUrl.startsWith('/')
-    ? `${origin}${fileUrl}`
-    : `${origin}/${fileUrl}`;
+  if (!origin) return raw;
+  return raw.startsWith('/')
+    ? `${origin}${raw}`
+    : `${origin}/${raw}`;
 }
 
 /**

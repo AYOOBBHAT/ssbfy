@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
+import { rawAssetDeliveryUrl } from '../config/cloudinary.js';
 import { pdfNoteRepository } from '../repositories/pdfNoteRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
 
@@ -94,6 +95,7 @@ function normalizePdfNoteDoc(doc) {
     ...doc,
     postIds: effective,
     postId: doc.postId ?? effective[0] ?? null,
+    fileUrl: rawAssetDeliveryUrl(doc.fileUrl, doc.storedName),
   };
 }
 

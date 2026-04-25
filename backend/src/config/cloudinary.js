@@ -63,3 +63,33 @@ export async function destroyPdfAsset(publicId) {
     });
   }
 }
+
+/**
+ * Public HTTPS delivery URL for a `resource_type: 'raw'` PDF asset.
+ *
+ * Multer stores `file.path` from the upload API's `secure_url` — that is
+ * the correct value. This helper re-applies the official `cloudinary.url()`
+ * builder when the upload path is missing, non-HTTPS, or not a res.cloudinary.com
+ * URL, so we never persist a hand-built or broken delivery link.
+ */
+export function rawAssetDeliveryUrl(secureUrlFromUpload, publicId) {
+  const fromApi = typeof secureUrlFromUpload === 'string' ? secureUrlFromUpload.trim() : '';
+  if (
+    fromApi &&
+    /^https:\/\//i.test(fromApi) &&
+    fromApi.includes('res.cloudinary.com')
+  ) {
+    return fromApi;
+  }
+  if (publicId) {
+    try {
+      return cloudinary.url(String(publicId), {
+        resource_type: 'raw',
+        secure: true,
+      });
+    } catch {
+      return fromApi;
+    }
+  }
+  return fromApi;
+}
