@@ -159,6 +159,7 @@ export const pdfNoteService = {
     );
 
     const firstPostId = oids[0];
+    console.log('[PdfNote] saving fileUrl to MongoDB (exact value):', fileUrl);
     const created = await pdfNoteRepository.create({
       title: trimmedTitle,
       postIds: oids,
