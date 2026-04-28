@@ -37,7 +37,11 @@ const AuthField = forwardRef(function AuthField(
     autoComplete,
     returnKeyType = 'next',
     onSubmitEditing,
+    leftAdornment = null,
     rightAdornment = null,
+    inputRowStyle = null,
+    maxLength,
+    ...inputRest
   },
   ref
 ) {
@@ -49,13 +53,17 @@ const AuthField = forwardRef(function AuthField(
       <View
         style={[
           styles.inputRow,
+          inputRowStyle,
           focused && styles.inputRowFocused,
           !editable && styles.inputRowDisabled,
         ]}
       >
+        {leftAdornment ? (
+          <View style={styles.leftAdornment}>{leftAdornment}</View>
+        ) : null}
         <TextInput
           ref={ref}
-          style={styles.input}
+          style={[styles.input, leftAdornment && styles.inputWithLeft]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -72,6 +80,8 @@ const AuthField = forwardRef(function AuthField(
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           selectionColor={colors.primary}
+          maxLength={maxLength}
+          {...inputRest}
         />
         {rightAdornment ? (
           <View style={styles.adornment}>{rightAdornment}</View>
@@ -120,11 +130,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    minHeight: 50,
+    minHeight: 54,
   },
   inputRowFocused: {
     borderColor: colors.primary,
@@ -136,11 +146,19 @@ const styles = StyleSheet.create({
   inputRowDisabled: {
     backgroundColor: '#f3f4f6',
   },
+  leftAdornment: {
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   input: {
     flex: 1,
     color: colors.text,
     fontSize: 15,
     paddingVertical: 12,
+  },
+  inputWithLeft: {
+    paddingLeft: 0,
   },
   adornment: {
     marginLeft: 8,

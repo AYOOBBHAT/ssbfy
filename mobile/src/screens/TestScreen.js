@@ -444,7 +444,7 @@ export default function TestScreen() {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      navigation.navigate('Home');
+      navigation.navigate('Main', { screen: 'Home' });
     }
   }, [navigation, answers, questions, isRetry, isDaily]);
 

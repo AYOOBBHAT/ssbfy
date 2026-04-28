@@ -36,6 +36,14 @@ export const env = {
    * Override with FREE_TEST_LIMIT in .env (falls back to 3).
    */
   freeTestLimit: Math.max(1, Number(process.env.FREE_TEST_LIMIT) || 3),
+
+  /**
+   * Resend (transactional email — password reset OTP). Backend only.
+   * RESEND_FROM_EMAIL must be a verified sender/domain in Resend.
+   */
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || '',
+  appName: process.env.APP_NAME || 'SSBFY',
 };
 
 export const isProd = env.nodeEnv === 'production';

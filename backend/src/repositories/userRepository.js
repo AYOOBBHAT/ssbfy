@@ -14,6 +14,15 @@ export const userRepository = {
     return q.exec();
   },
 
+  /**
+   * User doc with password + reset OTP fields (for verify / reset only).
+   */
+  async findByEmailForPasswordReset(email) {
+    return User.findOne({ email: email.toLowerCase() })
+      .select('+password +passwordResetOtpHash')
+      .exec();
+  },
+
   async findById(id) {
     return User.findById(id).lean().exec();
   },

@@ -736,7 +736,7 @@ export default function ResultScreen() {
           </Pressable>
         ) : null}
         <Pressable
-          onPress={() => navigation.navigate('Home')}
+          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
           style={({ pressed }) => [
             styles.secondaryBtn,
             pressed && styles.btnPressed,

@@ -33,5 +33,6 @@ export const colors = {
 
 export const brand = {
   name: 'SSBFY',
-  tagline: 'Your exam prep companion',
+  /** Shown on auth screens and home — academic, trust-forward motto. */
+  tagline: 'Prepare • Practice • Succeed',
 };

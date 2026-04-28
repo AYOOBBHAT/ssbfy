@@ -24,6 +24,11 @@ const userSchema = new mongoose.Schema(
     freeAttemptsUsed: { type: Number, default: 0, min: 0 },
     streakCount: { type: Number, default: 0, min: 0 },
     lastPracticeDate: { type: Date, default: null },
+
+    /** Hashed OTP for password reset — never returned by API; bcrypt. */
+    passwordResetOtpHash: { type: String, select: false, default: null },
+    passwordResetOtpExpiresAt: { type: Date, default: null },
+    passwordResetOtpAttempts: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

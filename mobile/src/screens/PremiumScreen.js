@@ -85,7 +85,7 @@ export default function PremiumScreen() {
   );
 
   const goHome = useCallback(() => {
-    navigation.navigate('Home');
+    navigation.navigate('Main', { screen: 'Home' });
   }, [navigation]);
 
   const handleUpgrade = useCallback(async () => {
