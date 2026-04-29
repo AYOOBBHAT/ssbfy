@@ -33,7 +33,9 @@ export const testController = {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }
 
-    const { attempt, resumed } = await testAttemptService.start(userId, req.params.id);
+    const { attempt, resumed } = await testAttemptService.start(userId, req.params.id, {
+      isPremium: isPremiumUser(user),
+    });
 
     if (resumed) {
       return sendSuccess(res, { attempt, resumed: true }, 'Test attempt resumed');
@@ -85,5 +87,57 @@ export const testController = {
       },
       'Test submitted'
     );
+  }),
+
+  attemptsHistory: asyncHandler(async (req, res) => {
+    const attempts = await testAttemptService.listHistory(req.user.id, req.params.id);
+    return sendSuccess(res, { attempts }, 'Test attempts');
+  }),
+
+  /**
+   * Backend source of truth for tests CTA state (Resume/Retry/Start/Completed).
+   * Used by mobile to avoid local-only heuristics.
+   */
+  statusMine: asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    // Use distinct testIds (not full attempt docs) so this stays fast even
+    // for users with many retries.
+    const [openIds, completedIds] = await Promise.all([
+      testAttemptRepository.distinctOpenTestIdsByUser(userId),
+      testAttemptRepository.distinctCompletedTestIdsByUser(userId),
+    ]);
+
+    const openSet = new Set((openIds || []).map(String));
+    const completedSet = new Set((completedIds || []).map(String));
+    const premium = isPremiumUser(user);
+
+    // Shape: { [testId]: { hasOpenAttempt, hasCompletedAttempt, canRetry } }
+    const status = {};
+
+    for (const t of openSet) {
+      status[t] = {
+        hasOpenAttempt: true,
+        hasCompletedAttempt: completedSet.has(t),
+        canRetry: premium,
+      };
+    }
+    for (const t of completedSet) {
+      if (!status[t]) {
+        status[t] = {
+          hasOpenAttempt: false,
+          hasCompletedAttempt: true,
+          canRetry: premium,
+        };
+      } else {
+        status[t].hasCompletedAttempt = true;
+      }
+    }
+
+    return sendSuccess(res, { status }, 'Test status');
   }),
 };

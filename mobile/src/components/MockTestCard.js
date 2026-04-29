@@ -25,11 +25,25 @@ function typeBadgeLabel(type) {
   return 'Mock';
 }
 
-export function MockTestCard({ item, index, onStart, isStarting }) {
+export function MockTestCard({
+  item,
+  index,
+  onStart,
+  isStarting,
+  actionLabel,
+  ctaState,
+}) {
+  const safeLabel = typeof actionLabel === 'string' && actionLabel.trim() ? actionLabel : 'Start test';
   const title = humanizeTitle(item?.title, index);
   const duration = Number(item?.duration) || 0;
   const qCount = Array.isArray(item?.questionIds) ? item.questionIds.length : 0;
   const badge = typeBadgeLabel(item?.type);
+  const state = typeof ctaState === 'string' ? ctaState : 'start';
+  const isCompleted = state === 'completed';
+  const isResume = state === 'resume';
+  const isRetry = state === 'retry';
+  const isLoading = state === 'loading';
+  const isUnknown = state === 'unknown';
 
   return (
     <View style={styles.card}>
@@ -43,6 +57,26 @@ export function MockTestCard({ item, index, onStart, isStarting }) {
             {' • '}
             {duration} mins
           </Text>
+          <View style={styles.stateRow}>
+            {isLoading ? (
+              <>
+                <View style={[styles.skelPill, styles.skelPillWide]} />
+                <View style={[styles.skelPill, styles.skelPillNarrow]} />
+              </>
+            ) : null}
+            {!isLoading && isResume ? (
+              <Text style={[styles.statePill, styles.pillResume]}>In progress</Text>
+            ) : null}
+            {!isLoading && isRetry ? (
+              <Text style={[styles.statePill, styles.pillRetry]}>Retry available</Text>
+            ) : null}
+            {!isLoading && isCompleted ? (
+              <Text style={[styles.statePill, styles.pillCompleted]}>Completed</Text>
+            ) : null}
+            {!isLoading && isUnknown ? (
+              <Text style={[styles.statePill, styles.pillUnknown]}>Syncing…</Text>
+            ) : null}
+          </View>
         </View>
         <View style={[styles.badge, badge === 'Full syllabus' && styles.badgeFull]}>
           <Text style={[styles.badgeText, badge === 'Full syllabus' && styles.badgeTextFull]}>
@@ -52,15 +86,30 @@ export function MockTestCard({ item, index, onStart, isStarting }) {
       </View>
       <Pressable
         onPress={() => onStart(item)}
-        disabled={isStarting}
+        disabled={isStarting || isCompleted || isLoading}
         style={({ pressed }) => [
           styles.startBtn,
+          isCompleted && styles.startBtnDisabled,
+          isLoading && styles.startBtnSkeleton,
           pressed && styles.pressed,
           isStarting && styles.disabled,
         ]}
       >
-        <Text style={styles.startBtnText}>{isStarting ? 'Starting…' : 'Start test'}</Text>
-        <Ionicons name="play" size={16} color={colors.textOnPrimary} style={styles.playIcon} />
+        {isLoading ? (
+          <View style={styles.skelBtnRow}>
+            <View style={styles.skelBtnText} />
+          </View>
+        ) : (
+          <>
+            <Text style={styles.startBtnText}>{isStarting ? 'Starting…' : safeLabel}</Text>
+            <Ionicons
+              name={isCompleted ? 'checkmark' : 'play'}
+              size={16}
+              color={colors.textOnPrimary}
+              style={styles.playIcon}
+            />
+          </>
+        )}
       </Pressable>
     </View>
   );
@@ -105,6 +154,46 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 18,
   },
+  stateRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  statePill: {
+    fontSize: 11,
+    fontWeight: '700',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  pillResume: {
+    color: colors.primaryDark,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  pillRetry: {
+    color: colors.primaryText,
+    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  pillCompleted: {
+    color: colors.muted,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pillUnknown: {
+    color: colors.muted,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  skelPill: {
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+  },
+  skelPillWide: { width: 118 },
+  skelPillNarrow: { width: 84 },
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -136,6 +225,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
+  },
+  startBtnSkeleton: {
+    backgroundColor: colors.primarySoft,
+  },
+  startBtnDisabled: {
+    backgroundColor: colors.muted,
+  },
+  skelBtnRow: { width: '100%', alignItems: 'center', justifyContent: 'center' },
+  skelBtnText: {
+    height: 14,
+    width: 120,
+    borderRadius: 7,
+    backgroundColor: '#bfdbfe',
   },
   startBtnText: {
     color: colors.textOnPrimary,

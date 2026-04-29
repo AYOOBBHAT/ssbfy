@@ -144,7 +144,7 @@ function validateAnswerCoverage(attemptQuestionIds, answers) {
 }
 
 export const testAttemptService = {
-  async start(userId, testId) {
+  async start(userId, testId, { isPremium = false } = {}) {
     // Use the service view so inactive / orphaned questions are already
     // stripped out before we build the attempt snapshot. This prevents a
     // user from ever being assigned a question whose subject or topic has
@@ -154,9 +154,11 @@ export const testAttemptService = {
       throw new AppError('Test has no active questions available', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const submitted = await testAttemptRepository.findSubmittedByUserAndTest(userId, testId);
-    if (submitted) {
-      throw new AppError('Test already completed', HTTP_STATUS.CONFLICT);
+    if (!isPremium) {
+      const submitted = await testAttemptRepository.findSubmittedByUserAndTest(userId, testId);
+      if (submitted) {
+        throw new AppError('Test already completed', HTTP_STATUS.CONFLICT);
+      }
     }
 
     const existing = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
@@ -172,13 +174,28 @@ export const testAttemptService = {
       throw new AppError('Test has no questions configured', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const attempt = await testAttemptRepository.create({
-      userId,
-      testId,
-      questionIds,
-      answers: [],
-      startTime: new Date(),
-    });
+    const attemptNumber = await testAttemptRepository.getNextAttemptNumber(userId, testId);
+
+    let attempt;
+    try {
+      attempt = await testAttemptRepository.create({
+        userId,
+        testId,
+        questionIds,
+        answers: [],
+        startTime: new Date(),
+        attemptNumber,
+      });
+    } catch (e) {
+      // If two start requests race for a premium user, the partial unique index
+      // on open attempts and the unique attemptNumber index will keep data
+      // consistent. In that case, fetch the in-progress attempt and return it.
+      const inProgress = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
+      if (inProgress) {
+        return { attempt: inProgress, resumed: true };
+      }
+      throw e;
+    }
 
     return { attempt, resumed: false };
   },
@@ -188,11 +205,6 @@ export const testAttemptService = {
     const test = await testRepository.findById(testId);
     if (!test) {
       throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
-    }
-
-    const submitted = await testAttemptRepository.findSubmittedByUserAndTest(userId, testId);
-    if (submitted) {
-      throw new AppError('Test already submitted', HTTP_STATUS.CONFLICT);
     }
 
     const attempt = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
@@ -338,5 +350,37 @@ export const testAttemptService = {
       weakTopics,
       correctAnswers,
     };
+  },
+
+  /**
+   * Previous completed attempts for a given user+test.
+   * Intended for future UI use (attempt history).
+   */
+  async listHistory(userId, testId) {
+    const rows = await testAttemptRepository.listSubmittedByUserAndTest(userId, testId);
+    // Backfill legacy null attemptNumbers in response only (do not write).
+    // We assign based on oldest-first ordering so attempt 1 is the earliest.
+    const oldestFirst = [...rows].sort((a, b) => {
+      const ta = new Date(a.endTime || a.createdAt || 0).getTime();
+      const tb = new Date(b.endTime || b.createdAt || 0).getTime();
+      return ta - tb;
+    });
+    const derivedMap = new Map();
+    for (let i = 0; i < oldestFirst.length; i += 1) {
+      const id = String(oldestFirst[i]._id);
+      derivedMap.set(id, i + 1);
+    }
+
+    return rows.map((a) => ({
+      _id: a._id,
+      testId: a.testId,
+      attemptNumber: a.attemptNumber ?? derivedMap.get(String(a._id)) ?? null,
+      score: a.score,
+      accuracy: a.accuracy,
+      timeTaken: a.timeTaken,
+      startTime: a.startTime,
+      endTime: a.endTime,
+      createdAt: a.createdAt,
+    }));
   },
 };

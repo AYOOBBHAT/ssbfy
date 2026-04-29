@@ -91,6 +91,13 @@ const testAttemptSchema = new mongoose.Schema(
     answers: { type: [answerItemSchema], default: [] },
     startTime: { type: Date, required: true },
     endTime: { type: Date, default: null },
+    /**
+     * Attempt number per (userId, testId).
+     *
+     * - For new attempts we always set this to 1..N.
+     * - Legacy documents may have null; we keep it nullable for safe rollout.
+     */
+    attemptNumber: { type: Number, default: null, min: 1 },
     score: { type: Number, default: null },
     accuracy: { type: Number, default: null },
     timeTaken: { type: Number, default: null },
@@ -100,5 +107,25 @@ const testAttemptSchema = new mongoose.Schema(
 
 testAttemptSchema.index({ userId: 1, testId: 1 });
 testAttemptSchema.index({ userId: 1, testId: 1, endTime: 1 });
+// Optimizes queries shaped like: { userId, endTime } (status lookup / resume checks).
+testAttemptSchema.index({ userId: 1, endTime: 1, testId: 1 });
+
+/**
+ * Prevent duplicate open attempts for the same user+test, regardless of tier.
+ * This is a partial unique index: only docs with endTime == null participate.
+ */
+testAttemptSchema.index(
+  { userId: 1, testId: 1, endTime: 1 },
+  { unique: true, partialFilterExpression: { endTime: null } }
+);
+
+/**
+ * Stable attempt numbering (unique per user+test).
+ * Participates only when attemptNumber is present (legacy null docs ignored).
+ */
+testAttemptSchema.index(
+  { userId: 1, testId: 1, attemptNumber: 1 },
+  { unique: true, partialFilterExpression: { attemptNumber: { $type: 'number' } } }
+);
 
 export const TestAttempt = mongoose.model('TestAttempt', testAttemptSchema);

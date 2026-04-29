@@ -261,6 +261,7 @@ export default function TestScreen() {
     (data) => {
       const payload = data || {};
       navigation.navigate('Result', {
+        testId,
         score: payload.score ?? 0,
         accuracy: payload.accuracy ?? 0,
         timeTaken: payload.timeTaken ?? 0,
@@ -274,7 +275,7 @@ export default function TestScreen() {
           : [],
       });
     },
-    [navigation, questionIds.length, attemptedCount, questions, answers]
+    [navigation, testId, questionIds.length, attemptedCount, questions, answers]
   );
 
   const executeSubmit = useCallback(

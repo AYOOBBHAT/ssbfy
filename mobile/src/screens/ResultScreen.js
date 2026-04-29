@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
-import { getQuestionsByTopic, getWeakPractice } from '../services/testService';
+import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
 import { getTopics } from '../services/topicService';
 import { getNotes, previewOf } from '../services/noteService';
 import {
@@ -104,6 +104,7 @@ export default function ResultScreen() {
   const params = route.params;
   const hasParams = !!params && typeof params === 'object';
   const {
+    testId,
     score,
     accuracy,
     timeTaken,
@@ -118,6 +119,61 @@ export default function ResultScreen() {
     retryQuestions = [],
   } = params || {};
   const isRetry = !!retry;
+  const isMock = !!testId && !isRetry;
+
+  const [attemptsLoading, setAttemptsLoading] = useState(false);
+  const [attemptsError, setAttemptsError] = useState(null);
+  const [attempts, setAttempts] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    const loadAttempts = async () => {
+      if (!isMock) return;
+      setAttemptsLoading(true);
+      setAttemptsError(null);
+      try {
+        const data = await getTestAttempts(testId);
+        const list = Array.isArray(data?.attempts) ? data.attempts : [];
+        if (!alive) return;
+        setAttempts(list);
+      } catch (e) {
+        if (!alive) return;
+        setAttemptsError(getApiErrorMessage(e));
+        setAttempts([]);
+      } finally {
+        if (!alive) return;
+        setAttemptsLoading(false);
+      }
+    };
+    void loadAttempts();
+    return () => {
+      alive = false;
+    };
+  }, [isMock, testId]);
+
+  const bestAttempt = useMemo(() => {
+    if (!Array.isArray(attempts) || attempts.length === 0) return null;
+    let best = attempts[0];
+    for (const a of attempts) {
+      const accA = Number(a?.accuracy) || 0;
+      const accB = Number(best?.accuracy) || 0;
+      if (accA > accB) best = a;
+    }
+    return best;
+  }, [attempts]);
+
+  const formatAttemptDate = (d) => {
+    const t = d ? new Date(d).getTime() : NaN;
+    if (Number.isNaN(t)) return '—';
+    return new Date(t).toLocaleString();
+  };
+
+  const formatAttemptTime = (s) => {
+    const n = Math.max(0, Number(s) || 0);
+    const mm = Math.floor(n / 60);
+    const ss = n % 60;
+    return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  };
 
   /**
    * Map questionId → canonical Number[] of correct option indexes.
@@ -504,6 +560,72 @@ export default function ResultScreen() {
         </Text>
       </View>
 
+      {isMock ? (
+        <View style={styles.attemptsBlock}>
+          <View style={styles.attemptsHeaderRow}>
+            <Text style={styles.sectionTitle}>Previous Attempts</Text>
+            {attemptsLoading ? <Text style={styles.attemptsMeta}>Loading…</Text> : null}
+          </View>
+          {attemptsError ? (
+            <Text style={styles.attemptsError}>{attemptsError}</Text>
+          ) : null}
+          {!attemptsLoading && attempts.length > 0 ? (
+            <View style={styles.attemptsSummaryRow}>
+              <View style={styles.summaryPill}>
+                <Text style={styles.summaryLabel}>Total attempts</Text>
+                <Text style={styles.summaryValue}>{String(attempts.length)}</Text>
+              </View>
+              <View style={styles.summaryPill}>
+                <Text style={styles.summaryLabel}>Best score</Text>
+                <Text style={styles.summaryValue}>{String(bestAttempt?.accuracy ?? 0)}%</Text>
+              </View>
+              <View style={styles.summaryPill}>
+                <Text style={styles.summaryLabel}>Latest score</Text>
+                <Text style={styles.summaryValue}>
+                  {String(attempts?.[0]?.accuracy ?? 0)}%
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {bestAttempt ? (
+            <View style={styles.bestAttemptCard}>
+              <View style={styles.bestAttemptTop}>
+                <Text style={styles.bestAttemptLabel}>Best score</Text>
+                <Text style={styles.bestAttemptValue}>
+                  {String(bestAttempt?.accuracy ?? 0)}%
+                </Text>
+              </View>
+              <Text style={styles.bestAttemptSub}>
+                Attempt {String(bestAttempt?.attemptNumber ?? '—')} • {formatAttemptDate(bestAttempt?.endTime)}
+              </Text>
+            </View>
+          ) : null}
+          {!attemptsLoading && attempts.length > 0 ? (
+            <View style={styles.attemptList}>
+              {attempts
+                .slice()
+                .sort((a, b) => (Number(a?.attemptNumber) || 0) - (Number(b?.attemptNumber) || 0))
+                .map((a) => (
+                  <View key={String(a?._id)} style={styles.attemptRow}>
+                    <View style={styles.attemptLeft}>
+                      <Text style={styles.attemptTitle}>
+                        Attempt {String(a?.attemptNumber ?? '—')}
+                      </Text>
+                      <Text style={styles.attemptSub}>
+                        Accuracy {String(a?.accuracy ?? 0)}% • Time {formatAttemptTime(a?.timeTaken)}
+                      </Text>
+                      <Text style={styles.attemptDate}>{formatAttemptDate(a?.endTime)}</Text>
+                    </View>
+                    <Text style={styles.attemptPct}>{String(a?.accuracy ?? 0)}%</Text>
+                  </View>
+                ))}
+            </View>
+          ) : !attemptsLoading ? (
+            <Text style={styles.attemptsEmpty}>No previous attempts yet.</Text>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
           <Text style={styles.statValue}>{String(totalQuestions)}</Text>
@@ -889,6 +1011,78 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 10,
   },
+
+  attemptsBlock: {
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    padding: 12,
+    marginBottom: 16,
+  },
+  attemptsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  attemptsMeta: { fontSize: 12, color: MUTED, fontWeight: '600' },
+  attemptsError: { color: colors.danger, fontSize: 13, marginTop: 6, fontWeight: '600' },
+  attemptsEmpty: { color: MUTED, fontSize: 13, marginTop: 6 },
+  attemptsSummaryRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', marginTop: 10 },
+  summaryPill: {
+    flexGrow: 1,
+    minWidth: 120,
+    backgroundColor: BG,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: MUTED,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  summaryValue: { fontSize: 16, fontWeight: '800', color: TEXT, marginTop: 6 },
+  bestAttemptCard: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  bestAttemptTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  bestAttemptLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.primaryText,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  bestAttemptValue: { fontSize: 18, fontWeight: '800', color: colors.primaryDark },
+  bestAttemptSub: { fontSize: 12, color: colors.primaryText, marginTop: 6, lineHeight: 16, opacity: 0.9 },
+  attemptList: { gap: 10 },
+  attemptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: BG,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  attemptLeft: { flex: 1, paddingRight: 10 },
+  attemptTitle: { fontSize: 14, fontWeight: '700', color: TEXT },
+  attemptSub: { fontSize: 12, color: MUTED, marginTop: 4, lineHeight: 16 },
+  attemptDate: { fontSize: 11, color: MUTED, marginTop: 6, opacity: 0.9 },
+  attemptPct: { fontSize: 15, fontWeight: '800', color: TEXT },
 
   sectionCard: {
     backgroundColor: CARD_BG,

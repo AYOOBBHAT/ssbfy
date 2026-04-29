@@ -24,6 +24,18 @@ export async function submitTest(testId, answers) {
   return data?.data ?? {};
 }
 
+/** @returns {Promise<{ attempts: object[] }>} */
+export async function getTestAttempts(testId) {
+  const { data } = await api.get(`/tests/${testId}/attempts`);
+  return data?.data ?? { attempts: [] };
+}
+
+/** @returns {Promise<{ status: Record<string, {hasOpenAttempt:boolean, hasCompletedAttempt:boolean, canRetry:boolean}> }>} */
+export async function getMyTestStatus() {
+  const { data } = await api.get('/tests/status/mine');
+  return data?.data ?? { status: {} };
+}
+
 /**
  * @param {string} topicId
  * @param {{ limit?: number }} [opts]

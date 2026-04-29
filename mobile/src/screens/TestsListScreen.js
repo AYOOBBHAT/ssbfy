@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -5,6 +6,10 @@ import { useMockTests } from '../hooks/useMockTests';
 import { MockTestCard } from '../components/MockTestCard';
 import { LoadingState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
+import { userHasPremiumAccess } from '../utils/premiumAccess';
+import { getApiErrorMessage } from '../services/api';
+import { getMyTestStatus } from '../services/testService';
 
 function EmptyTests() {
   return (
@@ -18,6 +23,11 @@ function EmptyTests() {
 
 export default function TestsListScreen() {
   const navigation = useNavigation();
+  const { user } = useAuth();
+  const isPremium = userHasPremiumAccess(user);
+  const [statusMap, setStatusMap] = useState({});
+  const [statusError, setStatusError] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(true);
   const {
     tests,
     loading,
@@ -28,6 +38,44 @@ export default function TestsListScreen() {
     handleStartTest,
     FREE_TEST_LIMIT_MESSAGE,
   } = useMockTests();
+
+  useEffect(() => {
+    let alive = true;
+    const loadStatuses = async () => {
+      try {
+        setStatusError(null);
+        setStatusLoading(true);
+        const data = await getMyTestStatus();
+        const next = data?.status && typeof data.status === 'object' ? data.status : {};
+        if (!alive) return;
+        setStatusMap(next);
+      } catch (e) {
+        if (!alive) return;
+        setStatusError(getApiErrorMessage(e));
+        setStatusMap({});
+      }
+      if (!alive) return;
+      setStatusLoading(false);
+    };
+    void loadStatuses();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const testStatusById = useMemo(() => {
+    const map = new Map();
+    for (const t of tests || []) {
+      const id = String(t?._id ?? '').trim();
+      if (!id) continue;
+      const st = statusMap?.[id];
+      map.set(id, {
+        hasOpen: !!st?.hasOpenAttempt,
+        isCompleted: !!st?.hasCompletedAttempt,
+      });
+    }
+    return map;
+  }, [tests, statusMap]);
 
   return (
     <FlatList
@@ -42,6 +90,13 @@ export default function TestsListScreen() {
           <Text style={styles.lead}>
             Full-length timed mocks aligned with your exam pattern. Tap start when you are ready.
           </Text>
+          {statusError ? (
+            <View style={styles.softWarn}>
+              <Text style={styles.softWarnText}>
+                Some test statuses may be outdated. {statusError}
+              </Text>
+            </View>
+          ) : null}
           {mockStartError ? (
             <View style={styles.alert}>
               <Text style={styles.alertTitle}>Could not start test</Text>
@@ -77,12 +132,38 @@ export default function TestsListScreen() {
         const itemId = item?._id;
         const isStarting =
           startingId != null && String(startingId) === String(itemId);
+        const st =
+          testStatusById.get(String(itemId)) || { hasOpen: false, isCompleted: false };
+
+        let cta = 'Open test';
+        let ctaState = 'loading';
+        if (!statusLoading && !statusError) {
+          cta = 'Start test';
+          ctaState = 'start';
+          if (st.hasOpen) {
+            cta = 'Resume test';
+            ctaState = 'resume';
+          } else if (st.isCompleted && isPremium) {
+            cta = 'Retry test';
+            ctaState = 'retry';
+          } else if (st.isCompleted && !isPremium) {
+            cta = 'Completed';
+            ctaState = 'completed';
+          }
+        } else if (!statusLoading && statusError) {
+          // If status could not be fetched, avoid claiming a state we don't know.
+          // Backend will still resume / block correctly when Start is pressed.
+          cta = 'Open test';
+          ctaState = 'unknown';
+        }
         return (
           <MockTestCard
             item={item}
             index={index}
             onStart={handleStartTest}
             isStarting={isStarting}
+            actionLabel={cta}
+            ctaState={ctaState}
           />
         );
       }}
@@ -146,6 +227,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   pressed: { opacity: 0.88 },
+  softWarn: {
+    backgroundColor: colors.warningSoft,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  softWarnText: {
+    color: colors.warning,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
   emptyWrap: {
     alignItems: 'center',
     paddingVertical: 48,

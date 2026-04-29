@@ -32,6 +32,16 @@ router.post(
   testController.submit
 );
 
+router.get(
+  '/:id/attempts',
+  authenticate,
+  ...testIdParam,
+  validateRequest,
+  testController.attemptsHistory
+);
+
+router.get('/status/mine', authenticate, testController.statusMine);
+
 router.post(
   '/',
   ...adminChain,
