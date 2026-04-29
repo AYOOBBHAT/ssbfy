@@ -6,6 +6,8 @@ import { createOrderValidators, verifyPaymentValidators } from '../validators/pa
 
 const router = Router();
 
+router.post('/webhook', paymentController.webhook);
+
 router.use(authenticate);
 
 router.post(

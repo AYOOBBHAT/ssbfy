@@ -45,6 +45,65 @@ export const uploadPdfSingle = multer({
   },
 }).single('file');
 
+// ---- CSV upload (memory storage; file lives on `req.file.buffer`). ----
+//
+// Question imports are bounded (we cap to ~5MB which is roughly 50k rows)
+// and processed synchronously, so memory storage avoids the disk cleanup
+// dance the PDF flow needs. We never persist this file — the parsed rows
+// fan out to MongoDB directly.
+
+const CSV_MAX_BYTES = 5 * 1024 * 1024;
+
+function csvFileFilter(_req, file, cb) {
+  const okMime =
+    file.mimetype === 'text/csv' ||
+    file.mimetype === 'application/vnd.ms-excel' || // some browsers tag CSVs this way
+    file.mimetype === 'application/csv' ||
+    file.mimetype === 'text/plain';
+  const fileExt = path.extname(file.originalname || '').toLowerCase();
+  const okExt = fileExt === '.csv' || fileExt === '.txt';
+  if (okMime || okExt) {
+    cb(null, true);
+    return;
+  }
+  cb(
+    new AppError(
+      'Only CSV files are allowed. Save as CSV from Excel/Sheets and re-upload.',
+      HTTP_STATUS.BAD_REQUEST
+    )
+  );
+}
+
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: csvFileFilter,
+  limits: { fileSize: CSV_MAX_BYTES, files: 1 },
+}).single('file');
+
+export function handleCsvUpload(req, res, next) {
+  csvUpload(req, res, (err) => {
+    if (!err) {
+      next();
+      return;
+    }
+    if (err instanceof multer.MulterError) {
+      const mapped =
+        err.code === 'LIMIT_FILE_SIZE'
+          ? new AppError(
+              `CSV too large. Max ${(CSV_MAX_BYTES / (1024 * 1024)).toFixed(0)} MB allowed.`,
+              HTTP_STATUS.BAD_REQUEST
+            )
+          : new AppError(
+              `Upload error: ${err.message}`,
+              HTTP_STATUS.BAD_REQUEST
+            );
+      next(mapped);
+      return;
+    }
+    next(err);
+  });
+}
+
 export function handlePdfUpload(req, res, next) {
   uploadPdfSingle(req, res, (err) => {
     if (!err) {

@@ -13,6 +13,8 @@ import dailyPracticeRoutes from './dailyPracticeRoutes.js';
 import leaderboardRoutes from './leaderboardRoutes.js';
 import savedMaterialRoutes from './savedMaterialRoutes.js';
 import subscriptionPlanRoutes from './subscriptionPlanRoutes.js';
+import adminSubscriptionPlanRoutes from './adminSubscriptionPlanRoutes.js';
+import adminPaymentRoutes from './adminPaymentRoutes.js';
 
 const router = Router();
 
@@ -30,5 +32,7 @@ router.use('/daily-practice', dailyPracticeRoutes);
 router.use('/leaderboard', leaderboardRoutes);
 router.use('/saved-materials', savedMaterialRoutes);
 router.use('/subscription-plans', subscriptionPlanRoutes);
+router.use('/admin/subscription-plans', adminSubscriptionPlanRoutes);
+router.use('/admin/payments', adminPaymentRoutes);
 
 export default router;

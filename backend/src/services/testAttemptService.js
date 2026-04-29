@@ -231,11 +231,30 @@ export const testAttemptService = {
 
     validateAnswerCoverage(attempt.questionIds, answers);
 
-    const questions = await questionRepository.findActiveByIds(attempt.questionIds);
+    // Score against the question docs as they exist now, EVEN IF admin
+    // soft-disabled them after this attempt started. The product rule is
+    // "start freezes eligibility, submit does not": a student must never
+    // lose a submit because of an admin action that happened mid-attempt.
+    //
+    // We deliberately do NOT use `findActiveByIds` here. That filter is the
+    // correct source of truth for *new* test starts and for daily / weak /
+    // smart practice (which keep using their existing helpers), so future
+    // sessions continue to exclude disabled content. Only this in-progress
+    // submit path is allowed to read inactive question docs.
+    //
+    // Subject / topic disable is automatically handled too: this path never
+    // re-checks subject.isActive or topic.isActive — they're only consulted
+    // at start time inside `testService.classifyQuestions`. So a disable on
+    // any of (question, topic, subject) AFTER start no longer breaks submit.
+    const questions = await questionRepository.findByIdsForScoring(attempt.questionIds);
     const qMap = new Map(questions.map((q) => [q._id.toString(), q]));
     if (questions.length !== attempt.questionIds.length) {
+      // Length mismatch can ONLY mean a question doc literally no longer
+      // exists in Mongo — admin hard-delete is no longer exposed by the
+      // API, so this is a defense-in-depth signal for legacy ops scripts
+      // / database corruption. Active vs inactive does not enter the check.
       throw new AppError(
-        'Some questions are missing or inactive; cannot score this attempt',
+        'A question recorded on this attempt is missing from the database; cannot score',
         HTTP_STATUS.BAD_REQUEST
       );
     }

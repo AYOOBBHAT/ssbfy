@@ -5,12 +5,15 @@ const links = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/add-question', label: 'Add Question' },
   { to: '/manage-questions', label: 'Manage Questions' },
+  { to: '/import-questions', label: 'Import Questions' },
   { to: '/add-note', label: 'Add Note' },
   { to: '/manage-notes', label: 'Manage Notes' },
   { to: '/upload-pdf', label: 'Upload PDF' },
   { to: '/manage-pdfs', label: 'Manage PDFs' },
   { to: '/create-test', label: 'Create Test' },
   { to: '/topics', label: 'Subjects & Topics' },
+  { to: '/subscription-plans', label: 'Subscription Plans' },
+  { to: '/payments', label: 'Payments' },
 ];
 
 export default function Navbar() {

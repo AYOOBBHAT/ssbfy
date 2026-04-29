@@ -46,6 +46,17 @@ const userSchema = new mongoose.Schema(
     passwordResetOtpHash: { type: String, select: false, default: null },
     passwordResetOtpExpiresAt: { type: Date, default: null },
     passwordResetOtpAttempts: { type: Number, default: 0, min: 0 },
+
+    /**
+     * Short-lived reset token issued AFTER successful OTP verification.
+     * Stored as a SHA-256 hash (never returned by API). The plaintext token
+     * is given to the client exactly once and consumed by reset-password.
+     * Decoupling reset from OTP means the OTP is invalidated immediately
+     * after verification and the password-reset request never carries the
+     * OTP secret.
+     */
+    passwordResetTokenHash: { type: String, select: false, default: null },
+    passwordResetTokenExpiresAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

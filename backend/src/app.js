@@ -25,7 +25,17 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '1mb' }));
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req, res, buf) => {
+      // Razorpay webhook HMAC is computed over the raw JSON bytes.
+      if (req.originalUrl === '/api/payments/webhook') {
+        req.rawBody = buf;
+      }
+    },
+  })
+);
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
 app.get('/health', (req, res) => {

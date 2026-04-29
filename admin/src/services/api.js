@@ -198,6 +198,98 @@ export async function updateQuestion(id, payload) {
 }
 
 /**
+ * Bulk enable/disable a list of question ids (admin).
+ * The server caps `ids` at 500 per call and runs an atomic `updateMany`.
+ */
+export async function bulkSetQuestionStatus({ ids, isActive } = {}) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new Error('bulkSetQuestionStatus requires a non-empty ids array.');
+  }
+  if (typeof isActive !== 'boolean') {
+    throw new Error('bulkSetQuestionStatus requires isActive boolean.');
+  }
+  const res = await api.post('/questions/admin/bulk-status', { ids, isActive });
+  return unwrap(res);
+}
+
+/**
+ * "Possible duplicate?" lookup for the AddQuestion form. Returns
+ * `{ exactDuplicateId, similar: [{_id, questionText, isActive, ...}] }`.
+ * Empty `subjectId` or short text returns an empty result.
+ */
+export async function findSimilarQuestions({ questionText, subjectId, excludeId } = {}) {
+  if (!questionText || !subjectId) {
+    return { exactDuplicateId: null, similar: [] };
+  }
+  const params = { questionText, subjectId };
+  if (excludeId) params.excludeId = excludeId;
+  const res = await api.get('/questions/admin/similar', { params });
+  return unwrap(res) || { exactDuplicateId: null, similar: [] };
+}
+
+/**
+ * Per-question usage counts: how many tests reference it and how many test
+ * attempts have already snapshotted it. Used by ManageQuestions to give the
+ * admin a feel for blast radius before disabling.
+ */
+export async function getQuestionUsage(id) {
+  if (!id) throw new Error('getQuestionUsage requires an id.');
+  const res = await api.get(`/questions/admin/${id}/usage`);
+  const data = unwrap(res);
+  return data?.usage ?? data ?? { tests: 0, attempts: 0 };
+}
+
+/**
+ * Download the CSV import template. Returns a Blob the caller can hand to
+ * `URL.createObjectURL` for a save-as link.
+ */
+export async function downloadImportTemplate() {
+  const res = await api.get('/questions/admin/import/template', {
+    responseType: 'blob',
+  });
+  return res.data;
+}
+
+/**
+ * Dry-run an import: upload the CSV, get back row-by-row validation +
+ * duplicate detection. NO writes happen on the server for this call.
+ */
+export async function dryRunImportQuestions(file) {
+  if (!file) throw new Error('dryRunImportQuestions requires a CSV file.');
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await api.post('/questions/admin/import/dry-run', fd, {
+    timeout: 120000,
+  });
+  return unwrap(res) || { summary: null, rows: [] };
+}
+
+/**
+ * Commit an import. The server re-runs the same validation against the
+ * uploaded bytes, so we never trust client-supplied row payloads.
+ *
+ * `forceImportDuplicates`: when true, rows that are exact duplicates of
+ * existing questions in the same subject are inserted anyway. In-batch
+ * duplicates (same text appearing twice in one CSV) are NEVER force-imported.
+ */
+export async function commitImportQuestions(file, { forceImportDuplicates = false } = {}) {
+  if (!file) throw new Error('commitImportQuestions requires a CSV file.');
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('forceImportDuplicates', forceImportDuplicates ? 'true' : 'false');
+  const res = await api.post('/questions/admin/import/commit', fd, {
+    timeout: 180000,
+  });
+  return (
+    unwrap(res) || {
+      summary: null,
+      rows: [],
+      insertErrors: [],
+    }
+  );
+}
+
+/**
  * Create a new test (admin only).
  * @param {object} payload  title, type, questionIds, duration, negativeMarking
  */
@@ -314,6 +406,88 @@ export async function updatePdfNote(id, { isActive, postIds } = {}) {
     throw new Error('updatePdfNote requires isActive and/or postIds.');
   }
   const res = await api.patch(`/notes/pdfs/${id}`, payload);
+  return unwrap(res);
+}
+
+/* ---------------- Subscription plans (admin) ---------------- */
+
+// Backend lives at /api/admin/subscription-plans (admin-gated).
+// Plans are NEVER hard-deleted — disable via setAdminPlanStatus(id, false).
+// The server enforces the "at least one active plan" invariant atomically
+// and rejects disables that would violate it with HTTP 409.
+
+const ADMIN_PLANS_BASE = '/admin/subscription-plans';
+
+/** List every plan (active + inactive), sorted server-side by displayOrder. */
+export async function listAdminPlans() {
+  const res = await api.get(ADMIN_PLANS_BASE);
+  const data = unwrap(res);
+  return Array.isArray(data?.plans) ? data.plans : [];
+}
+
+/**
+ * Create a new plan. Required: `name`, `planType`, `priceInr`. `durationDays`
+ * is required for non-lifetime types and MUST be omitted/null for lifetime.
+ */
+export async function createAdminPlan(payload) {
+  const res = await api.post(ADMIN_PLANS_BASE, payload);
+  return unwrap(res)?.plan ?? null;
+}
+
+/**
+ * Edit an existing plan. `planType` is immutable on the server — pass
+ * everything else (name, priceInr, displayOrder, description, isActive,
+ * durationDays). `isActive: false` routes through the atomic last-active
+ * guard on the server and may return 409 if it would leave zero active plans.
+ */
+export async function updateAdminPlan(id, payload) {
+  if (!id) throw new Error('updateAdminPlan requires an id.');
+  const res = await api.patch(`${ADMIN_PLANS_BASE}/${id}`, payload);
+  return unwrap(res)?.plan ?? null;
+}
+
+/** Toggle a plan's active state. Same 409 contract as updateAdminPlan. */
+export async function setAdminPlanStatus(id, isActive) {
+  if (!id) throw new Error('setAdminPlanStatus requires an id.');
+  const res = await api.patch(`${ADMIN_PLANS_BASE}/${id}/status`, {
+    isActive: !!isActive,
+  });
+  return unwrap(res)?.plan ?? null;
+}
+
+/** Move a plan one slot up in displayOrder (no-op at the top). */
+export async function moveAdminPlanUp(id) {
+  if (!id) throw new Error('moveAdminPlanUp requires an id.');
+  const res = await api.patch(`${ADMIN_PLANS_BASE}/${id}/move-up`);
+  return unwrap(res)?.plan ?? null;
+}
+
+/** Move a plan one slot down in displayOrder (no-op at the bottom). */
+export async function moveAdminPlanDown(id) {
+  if (!id) throw new Error('moveAdminPlanDown requires an id.');
+  const res = await api.patch(`${ADMIN_PLANS_BASE}/${id}/move-down`);
+  return unwrap(res)?.plan ?? null;
+}
+
+/* ---------------- Payments (admin / support) ---------------- */
+
+const ADMIN_PAYMENTS_BASE = '/admin/payments';
+
+/**
+ * Paged payment audit log. Query: page, pageSize, userId, paymentStatus, hydrationIssue.
+ */
+export async function listAdminPayments(params = {}) {
+  const res = await api.get(ADMIN_PAYMENTS_BASE, { params });
+  return unwrap(res) ?? { payments: [], pagination: {} };
+}
+
+/**
+ * Idempotent reconcile: fetch Razorpay payments for order and run safe finalize.
+ * Body: { orderId } (Razorpay order id string).
+ */
+export async function reconcileAdminPayment(orderId) {
+  if (!orderId) throw new Error('reconcileAdminPayment requires orderId.');
+  const res = await api.post(`${ADMIN_PAYMENTS_BASE}/reconcile`, { orderId });
   return unwrap(res);
 }
 

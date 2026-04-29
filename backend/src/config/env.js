@@ -19,6 +19,11 @@ export const env = {
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 12,
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || '',
+  /**
+   * Razorpay Dashboard → Webhooks → signing secret. Used ONLY for
+   * POST /api/payments/webhook HMAC verification (not the API key secret).
+   */
+  razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   /** Default order amount in INR (integer) for create-order when body omits amount */
   razorpayDefaultAmountInr: Number(process.env.RAZORPAY_DEFAULT_AMOUNT_INR) || 99,
 

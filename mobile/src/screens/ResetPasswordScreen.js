@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,55 +12,92 @@ import {
 import AppButton from '../components/AppButton';
 import AuthField, { PasswordToggle } from '../components/AuthField';
 import { colors, brand } from '../theme/colors';
-import { resetPassword } from '../services/authService';
+import { completePasswordReset } from '../services/authService';
 import { getApiErrorMessage } from '../services/api';
 
+/**
+ * STEP 3 of the Forgot Password flow.
+ *
+ * The user has already verified their OTP and we hold a short-lived
+ * `resetToken`. From here we never touch the OTP again — only the
+ * token + new password leave the device. On success the server tells
+ * us the password was updated; we surface a clear confirmation and
+ * reset the navigation stack to Login (no auto-login).
+ *
+ * Route params (required): { email, resetToken }
+ *
+ * If a user lands here without a resetToken (e.g. via a deep link or
+ * back-navigation accident) we redirect them to ForgotPassword so they
+ * can re-establish a verified session.
+ */
 export default function ResetPasswordScreen({ navigation, route }) {
-  const initialEmail = route.params?.email || '';
-  const [email, setEmail] = useState(initialEmail);
-  const [otp, setOtp] = useState('');
+  const email = route?.params?.email || '';
+  const resetToken = route?.params?.resetToken || '';
+
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const otpRef = useRef(null);
-  const passRef = useRef(null);
+
   const confirmRef = useRef(null);
+
+  // Defensive: cannot reset without a verified-session token.
+  if (!resetToken || !email) {
+    return (
+      <View style={styles.fallback}>
+        <Text style={styles.title}>Reset session expired</Text>
+        <Text style={styles.subtitle}>
+          Please start again to receive a new code.
+        </Text>
+        <AppButton
+          title="Back to Forgot Password"
+          onPress={() => navigation.replace('ForgotPassword')}
+          style={styles.primaryCta}
+        />
+      </View>
+    );
+  }
+
+  function validate() {
+    if (newPassword.length < 8) {
+      return 'Password must be at least 8 characters.';
+    }
+    if (newPassword !== confirmPassword) {
+      return 'Passwords do not match.';
+    }
+    return '';
+  }
 
   async function handleReset() {
     if (submitting) return;
     setError('');
-    const trimmedEmail = email.trim();
-    if (!trimmed) {
-      setError('Email is required.');
-      return;
-    }
-    const code = otp.trim();
-    if (!/^\d{6}$/.test(code)) {
-      setError('Enter the 6-digit code from your email.');
-      return;
-    }
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
+    const v = validate();
+    if (v) {
+      setError(v);
       return;
     }
     setSubmitting(true);
     try {
-      await resetPassword({
-        email: trimmedEmail,
-        otp: code,
+      await completePasswordReset({
+        email,
+        resetToken,
         newPassword,
+        confirmPassword,
       });
+      // Success — explicit confirmation, no auto-login. Reset the stack
+      // so back navigation cannot land on a forgot-password screen with
+      // stale state.
       Alert.alert(
-        'Password updated',
-        'You can sign in with your new password.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        'Password reset successful',
+        'You can now sign in with your new password.',
+        [
+          {
+            text: 'Go to Login',
+            onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' }] }),
+          },
+        ]
       );
     } catch (e) {
       setError(getApiErrorMessage(e));
@@ -70,8 +107,6 @@ export default function ResetPasswordScreen({ navigation, route }) {
   }
 
   const canSubmit =
-    email.trim().length > 0 &&
-    /^\d{6}$/.test(otp.trim()) &&
     newPassword.length >= 8 &&
     confirmPassword.length > 0 &&
     !submitting;
@@ -86,9 +121,11 @@ export default function ResetPasswordScreen({ navigation, route }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Reset password</Text>
+        <Text style={styles.title}>Choose a new password</Text>
         <Text style={styles.subtitle}>
-          Enter the code from your email and choose a new password for {brand.name}.
+          Set a new password for{' '}
+          <Text style={styles.emailEm}>{email}</Text>. You&apos;ll sign in to{' '}
+          {brand.name} with the new password right after.
         </Text>
 
         {error ? (
@@ -98,41 +135,14 @@ export default function ResetPasswordScreen({ navigation, route }) {
         ) : null}
 
         <AuthField
-          label="Email"
-          placeholder="you@example.com"
-          value={email}
-          onChangeText={setEmail}
-          editable={!submitting}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          autoComplete="email"
-          returnKeyType="next"
-          onSubmitEditing={() => otpRef.current?.focus()}
-        />
-
-        <AuthField
-          ref={otpRef}
-          label="6-digit code"
-          placeholder="000000"
-          value={otp}
-          onChangeText={(t) => setOtp(t.replace(/\D/g, '').slice(0, 6))}
-          editable={!submitting}
-          keyboardType="number-pad"
-          textContentType="oneTimeCode"
-          maxLength={6}
-          returnKeyType="next"
-          onSubmitEditing={() => passRef.current?.focus()}
-        />
-
-        <AuthField
-          ref={passRef}
           label="New password"
           placeholder="At least 8 characters"
           value={newPassword}
           onChangeText={setNewPassword}
           editable={!submitting}
           secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
           textContentType="newPassword"
           autoComplete="password-new"
           returnKeyType="next"
@@ -146,6 +156,11 @@ export default function ResetPasswordScreen({ navigation, route }) {
           }
         />
 
+        <Text style={styles.hint}>
+          Use 8+ characters. Mix letters, numbers and symbols for a stronger
+          password.
+        </Text>
+
         <AuthField
           ref={confirmRef}
           label="Confirm new password"
@@ -154,6 +169,8 @@ export default function ResetPasswordScreen({ navigation, route }) {
           onChangeText={setConfirmPassword}
           editable={!submitting}
           secureTextEntry={!showConfirm}
+          autoCapitalize="none"
+          autoCorrect={false}
           textContentType="newPassword"
           returnKeyType="go"
           onSubmitEditing={handleReset}
@@ -174,17 +191,14 @@ export default function ResetPasswordScreen({ navigation, route }) {
         />
 
         <Pressable
-          onPress={() => navigation.navigate('ForgotPassword')}
-          style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}
+          onPress={() => navigation.replace('ForgotPassword')}
+          disabled={submitting}
+          style={({ pressed }) => [
+            styles.linkRow,
+            pressed && !submitting && { opacity: 0.7 },
+          ]}
         >
-          <Text style={styles.linkText}>Need a new code?</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.mutedLink}>Back to sign in</Text>
+          <Text style={styles.mutedLink}>Cancel and start over</Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -199,6 +213,13 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 32,
   },
+  fallback: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    alignItems: 'stretch',
+  },
   title: {
     fontSize: 22,
     fontWeight: '700',
@@ -211,6 +232,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     lineHeight: 20,
   },
+  emailEm: { color: colors.text, fontWeight: '700' },
   errorBanner: {
     backgroundColor: colors.dangerSoft,
     borderColor: colors.danger,
@@ -220,8 +242,14 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   errorText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+  hint: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: -8,
+    marginBottom: 12,
+    lineHeight: 16,
+  },
   primaryCta: { marginTop: 8, paddingVertical: 14, borderRadius: 12 },
   linkRow: { alignSelf: 'center', marginTop: 16, paddingVertical: 8 },
-  linkText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
   mutedLink: { color: colors.muted, fontSize: 14 },
 });

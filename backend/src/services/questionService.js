@@ -692,12 +692,91 @@ export const questionService = {
     return projectQuestion(saved);
   },
 
-  async softDelete(id) {
-    const existing = await questionRepository.findById(id);
-    if (!existing) {
+  /**
+   * Bulk enable/disable. Validates ids, deduplicates, and reports actual
+   * matched/modified counts (so the UI can warn on missing ids).
+   *
+   * Why no per-id "would this break N tests" interlock: tests already filter
+   * inactive questions at serve time (`testService.classifyQuestions`), and
+   * scoring already throws for inactive questions in an in-progress attempt.
+   * Disable behavior on the bulk path is identical to single disable; only
+   * the operation surface is collapsed for admin throughput.
+   */
+  async bulkSetStatus({ ids, isActive }) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError('ids must be a non-empty array', HTTP_STATUS.BAD_REQUEST);
+    }
+    const cleanIds = [...new Set(ids.map(String))];
+    for (const id of cleanIds) {
+      if (!mongoose.isValidObjectId(id)) {
+        throw new AppError(`Invalid question id: ${id}`, HTTP_STATUS.BAD_REQUEST);
+      }
+    }
+    const { matchedCount, modifiedCount } = await questionRepository.bulkSetActive(
+      cleanIds,
+      isActive
+    );
+    return {
+      requested: cleanIds.length,
+      matched: matchedCount,
+      modified: modifiedCount,
+      isActive: Boolean(isActive),
+    };
+  },
+
+  /**
+   * Soft "Possible duplicate?" lookup for the AddQuestion form. We do not
+   * block submission on this — the admin can still save (some near-duplicates
+   * are legitimate, e.g. retypes from different exam papers). We just expose
+   * the candidates so they can deliberately confirm or cancel.
+   *
+   * Returns up to 5 same-subject candidates, plus a hard `exactDuplicateId`
+   * when the normalized text matches exactly (handy for the form to render
+   * a stronger warning).
+   */
+  async findSimilar({ questionText, subjectId, excludeId }) {
+    const text = String(questionText || '').trim();
+    if (!text) return { exactDuplicateId: null, similar: [] };
+    if (!subjectId || !mongoose.isValidObjectId(String(subjectId))) {
+      return { exactDuplicateId: null, similar: [] };
+    }
+    const [exact, similar] = await Promise.all([
+      questionRepository.findExactDuplicate({
+        questionText: text,
+        subjectId,
+        excludeId,
+      }),
+      questionRepository.findSimilar({
+        questionText: text,
+        subjectId,
+        excludeId,
+        limit: 5,
+      }),
+    ]);
+    return {
+      exactDuplicateId: exact ? String(exact._id) : null,
+      similar: similar.map((s) => ({
+        _id: String(s._id),
+        questionText: s.questionText,
+        isActive: s.isActive !== false,
+        difficulty: s.difficulty,
+        topicId: s.topicId ? String(s.topicId) : null,
+      })),
+    };
+  },
+
+  /**
+   * Usage info for a single question — how many tests reference it and how
+   * many test attempts have hit it. Cheap counts; admin UI fetches lazily.
+   */
+  async getUsage(id) {
+    if (!mongoose.isValidObjectId(String(id))) {
+      throw new AppError('Invalid question id', HTTP_STATUS.BAD_REQUEST);
+    }
+    const exists = await questionRepository.findById(id);
+    if (!exists) {
       throw new AppError('Question not found', HTTP_STATUS.NOT_FOUND);
     }
-    const updated = await questionRepository.softDeleteById(id);
-    return projectQuestion(updated);
+    return questionRepository.getUsageCounts(id);
   },
 };

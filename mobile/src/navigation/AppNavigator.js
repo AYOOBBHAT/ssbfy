@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import VerifyOtpScreen from '../screens/VerifyOtpScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import HomeScreen from '../screens/HomeScreen';
 import TestsListScreen from '../screens/TestsListScreen';
@@ -240,6 +241,11 @@ export default function AppNavigator() {
             name="ForgotPassword"
             component={ForgotPasswordScreen}
             options={{ title: 'Forgot password' }}
+          />
+          <RootStack.Screen
+            name="VerifyOtp"
+            component={VerifyOtpScreen}
+            options={{ title: 'Verify code' }}
           />
           <RootStack.Screen
             name="ResetPassword"

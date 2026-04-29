@@ -3,19 +3,21 @@ import { questionController } from '../controllers/questionController.js';
 import { validateRequest } from '../middlewares/validate.js';
 import { authenticate } from '../middlewares/auth.js';
 import { adminChain } from '../middlewares/adminGuard.js';
+import { handleCsvUpload } from '../middlewares/upload.js';
 import {
   adminListQuestionsQueryValidators,
+  bulkStatusValidators,
   createQuestionValidators,
+  importCommitBodyValidators,
   listQuestionsQueryValidators,
   questionIdParam,
+  similarQueryValidators,
   smartPracticeBodyValidators,
   updateQuestionValidators,
   weakPracticeValidators,
 } from '../validators/questionValidators.js';
 
 const router = Router();
-
-// Future: POST /bulk — admin bulk insert for large imports (1000+ rows).
 
 router.get(
   '/',
@@ -39,6 +41,55 @@ router.get(
   adminListQuestionsQueryValidators,
   validateRequest,
   questionController.adminList
+);
+
+// Admin polish endpoints. Order matters: every literal-segment route here
+// must precede the parametric `/admin/:id` route below or Express will
+// try to treat "import"/"similar"/"bulk-status" as a Mongo id.
+router.get(
+  '/admin/import/template',
+  ...adminChain,
+  questionController.importTemplate
+);
+
+router.post(
+  '/admin/import/dry-run',
+  ...adminChain,
+  handleCsvUpload,
+  questionController.importDryRun
+);
+
+router.post(
+  '/admin/import/commit',
+  ...adminChain,
+  handleCsvUpload,
+  importCommitBodyValidators,
+  validateRequest,
+  questionController.importCommit
+);
+
+router.post(
+  '/admin/bulk-status',
+  ...adminChain,
+  bulkStatusValidators,
+  validateRequest,
+  questionController.bulkSetStatus
+);
+
+router.get(
+  '/admin/similar',
+  ...adminChain,
+  similarQueryValidators,
+  validateRequest,
+  questionController.findSimilar
+);
+
+router.get(
+  '/admin/:id/usage',
+  ...adminChain,
+  ...questionIdParam,
+  validateRequest,
+  questionController.getUsage
 );
 
 router.get(
@@ -85,12 +136,10 @@ router.patch(
   questionController.update
 );
 
-router.delete(
-  '/:id',
-  ...adminChain,
-  ...questionIdParam,
-  validateRequest,
-  questionController.remove
-);
+// NOTE: Hard-delete (`DELETE /questions/:id`) was intentionally removed.
+// Soft-disable via `PATCH /:id { isActive: false }` (single) and
+// `POST /admin/bulk-status` (bulk) is now the ONLY destructive primitive.
+// This guarantees historical attempts/results never reference a missing
+// Question document.
 
 export default router;

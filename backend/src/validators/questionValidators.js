@@ -282,3 +282,42 @@ export const updateQuestionValidators = [
     .withMessage(`difficulty must be one of: ${DIFFICULTY_VALUES.join(', ')}`),
   body('isActive').optional().isBoolean().toBoolean(),
 ];
+
+/**
+ * POST /questions/admin/bulk-status — bulk enable/disable.
+ * Accepts up to 500 ids per request to bound the worst-case `updateMany`.
+ */
+export const bulkStatusValidators = [
+  body('ids')
+    .isArray({ min: 1, max: 500 })
+    .withMessage('ids must be a non-empty array (max 500)'),
+  body('ids.*').isMongoId().withMessage('Each id must be a valid Mongo ObjectId'),
+  body('isActive').isBoolean().withMessage('isActive must be a boolean').toBoolean(),
+];
+
+/**
+ * GET /questions/admin/similar — soft duplicate-detection helper. Both
+ * fields are required; the service returns an empty result for blanks
+ * but we'd rather catch the obvious typo at the boundary.
+ */
+export const similarQueryValidators = [
+  query('questionText')
+    .isString()
+    .trim()
+    .isLength({ min: 3, max: 5000 })
+    .withMessage('questionText must be 3..5000 chars'),
+  query('subjectId').isMongoId().withMessage('subjectId is required'),
+  query('excludeId').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid excludeId'),
+];
+
+/**
+ * POST /questions/admin/import/commit — body validation for the JSON branch
+ * of the commit endpoint. (Multipart re-uploads use `parseCsvBuffer` again
+ * to re-validate from raw bytes.)
+ *
+ * `forceImportDuplicates`: when true, rows flagged as duplicates are
+ * inserted anyway (admin override). Defaults to false.
+ */
+export const importCommitBodyValidators = [
+  body('forceImportDuplicates').optional().isBoolean().toBoolean(),
+];

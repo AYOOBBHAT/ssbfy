@@ -9,7 +9,12 @@ const cards = [
   {
     to: '/manage-questions',
     title: 'Manage Questions',
-    description: 'Search, filter, edit, and enable or disable questions.',
+    description: 'Search, filter, edit, and bulk enable/disable questions safely.',
+  },
+  {
+    to: '/import-questions',
+    title: 'Import Questions',
+    description: 'Bulk-create questions from CSV with preview and validation.',
   },
   {
     to: '/add-note',
@@ -40,6 +45,17 @@ const cards = [
     to: '/topics',
     title: 'Subjects & Topics',
     description: 'Create subjects and add topics under them.',
+  },
+  {
+    to: '/subscription-plans',
+    title: 'Subscription Plans',
+    description: 'Create, edit, disable, and reorder Premium plans.',
+  },
+  {
+    to: '/payments',
+    title: 'Payments & webhooks',
+    description:
+      'Trace Razorpay orders, webhook verification, premium activation, and manual reconcile.',
   },
 ];
 

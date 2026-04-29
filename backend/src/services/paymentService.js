@@ -6,6 +6,7 @@ import { AppError } from '../utils/AppError.js';
 import { isPremiumUser } from '../utils/freeTierAccess.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { paymentRepository } from '../repositories/paymentRepository.js';
+import { webhookEventRepository } from '../repositories/webhookEventRepository.js';
 import { subscriptionPlanRepository } from '../repositories/subscriptionPlanRepository.js';
 import { subscriptionPlanService } from './subscriptionPlanService.js';
 
@@ -21,6 +22,18 @@ function safeEqualHex(a, b) {
   } catch {
     return false;
   }
+}
+
+function mergeVerificationSource(prev, incoming) {
+  if (!incoming) return prev || null;
+  const p = prev || null;
+  if (!p) return incoming;
+  if (p === incoming) return p;
+  if (p === 'both' || incoming === 'both') return 'both';
+  if ((p === 'client' && incoming === 'webhook') || (p === 'webhook' && incoming === 'client')) {
+    return 'both';
+  }
+  return incoming;
 }
 
 function assertRazorpayConfigured() {
@@ -90,15 +103,6 @@ function subscriptionEndFromPlan(user, { type, days }) {
   return base;
 }
 
-/**
- * If the Payment snapshot is missing for an orderId at verify time, we can
- * still recover safely: the Razorpay order's `notes.planId` was written by
- * THIS server's `createOrder` and is tamper-proof from the client. We
- * re-fetch the SubscriptionPlan and rebuild the snapshot. If anything is
- * inconsistent, return null and the caller will reject the verify.
- *
- * Returns null on any failure — caller MUST throw 409, never silently grant.
- */
 async function tryRecoverPlanFromOrderNotes(orderId, userId) {
   try {
     const rzp = getClient();
@@ -125,6 +129,21 @@ async function tryRecoverPlanFromOrderNotes(orderId, userId) {
   }
 }
 
+async function readUserIdFromRazorpayOrder(orderId) {
+  try {
+    const rzp = getClient();
+    const order = await rzp.orders.fetch(orderId);
+    const uid = order?.notes?.userId ? String(order.notes.userId) : '';
+    return uid || null;
+  } catch (err) {
+    console.log('[PAYMENT] Order fetch for webhook userId failed:', {
+      orderId,
+      message: err?.message,
+    });
+    return null;
+  }
+}
+
 async function healSubscriptionForRecordedPayment(userId, record) {
   let user = await userRepository.findById(userId);
   if (!user) {
@@ -142,7 +161,9 @@ async function healSubscriptionForRecordedPayment(userId, record) {
     currentPlanType: plan.type,
   });
   if (record?.razorpay_order_id) {
-    await paymentRepository.updateByOrderId(record.razorpay_order_id, { subscriptionEndAt: subscriptionEnd });
+    await paymentRepository.updateByOrderId(record.razorpay_order_id, {
+      subscriptionEndAt: subscriptionEnd,
+    });
   }
   console.log('[PAYMENT] Healing subscription for existing payment:', {
     userId: String(userId),
@@ -150,6 +171,180 @@ async function healSubscriptionForRecordedPayment(userId, record) {
     planType: plan.type,
   });
   return user;
+}
+
+async function patchOrderVerificationMerge(razorpay_order_id, incomeSource, { eventId } = {}) {
+  if (!razorpay_order_id || !incomeSource) return;
+  const latest = await paymentRepository.findByOrderId(razorpay_order_id);
+  if (!latest) return;
+  const verificationSource = mergeVerificationSource(latest.verificationSource, incomeSource);
+  const verifiedByWebhook = latest.verifiedByWebhook === true || incomeSource === 'webhook';
+  const patch = {
+    verificationSource,
+    verifiedByWebhook,
+  };
+  if (incomeSource === 'webhook') {
+    patch.webhookReceivedAt = new Date();
+    if (eventId) patch.lastWebhookEventId = String(eventId);
+  }
+  await paymentRepository.updateByOrderId(razorpay_order_id, patch);
+}
+
+/**
+ * Single idempotent pipeline: trusted capture/authorize + plan snapshot → Payment row + User premium.
+ * Used by BOTH `/payments/verify` (fast UX) and `/payments/webhook` (reliability / self-heal).
+ *
+ * Preconditions: `orderId` / `paymentId` / amounts / status are already validated —
+ * client path verified payment signature + Razorpay `payments.fetch`; webhook path verified
+ * webhook HMAC and (for capture events) payload entity fields.
+ */
+async function finalizePaidOrderFromTrustedState({
+  userId,
+  orderId,
+  paymentId,
+  amountPaise,
+  remoteStatus,
+  incomeSource,
+  webhookMeta = {},
+}) {
+  const status = String(remoteStatus || '').toLowerCase();
+  if (status !== 'captured' && status !== 'authorized') {
+    throw new AppError('Payment not completed', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const existing = await paymentRepository.findByPaymentId(paymentId);
+  if (existing) {
+    if (existing.userId.toString() !== String(userId)) {
+      console.log('[PAYMENT] Idempotency conflict — payment owned by another user:', { paymentId });
+      throw new AppError('Payment already processed', HTTP_STATUS.CONFLICT);
+    }
+    await patchOrderVerificationMerge(existing.razorpay_order_id, incomeSource, webhookMeta);
+    const user = await healSubscriptionForRecordedPayment(userId, existing);
+    console.log('[PAYMENT] Idempotent finalize (payment row exists):', {
+      userId: String(userId),
+      paymentId,
+      incomeSource,
+    });
+    return {
+      user,
+      subscriptionEnd: user.subscriptionEnd,
+      plan: user.plan,
+      idempotent: true,
+    };
+  }
+
+  const existingOrder = await paymentRepository.findByOrderId(orderId);
+  if (existingOrder && existingOrder.userId.toString() !== String(userId)) {
+    throw new AppError('Payment order does not belong to this user', HTTP_STATUS.CONFLICT);
+  }
+
+  if (existingOrder?.razorpay_payment_id === paymentId) {
+    await patchOrderVerificationMerge(orderId, incomeSource, webhookMeta);
+    const user = await healSubscriptionForRecordedPayment(userId, existingOrder);
+    return {
+      user,
+      subscriptionEnd: user.subscriptionEnd,
+      plan: user.plan,
+      idempotent: true,
+    };
+  }
+
+  const postFetch = await paymentRepository.findByOrderId(orderId);
+  if (postFetch?.razorpay_payment_id === paymentId) {
+    await patchOrderVerificationMerge(orderId, incomeSource, webhookMeta);
+    const user = await healSubscriptionForRecordedPayment(userId, postFetch);
+    return {
+      user,
+      subscriptionEnd: user.subscriptionEnd,
+      plan: user.plan,
+      idempotent: true,
+    };
+  }
+
+  let record = postFetch || existingOrder;
+  if (!record) {
+    const recovered = await tryRecoverPlanFromOrderNotes(orderId, userId);
+    if (!recovered) {
+      console.log('[PAYMENT] Finalize rejected — missing Payment snapshot and no recoverable plan:', {
+        userId: String(userId),
+        orderId,
+        paymentId,
+      });
+      throw new AppError(VERIFY_FAILED_MESSAGE, HTTP_STATUS.CONFLICT);
+    }
+    record = await paymentRepository.create({
+      userId,
+      razorpay_order_id: orderId,
+      amount: Number(amountPaise),
+      priceInr: recovered.priceInr,
+      planId: recovered.planId,
+      planType: recovered.planType,
+      durationDays: recovered.durationDays,
+      status: 'created',
+      paymentStatus: 'pending',
+      subscriptionEndAt: null,
+      verifiedByWebhook: false,
+      verificationSource: null,
+    });
+    console.log('[PAYMENT] Recovered plan snapshot from order notes (finalize):', {
+      userId: String(userId),
+      orderId,
+      planType: recovered.planType,
+    });
+  }
+
+  const plan = planFromRecord(record);
+  const userBefore = await userRepository.findById(userId);
+  if (!userBefore) {
+    throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+  }
+  const subscriptionEnd = subscriptionEndFromPlan(userBefore, plan);
+
+  const latest = await paymentRepository.findByOrderId(orderId);
+  const verificationSource = mergeVerificationSource(latest?.verificationSource, incomeSource);
+  const verifiedByWebhook = latest?.verifiedByWebhook === true || incomeSource === 'webhook';
+  const payPatch = {
+    razorpay_payment_id: paymentId,
+    amount: Number(amountPaise),
+    status,
+    paymentStatus: 'paid',
+    subscriptionEndAt: subscriptionEnd,
+    verificationSource,
+    verifiedByWebhook,
+  };
+  if (incomeSource === 'webhook') {
+    payPatch.webhookReceivedAt = new Date();
+    if (webhookMeta.eventId) payPatch.lastWebhookEventId = String(webhookMeta.eventId);
+  }
+
+  await paymentRepository.updateByOrderId(orderId, payPatch);
+
+  const user = await userRepository.setSubscriptionAfterPayment(userId, {
+    subscriptionEnd,
+    plan: plan.type,
+    currentPlanId: record?.planId || null,
+    currentPlanType: plan.type,
+  });
+  if (!user) {
+    throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+  }
+
+  console.log('[PAYMENT] Activation successful (finalize):', {
+    userId: String(userId),
+    paymentId,
+    orderId,
+    planType: plan.type,
+    subscriptionEnd: user.subscriptionEnd,
+    incomeSource,
+    idempotent: false,
+  });
+
+  return {
+    user,
+    subscriptionEnd: user.subscriptionEnd,
+    plan: user.plan,
+    idempotent: false,
+  };
 }
 
 export const paymentService = {
@@ -190,7 +385,10 @@ export const paymentService = {
       planType: plan.planType,
       durationDays: plan.durationDays ?? null,
       status: 'created',
+      paymentStatus: 'pending',
       subscriptionEndAt: null,
+      verifiedByWebhook: false,
+      verificationSource: null,
     });
 
     console.log('[PAYMENT] Order created:', {
@@ -233,44 +431,6 @@ export const paymentService = {
       throw new AppError('Invalid payment signature', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const existing = await paymentRepository.findByPaymentId(paymentId);
-    if (existing) {
-      if (existing.userId.toString() !== String(userId)) {
-        console.log('[PAYMENT] Idempotency conflict — payment owned by another user:', { paymentId });
-        throw new AppError('Payment already processed', HTTP_STATUS.CONFLICT);
-      }
-      const user = await healSubscriptionForRecordedPayment(userId, existing);
-      console.log('[PAYMENT] Idempotent verify (already recorded):', {
-        userId: String(userId),
-        paymentId,
-        subscriptionEnd: user.subscriptionEnd,
-      });
-      return {
-        user,
-        subscriptionEnd: user.subscriptionEnd,
-        plan: user.plan,
-        idempotent: true,
-      };
-    }
-
-    const existingOrder = await paymentRepository.findByOrderId(orderId);
-    if (existingOrder && existingOrder.userId.toString() !== String(userId)) {
-      throw new AppError('Payment order does not belong to this user', HTTP_STATUS.CONFLICT);
-    }
-
-    // Race protection: if another concurrent verify already linked this
-    // order to this payment id, route through heal (which is a no-op for
-    // already-premium users, preventing double-grants).
-    if (existingOrder?.razorpay_payment_id === paymentId) {
-      const user = await healSubscriptionForRecordedPayment(userId, existingOrder);
-      return {
-        user,
-        subscriptionEnd: user.subscriptionEnd,
-        plan: user.plan,
-        idempotent: true,
-      };
-    }
-
     const rzp = getClient();
     let remote;
     try {
@@ -289,99 +449,264 @@ export const paymentService = {
       throw new AppError('Payment does not match order', HTTP_STATUS.BAD_REQUEST);
     }
 
-    if (remote.status !== 'captured' && remote.status !== 'authorized') {
-      console.log('[PAYMENT] Payment not successful:', {
-        userId: String(userId),
-        paymentId,
-        status: remote?.status,
+    // Race: concurrent verify or webhook may have claimed this order while we were in flight.
+    const lateCheck = await paymentRepository.findByOrderId(orderId);
+    if (
+      lateCheck?.razorpay_payment_id &&
+      lateCheck.razorpay_payment_id !== paymentId
+    ) {
+      console.log('[PAYMENT] Order already linked to another payment:', {
+        orderId,
+        expected: paymentId,
+        existing: lateCheck.razorpay_payment_id,
       });
-      throw new AppError('Payment not completed', HTTP_STATUS.BAD_REQUEST);
+      throw new AppError('Payment order already completed', HTTP_STATUS.CONFLICT);
     }
 
-    // Race protection: a concurrent verify may have claimed this order while
-    // the Razorpay network fetch was in flight. Re-check before granting.
-    const postFetch = await paymentRepository.findByOrderId(orderId);
-    if (postFetch?.razorpay_payment_id === paymentId) {
-      const user = await healSubscriptionForRecordedPayment(userId, postFetch);
+    return finalizePaidOrderFromTrustedState({
+      userId,
+      orderId,
+      paymentId,
+      amountPaise: Number(remote.amount),
+      remoteStatus: remote.status,
+      incomeSource: 'client',
+      webhookMeta: {},
+    });
+  },
+
+  /**
+   * Razorpay webhook: call ONLY after `X-Razorpay-Signature` is verified against raw body.
+   * Idempotent per `event.id` (retries short-circuit).
+   */
+  async processRazorpayWebhookEvent(parsedBody) {
+    const eventName = String(parsedBody?.event || '');
+    const eventId =
+      parsedBody?.id != null && String(parsedBody.id).trim()
+        ? String(parsedBody.id).trim()
+        : null;
+
+    if (eventId) {
+      const { inserted } = await webhookEventRepository.tryInsertEvent({
+        eventId,
+        event: eventName || 'unknown',
+      });
+      if (!inserted) {
+        console.log('[PAYMENT WEBHOOK] Duplicate event ignored:', { eventId, eventName });
+        return { handled: false, duplicate: true };
+      }
+    }
+
+    if (eventName === 'payment.captured' || eventName === 'payment.authorized') {
+      const entity = parsedBody?.payload?.payment?.entity;
+      if (!entity?.id || !entity.order_id) {
+        console.log('[PAYMENT WEBHOOK] Missing payment entity fields:', { eventName });
+        return { handled: false, reason: 'bad_payload' };
+      }
+      const paymentId = String(entity.id);
+      const orderId = String(entity.order_id);
+      const status = entity.status || eventName.replace('payment.', '');
+      const amountPaise = Number(entity.amount);
+
+      let userId = null;
+      const row = await paymentRepository.findByOrderId(orderId);
+      if (row?.userId) userId = String(row.userId);
+      if (!userId) userId = await readUserIdFromRazorpayOrder(orderId);
+      if (!userId) {
+        console.log('[PAYMENT WEBHOOK] No userId for order; cannot activate:', { orderId });
+        return { handled: false, reason: 'no_user' };
+      }
+
+      await finalizePaidOrderFromTrustedState({
+        userId,
+        orderId,
+        paymentId,
+        amountPaise,
+        remoteStatus: status,
+        incomeSource: 'webhook',
+        webhookMeta: { eventId },
+      });
+      return { handled: true, eventName };
+    }
+
+    if (eventName === 'order.paid') {
+      const orderEnt = parsedBody?.payload?.order?.entity;
+      const orderId = orderEnt?.id ? String(orderEnt.id) : null;
+      if (!orderId) {
+        return { handled: false, reason: 'bad_payload' };
+      }
+      const rzp = getClient();
+      let items = [];
+      try {
+        const resp = await rzp.orders.fetchPayments(orderId);
+        items = resp?.items || [];
+      } catch (err) {
+        console.log('[PAYMENT WEBHOOK] fetchPayments failed:', { orderId, message: err?.message });
+        return { handled: false, reason: 'fetch_failed' };
+      }
+      const captured = items.find(
+        (p) => p.status === 'captured' || p.status === 'authorized'
+      );
+      if (!captured) {
+        console.log('[PAYMENT WEBHOOK] order.paid but no captured payment in list:', { orderId });
+        return { handled: false, reason: 'no_capture' };
+      }
+      let userId = null;
+      const row = await paymentRepository.findByOrderId(orderId);
+      if (row?.userId) userId = String(row.userId);
+      if (!userId) userId = await readUserIdFromRazorpayOrder(orderId);
+      if (!userId) return { handled: false, reason: 'no_user' };
+
+      await finalizePaidOrderFromTrustedState({
+        userId,
+        orderId,
+        paymentId: String(captured.id),
+        amountPaise: Number(captured.amount),
+        remoteStatus: captured.status,
+        incomeSource: 'webhook',
+        webhookMeta: { eventId },
+      });
+      return { handled: true, eventName };
+    }
+
+    if (eventName === 'payment.failed') {
+      const entity = parsedBody?.payload?.payment?.entity;
+      const orderId = entity?.order_id ? String(entity.order_id) : null;
+      if (orderId) {
+        const row = await paymentRepository.findByOrderId(orderId);
+        const ps = String(row?.paymentStatus || '').toLowerCase();
+        if (ps === 'paid' || ps === 'captured' || ps === 'authorized') {
+          console.log('[PAYMENT WEBHOOK] Ignoring payment.failed — order already paid:', { orderId });
+          return { handled: true, eventName, reason: 'ignored_after_success' };
+        }
+        await paymentRepository.updateByOrderId(orderId, {
+          paymentStatus: 'failed',
+          status: 'failed',
+          webhookReceivedAt: new Date(),
+          verifiedByWebhook: true,
+          lastWebhookEventId: eventId || undefined,
+        });
+      }
+      return { handled: true, eventName };
+    }
+
+    if (eventName === 'order.expired' || eventName === 'order.cancelled') {
+      const orderEnt = parsedBody?.payload?.order?.entity;
+      const orderId = orderEnt?.id ? String(orderEnt.id) : null;
+      if (orderId) {
+        const row = await paymentRepository.findByOrderId(orderId);
+        const ps = String(row?.paymentStatus || '').toLowerCase();
+        if (ps === 'paid' || ps === 'captured' || ps === 'authorized') {
+          console.log('[PAYMENT WEBHOOK] Ignoring order terminal event — already paid:', {
+            orderId,
+            eventName,
+          });
+          return { handled: true, eventName, reason: 'ignored_after_success' };
+        }
+        await paymentRepository.updateByOrderId(orderId, {
+          paymentStatus: 'expired',
+          status: 'expired',
+          webhookReceivedAt: new Date(),
+          verifiedByWebhook: true,
+          lastWebhookEventId: eventId || undefined,
+        });
+      }
+      return { handled: true, eventName };
+    }
+
+    console.log('[PAYMENT WEBHOOK] Unhandled event (acked):', { eventName });
+    return { handled: false, eventName, reason: 'unhandled' };
+  },
+
+  /**
+   * Admin/support: re-fetch Razorpay state for an order and run the same safe finalize path.
+   * Idempotent — safe to retry; does not double-stack subscription (setSubscriptionAfterPayment + heal guard).
+   */
+  async reconcileOrderForAdmin(orderId) {
+    assertRazorpayConfigured();
+    const oid = String(orderId || '').trim();
+    if (!oid || !RAZORPAY_ID_RE.test(oid)) {
+      throw new AppError('Invalid order id', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const rzp = getClient();
+    let items = [];
+    try {
+      const resp = await rzp.orders.fetchPayments(oid);
+      items = resp?.items || [];
+    } catch (err) {
+      console.log('[PAYMENT] Admin reconcile fetchPayments failed:', { oid, message: err?.message });
+      throw new AppError('Could not reach Razorpay', HTTP_STATUS.BAD_GATEWAY);
+    }
+
+    const captured = items.find((p) => p.status === 'captured' || p.status === 'authorized');
+    if (!captured) {
       return {
-        user,
-        subscriptionEnd: user.subscriptionEnd,
-        plan: user.plan,
-        idempotent: true,
+        ok: false,
+        reason: 'no_captured_payment',
+        orderId: oid,
       };
     }
 
-    let record = postFetch || existingOrder;
-    if (!record) {
-      // Order was paid via Razorpay but no Payment snapshot exists in our DB
-      // (createOrder DB write failed, off-band order, etc). Recover SAFELY
-      // from the tamper-proof `notes.planId` we set at order creation.
-      // If we can't recover, REJECT — never silently assign a default duration.
-      const recovered = await tryRecoverPlanFromOrderNotes(orderId, userId);
-      if (!recovered) {
-        console.log('[PAYMENT] Verify rejected — missing Payment snapshot and no recoverable plan:', {
-          userId: String(userId),
-          orderId,
-          paymentId,
-        });
-        throw new AppError(VERIFY_FAILED_MESSAGE, HTTP_STATUS.CONFLICT);
-      }
-      record = await paymentRepository.create({
-        userId,
-        razorpay_order_id: orderId,
-        amount: Number(remote.amount),
-        priceInr: recovered.priceInr,
-        planId: recovered.planId,
-        planType: recovered.planType,
-        durationDays: recovered.durationDays,
-        status: 'created',
-        subscriptionEndAt: null,
-      });
-      console.log('[PAYMENT] Recovered plan snapshot from order notes:', {
-        userId: String(userId),
-        orderId,
-        planType: recovered.planType,
-      });
+    let userId = null;
+    const row = await paymentRepository.findByOrderId(oid);
+    if (row?.userId) userId = String(row.userId);
+    if (!userId) userId = await readUserIdFromRazorpayOrder(oid);
+    if (!userId) {
+      throw new AppError('Cannot resolve user for this order', HTTP_STATUS.CONFLICT);
     }
 
-    const plan = planFromRecord(record);
-    const userBefore = await userRepository.findById(userId);
-    if (!userBefore) {
-      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
-    }
-    const subscriptionEnd = subscriptionEndFromPlan(userBefore, plan);
-
-    await paymentRepository.updateByOrderId(orderId, {
-      razorpay_payment_id: paymentId,
-      amount: Number(remote.amount),
-      status: String(remote.status),
-      subscriptionEndAt: subscriptionEnd,
+    const out = await finalizePaidOrderFromTrustedState({
+      userId,
+      orderId: oid,
+      paymentId: String(captured.id),
+      amountPaise: Number(captured.amount),
+      remoteStatus: captured.status,
+      incomeSource: 'webhook',
+      webhookMeta: {},
     });
 
-    const user = await userRepository.setSubscriptionAfterPayment(userId, {
-      subscriptionEnd,
-      plan: plan.type,
-      currentPlanId: record?.planId || null,
-      currentPlanType: plan.type,
-    });
-    if (!user) {
-      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
-    }
-
-    console.log('[PAYMENT] Activation successful:', {
-      userId: String(userId),
-      paymentId,
-      orderId,
-      planType: plan.type,
-      subscriptionEnd: user.subscriptionEnd,
-      idempotent: false,
-    });
+    await paymentRepository.updateByOrderId(oid, { adminReconciledAt: new Date() });
 
     return {
-      user,
-      subscriptionEnd: user.subscriptionEnd,
-      plan: user.plan,
-      idempotent: false,
+      ok: true,
+      orderId: oid,
+      idempotent: out.idempotent,
+    };
+  },
+
+  async listPaymentsForAdmin(query) {
+    const page = Math.max(Number(query.page) || 1, 1);
+    const pageSize = Math.min(Math.max(Number(query.pageSize) || 30, 1), 100);
+    const skip = (page - 1) * pageSize;
+    const filter = {};
+    if (query.userId) filter.userId = String(query.userId).trim();
+    if (query.paymentStatus) filter.paymentStatus = String(query.paymentStatus).trim();
+    if (String(query.hydrationIssue || '').toLowerCase() === 'true') {
+      filter.hydrationIssue = true;
+    }
+    const { rows, total, limit } = await paymentRepository.findForAdminList(filter, {
+      limit: pageSize,
+      skip,
+    });
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+    const enriched = rows.map((p) => {
+      const u = p.userId && typeof p.userId === 'object' ? p.userId : null;
+      const premiumActive = u ? isPremiumUser(u) : false;
+      return {
+        ...p,
+        userId: u?._id ?? p.userId,
+        user: u ? { name: u.name, email: u.email } : null,
+        premiumActivated: premiumActive,
+        verificationSource: p.verificationSource ?? null,
+        verifiedByWebhook: p.verifiedByWebhook === true,
+        paymentStatus: p.paymentStatus || p.status || 'unknown',
+      };
+    });
+    return {
+      payments: enriched,
+      pagination: { total, page, pageSize: limit, totalPages },
     };
   },
 };
+
+export { safeEqualHex };

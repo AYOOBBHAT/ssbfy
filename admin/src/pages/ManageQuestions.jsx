@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  bulkSetQuestionStatus,
   getApiErrorMessage,
   getPosts,
+  getQuestionUsage,
   getSubjects,
   getTopics,
   listQuestionsAdmin,
@@ -22,20 +24,12 @@ const DIFFICULTY_LABELS = {
 };
 
 const PAGE_SIZE = 20;
+const BULK_TYPED_CONFIRM_THRESHOLD = 10;
 
 function asArray(res, key) {
   if (Array.isArray(res)) return res;
   if (res && Array.isArray(res[key])) return res[key];
   return [];
-}
-
-function confirmDisable(preview) {
-  if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
-    return true;
-  }
-  return window.confirm(
-    `Disable this question? Students, Smart Practice, and new test picks will stop using it.`
-  );
 }
 
 function formatDate(value) {
@@ -57,8 +51,15 @@ function previewText(s, max = 72) {
 }
 
 /**
- * Admin: search, filter, enable/disable, and deep link to the shared
- * Add Question form in edit mode.
+ * Manage Questions: search, filter, bulk enable/disable, lazy usage info,
+ * styled confirmations. Single-question edit reuses the existing
+ * AddQuestion form via `?edit=<id>` so we don't fork the create flow.
+ *
+ * Why bulk-action and single disable both go through the same pattern:
+ *   - downstream (tests, attempts, daily/weak/smart practice) already filter
+ *     by `isActive: true`, so a soft-disable is the correct primitive.
+ *   - hard delete was removed at the route layer; toggling `isActive` is the
+ *     ONLY destructive operation now, which means undo is always possible.
  */
 export default function ManageQuestions() {
   const navigate = useNavigate();
@@ -87,10 +88,17 @@ export default function ManageQuestions() {
   const [listError, setListError] = useState('');
 
   const [togglingId, setTogglingId] = useState(null);
-  const [toggleMsg, setToggleMsg] = useState('');
-  const [toggleErr, setToggleErr] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
+  const [statusErr, setStatusErr] = useState('');
 
   const [expanded, setExpanded] = useState(() => new Set());
+  const [usageById, setUsageById] = useState(() => new Map());
+  const usageInflight = useRef(new Set());
+
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [confirmDialog, setConfirmDialog] = useState(null); // { type, payload, title, body, requireTyping, danger }
+  const [typedConfirm, setTypedConfirm] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -99,6 +107,7 @@ export default function ManageQuestions() {
 
   useEffect(() => {
     setPage(1);
+    setSelectedIds(new Set());
   }, [
     debouncedSearch,
     filterPostId,
@@ -229,23 +238,76 @@ export default function ManageQuestions() {
     setStatusFilter('all');
   }
 
-  async function handleToggle(q) {
-    if (togglingId) return;
-    const nextActive = !q.isActive;
-    if (!nextActive && !confirmDisable(q.questionText)) return;
+  function clearAlerts() {
+    setStatusMsg('');
+    setStatusErr('');
+  }
 
-    setToggleErr('');
-    setToggleMsg('');
-    setTogglingId(q._id);
+  // ---------------- Selection ----------------
+
+  function toggleSelected(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllOnPage() {
+    setSelectedIds((prev) => {
+      const pageIds = questions.map((q) => String(q._id));
+      const allOnPageSelected = pageIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        for (const id of pageIds) next.delete(id);
+      } else {
+        for (const id of pageIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  const allOnPageSelected = useMemo(() => {
+    if (questions.length === 0) return false;
+    return questions.every((q) => selectedIds.has(String(q._id)));
+  }, [questions, selectedIds]);
+
+  // ---------------- Single toggle ----------------
+
+  function askToggle(q) {
+    const nextActive = !q.isActive;
+    setConfirmDialog({
+      type: 'single-toggle',
+      payload: { id: q._id, isActive: nextActive, label: q.questionText },
+      title: nextActive ? 'Enable question?' : 'Disable question?',
+      body: nextActive
+        ? 'Students, Smart Practice, and new test picks will start using it again.'
+        : 'Students, Smart Practice, and new test picks will stop using it. Old results and history are preserved.',
+      requireTyping: false,
+      danger: !nextActive,
+    });
+  }
+
+  async function applySingleToggle(payload) {
+    if (togglingId) return;
+    clearAlerts();
+    setTogglingId(payload.id);
 
     setQuestions((prev) =>
       prev.map((row) =>
-        String(row._id) === String(q._id) ? { ...row, isActive: nextActive } : row
+        String(row._id) === String(payload.id)
+          ? { ...row, isActive: payload.isActive }
+          : row
       )
     );
 
     try {
-      const res = await updateQuestion(q._id, { isActive: nextActive });
+      const res = await updateQuestion(payload.id, { isActive: payload.isActive });
       const updated = res?.question || res;
       if (updated && updated._id) {
         setQuestions((prev) =>
@@ -254,39 +316,147 @@ export default function ManageQuestions() {
           )
         );
       }
-      setToggleMsg(nextActive ? 'Question enabled.' : 'Question disabled.');
+      setStatusMsg(payload.isActive ? 'Question enabled.' : 'Question disabled.');
     } catch (e) {
       setQuestions((prev) =>
         prev.map((row) =>
-          String(row._id) === String(q._id) ? { ...row, isActive: !nextActive } : row
+          String(row._id) === String(payload.id)
+            ? { ...row, isActive: !payload.isActive }
+            : row
         )
       );
-      setToggleErr(getApiErrorMessage(e));
+      setStatusErr(getApiErrorMessage(e));
     } finally {
       setTogglingId(null);
     }
   }
+
+  // ---------------- Bulk actions ----------------
+
+  function askBulkSetStatus(nextActive) {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const requireTyping = ids.length >= BULK_TYPED_CONFIRM_THRESHOLD && !nextActive;
+    setTypedConfirm('');
+    setConfirmDialog({
+      type: 'bulk-status',
+      payload: { ids, isActive: nextActive },
+      title: nextActive
+        ? `Enable ${ids.length} question${ids.length === 1 ? '' : 's'}?`
+        : `Disable ${ids.length} question${ids.length === 1 ? '' : 's'}?`,
+      body: nextActive
+        ? 'They will be visible again to students, Smart Practice, and new test picks.'
+        : 'They will be hidden from students, Smart Practice, and new test picks. Old results and history stay intact.',
+      requireTyping,
+      danger: !nextActive,
+    });
+  }
+
+  async function applyBulkSetStatus(payload) {
+    if (bulkBusy) return;
+    clearAlerts();
+    setBulkBusy(true);
+    try {
+      const result = await bulkSetQuestionStatus(payload);
+      // Optimistic local update — the server returns counts, not the docs.
+      setQuestions((prev) =>
+        prev.map((row) => {
+          if (!payload.ids.includes(String(row._id))) return row;
+          return { ...row, isActive: Boolean(payload.isActive) };
+        })
+      );
+      const matched = result?.matched ?? 0;
+      const modified = result?.modified ?? 0;
+      const requested = result?.requested ?? payload.ids.length;
+      const verb = payload.isActive ? 'Enabled' : 'Disabled';
+      setStatusMsg(
+        `${verb} ${modified} of ${requested} question(s).` +
+          (matched < requested
+            ? ` ${requested - matched} id(s) didn't match any question.`
+            : '')
+      );
+      setSelectedIds(new Set());
+    } catch (e) {
+      setStatusErr(getApiErrorMessage(e));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  // ---------------- Confirm dialog dispatcher ----------------
+
+  function closeConfirm() {
+    setConfirmDialog(null);
+    setTypedConfirm('');
+  }
+
+  async function handleConfirm() {
+    if (!confirmDialog) return;
+    if (
+      confirmDialog.requireTyping &&
+      typedConfirm.trim().toUpperCase() !== 'CONFIRM'
+    ) {
+      return;
+    }
+    const dialog = confirmDialog;
+    closeConfirm();
+    if (dialog.type === 'single-toggle') {
+      await applySingleToggle(dialog.payload);
+    } else if (dialog.type === 'bulk-status') {
+      await applyBulkSetStatus(dialog.payload);
+    }
+  }
+
+  // ---------------- Expand / lazy usage ----------------
 
   function toggleExpand(id) {
     setExpanded((prev) => {
       const n = new Set(prev);
       const k = String(id);
       if (n.has(k)) n.delete(k);
-      else n.add(k);
+      else {
+        n.add(k);
+        // Fetch usage on first expand. We never refetch automatically — these
+        // numbers don't change every second and the admin can re-collapse +
+        // re-expand to retry on error.
+        if (!usageById.has(k) && !usageInflight.current.has(k)) {
+          usageInflight.current.add(k);
+          getQuestionUsage(k)
+            .then((u) => {
+              setUsageById((prev2) => {
+                const m = new Map(prev2);
+                m.set(k, { ok: true, tests: u.tests ?? 0, attempts: u.attempts ?? 0 });
+                return m;
+              });
+            })
+            .catch((e) => {
+              setUsageById((prev2) => {
+                const m = new Map(prev2);
+                m.set(k, { ok: false, error: getApiErrorMessage(e) });
+                return m;
+              });
+            })
+            .finally(() => {
+              usageInflight.current.delete(k);
+            });
+        }
+      }
       return n;
     });
   }
 
   const totalPages = pagination?.totalPages ?? 0;
   const total = pagination?.total ?? 0;
+  const selectedCount = selectedIds.size;
 
   return (
     <div>
       <h1 className="page-title">Manage Questions</h1>
       <p className="page-subtitle">
-        Search and filter the question bank, edit in place, or enable/disable
-        without deleting. Disabled questions stay in old test history but are
-        hidden from students and from Smart / weak practice.
+        Search, filter, edit, and enable/disable questions. Disabled
+        questions stay in old test history but are hidden from students and
+        from Smart / weak / daily practice. Bulk-disable is reversible — hard
+        delete is not exposed by design.
       </p>
 
       {refError ? <div className="alert alert-error">{refError}</div> : null}
@@ -436,16 +606,71 @@ export default function ManageQuestions() {
         </div>
       </div>
 
-      {toggleMsg ? <div className="alert alert-success">{toggleMsg}</div> : null}
-      {toggleErr ? <div className="alert alert-error">{toggleErr}</div> : null}
+      {selectedCount > 0 ? (
+        <div className="bulk-bar">
+          <span className="bulk-bar-count">
+            {selectedCount} selected
+          </span>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => askBulkSetStatus(true)}
+            disabled={bulkBusy}
+          >
+            Enable selected
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => askBulkSetStatus(false)}
+            disabled={bulkBusy}
+          >
+            Disable selected
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={clearSelection}
+            disabled={bulkBusy}
+          >
+            Clear selection
+          </button>
+        </div>
+      ) : null}
+
+      {statusMsg ? <div className="alert alert-success">{statusMsg}</div> : null}
+      {statusErr ? <div className="alert alert-error">{statusErr}</div> : null}
       {listError ? <div className="alert alert-error">{listError}</div> : null}
 
       <div className="card">
-        <p className="helper" style={{ marginTop: 0 }}>
-          {!listLoading && total > 0
-            ? `Showing page ${page}${totalPages ? ` of ${totalPages}` : ''} · ${total} total`
-            : null}
-        </p>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 8,
+          }}
+        >
+          <label
+            className="helper"
+            style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}
+          >
+            <input
+              type="checkbox"
+              checked={allOnPageSelected}
+              onChange={toggleSelectAllOnPage}
+              disabled={listLoading || questions.length === 0}
+            />
+            Select all on this page
+          </label>
+          <p className="helper" style={{ margin: 0 }}>
+            {!listLoading && total > 0
+              ? `Showing page ${page}${totalPages ? ` of ${totalPages}` : ''} · ${total} total`
+              : null}
+          </p>
+        </div>
+
         {listLoading ? (
           <p className="helper">Loading questions…</p>
         ) : questions.length === 0 ? (
@@ -457,14 +682,18 @@ export default function ManageQuestions() {
               const active = q.isActive !== false;
               const isToggling = String(togglingId) === id;
               const isOpen = expanded.has(id);
+              const isSelected = selectedIds.has(id);
               const typeLabel = QUESTION_TYPE_LABELS[q.questionType] || q.questionType || '—';
               const diffLabel = q.difficulty
                 ? DIFFICULTY_LABELS[q.difficulty] || q.difficulty
                 : '—';
+              const usage = usageById.get(id);
               return (
                 <li
                   key={id}
-                  className={`row-item${active ? '' : ' row-item-inactive'}`}
+                  className={`row-item${active ? '' : ' row-item-inactive'}${
+                    isSelected ? ' row-item-selected' : ''
+                  }`}
                   style={{ flexDirection: 'column', alignItems: 'stretch' }}
                 >
                   <div
@@ -476,6 +705,12 @@ export default function ManageQuestions() {
                       width: '100%',
                     }}
                   >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelected(id)}
+                      aria-label="Select question"
+                    />
                     <div
                       className="row-main row-main-static"
                       style={{ flex: '1 1 220px', minWidth: 0 }}
@@ -529,13 +764,31 @@ export default function ManageQuestions() {
                     </button>
                     <button
                       type="button"
-                      className="btn btn-ghost btn-small"
-                      onClick={() => handleToggle(q)}
-                      disabled={isToggling}
+                      className={`btn btn-small ${active ? 'btn-danger' : 'btn-ghost'}`}
+                      onClick={() => askToggle(q)}
+                      disabled={isToggling || bulkBusy}
                     >
                       {isToggling ? '…' : active ? 'Disable' : 'Enable'}
                     </button>
                   </div>
+                  {isOpen ? (
+                    <div className="helper" style={{ marginTop: 8 }}>
+                      {usage ? (
+                        usage.ok ? (
+                          <>
+                            Used in <strong>{usage.tests}</strong> test
+                            {usage.tests === 1 ? '' : 's'} ·{' '}
+                            <strong>{usage.attempts}</strong> attempt
+                            {usage.attempts === 1 ? '' : 's'} so far.
+                          </>
+                        ) : (
+                          <>Couldn't load usage info: {usage.error}</>
+                        )
+                      ) : (
+                        'Loading usage info…'
+                      )}
+                    </div>
+                  ) : null}
                 </li>
               );
             })}
@@ -567,10 +820,56 @@ export default function ManageQuestions() {
         ) : null}
 
         <p className="helper" style={{ marginTop: 16 }}>
-          Tip: <Link to="/add-question">Add Question</Link> is unchanged; editing
-          reuses the same form to avoid duplicate logic.
+          Tip: <Link to="/add-question">Add Question</Link> for one-off rows;{' '}
+          <Link to="/import-questions">Import Questions</Link> for bulk CSV
+          uploads.
         </p>
       </div>
+
+      {confirmDialog ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <h3>{confirmDialog.title}</h3>
+            <p className="helper">{confirmDialog.body}</p>
+
+            {confirmDialog.requireTyping ? (
+              <div className="form-row">
+                <label className="label" htmlFor="bulk-confirm-input">
+                  Type <strong>CONFIRM</strong> to proceed:
+                </label>
+                <input
+                  id="bulk-confirm-input"
+                  className="input"
+                  value={typedConfirm}
+                  onChange={(e) => setTypedConfirm(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            ) : null}
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeConfirm}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`btn ${confirmDialog.danger ? 'btn-danger' : 'btn-primary'}`}
+                onClick={handleConfirm}
+                disabled={
+                  confirmDialog.requireTyping &&
+                  typedConfirm.trim().toUpperCase() !== 'CONFIRM'
+                }
+              >
+                {confirmDialog.danger ? 'Yes, disable' : 'Yes, continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

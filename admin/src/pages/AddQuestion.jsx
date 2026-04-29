@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   createQuestion,
+  findSimilarQuestions,
   getQuestionForAdmin,
   getSubjects,
   getTopics,
@@ -82,6 +83,13 @@ export default function AddQuestion() {
   const [errorMsg, setErrorMsg] = useState('');
   /** Increment in edit mode to re-fetch the question (Reset) without full page reload. */
   const [editVersion, setEditVersion] = useState(0);
+
+  // Similar-question state. We only ever surface this as a soft warning —
+  // some near-duplicates are legitimate (different exam papers, retypes from
+  // older sources) so the admin always retains the final say.
+  const [similar, setSimilar] = useState({ exactDuplicateId: null, similar: [] });
+  const [similarLoading, setSimilarLoading] = useState(false);
+  const [acknowledgedDuplicate, setAcknowledgedDuplicate] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,6 +180,44 @@ export default function AddQuestion() {
       cancelled = true;
     };
   }, [editId, editVersion]);
+
+  // Debounced "Possible duplicate?" lookup. Triggers when both the question
+  // text and the subject are populated — without a subject we can't scope
+  // duplicate detection to anything meaningful, and the server-side helper
+  // refuses unscoped queries anyway.
+  useEffect(() => {
+    const text = form.questionText.trim();
+    if (!text || text.length < 8 || !form.subjectId) {
+      setSimilar({ exactDuplicateId: null, similar: [] });
+      return undefined;
+    }
+    let cancelled = false;
+    setSimilarLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const data = await findSimilarQuestions({
+          questionText: text,
+          subjectId: form.subjectId,
+          excludeId: editId || null,
+        });
+        if (cancelled) return;
+        setSimilar(data || { exactDuplicateId: null, similar: [] });
+        // Reset acknowledgment whenever the underlying match changes — the
+        // admin should consciously re-confirm each new duplicate they see.
+        setAcknowledgedDuplicate(false);
+      } catch {
+        // Silent: the warning is non-blocking. Falling back to "no warning"
+        // is preferable to a scary error toast for a soft UX feature.
+        if (!cancelled) setSimilar({ exactDuplicateId: null, similar: [] });
+      } finally {
+        if (!cancelled) setSimilarLoading(false);
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [form.questionText, form.subjectId, editId]);
 
   function updateField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -283,6 +329,19 @@ export default function AddQuestion() {
     const validationError = validate();
     if (validationError) {
       setErrorMsg(validationError);
+      return;
+    }
+
+    // Soft duplicate gate: server has no unique index on questionText
+    // (legacy data may already contain near-duplicates), so this is a
+    // client-side speed bump. Admin can override by ticking
+    // "Save anyway" — we never silently let an exact duplicate through.
+    if (similar.exactDuplicateId && !acknowledgedDuplicate) {
+      setErrorMsg(
+        'A question with the same text already exists in this subject. ' +
+          'Tick "Save anyway" below the warning to insert it as a separate question, ' +
+          'or open the existing question to edit it.'
+      );
       return;
     }
 
@@ -591,10 +650,87 @@ export default function AddQuestion() {
             rows={3}
             value={form.explanation}
             onChange={(e) => updateField('explanation', e.target.value)}
-            placeholder="Optional explanation shown after submission."
+            placeholder="Recommended: explain why the correct answer is correct (shown after submission)."
             disabled={submitting}
           />
+          {!form.explanation.trim() ? (
+            <p className="helper" style={{ color: '#92400e' }}>
+              Tip: explanations make Result review and Smart Practice
+              learning loops far stronger. Optional, but encouraged.
+            </p>
+          ) : null}
         </div>
+
+        {similarLoading ? (
+          <p className="helper">Checking for similar questions…</p>
+        ) : null}
+
+        {!similarLoading && similar.exactDuplicateId ? (
+          <div className="alert alert-warning">
+            <div>
+              <strong>Possible exact duplicate.</strong> A question with the
+              same text already exists in this subject.
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <Link
+                to={`/add-question?edit=${encodeURIComponent(
+                  similar.exactDuplicateId
+                )}`}
+                style={{ fontWeight: 600 }}
+              >
+                Open existing question →
+              </Link>
+            </div>
+            <label
+              style={{
+                display: 'inline-flex',
+                gap: 8,
+                alignItems: 'center',
+                marginTop: 8,
+                fontSize: 13,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={acknowledgedDuplicate}
+                onChange={(e) => setAcknowledgedDuplicate(e.target.checked)}
+              />
+              Save anyway — this is a different question that happens to
+              share the same prompt.
+            </label>
+          </div>
+        ) : null}
+
+        {!similarLoading &&
+        !similar.exactDuplicateId &&
+        similar.similar.length > 0 ? (
+          <div className="alert alert-info">
+            <div>
+              <strong>Similar questions in this subject:</strong>
+            </div>
+            <ul style={{ margin: '6px 0 0 18px' }}>
+              {similar.similar.slice(0, 5).map((s) => (
+                <li key={s._id}>
+                  <Link
+                    to={`/add-question?edit=${encodeURIComponent(s._id)}`}
+                  >
+                    {s.questionText.slice(0, 96)}
+                    {s.questionText.length > 96 ? '…' : ''}
+                  </Link>
+                  {!s.isActive ? (
+                    <span className="helper" style={{ marginLeft: 6 }}>
+                      (inactive)
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            <p className="helper" style={{ marginTop: 6, marginBottom: 0 }}>
+              These are not exact duplicates — saving is allowed, but please
+              skim them first.
+            </p>
+          </div>
+        ) : null}
 
         <div className="form-actions">
           <button

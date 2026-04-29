@@ -11,19 +11,32 @@ import {
 import AppButton from '../components/AppButton';
 import AuthField from '../components/AuthField';
 import { colors, brand } from '../theme/colors';
-import { forgotPassword } from '../services/authService';
+import { sendForgotPasswordOtp } from '../services/authService';
 import { getApiErrorMessage } from '../services/api';
 
-const COOLDOWN_SEC = 45;
+/** Default cooldown shown to the user when the server doesn't return one. */
+const DEFAULT_COOLDOWN_SEC = 45;
 
+/**
+ * STEP 1 of the Forgot Password flow.
+ *
+ * Collects the email and asks the server to send an OTP. The server
+ * applies a per-email cooldown even when the account does not exist,
+ * and returns the SAME generic message either way — so this screen
+ * never branches on the message text or the response status.
+ *
+ * After a successful send (or any "code may be on its way" outcome) we
+ * navigate to VerifyOtp where the user enters the code.
+ */
 export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const tickRef = useRef(null);
 
+  // Stop the interval when the screen unmounts so we don't leak a timer
+  // (and don't call setState on an unmounted component).
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
@@ -31,7 +44,7 @@ export default function ForgotPasswordScreen({ navigation }) {
   }, []);
 
   const startCooldown = useCallback((seconds) => {
-    const sec = Math.max(1, Math.min(Number(seconds) || COOLDOWN_SEC, 120));
+    const sec = Math.max(1, Math.min(Number(seconds) || DEFAULT_COOLDOWN_SEC, 120));
     setCooldownLeft(sec);
     if (tickRef.current) clearInterval(tickRef.current);
     tickRef.current = setInterval(() => {
@@ -49,7 +62,6 @@ export default function ForgotPasswordScreen({ navigation }) {
   async function sendCode() {
     if (submitting || cooldownLeft > 0) return;
     setError('');
-    setInfo('');
     const trimmed = email.trim();
     if (!trimmed) {
       setError('Enter your email address.');
@@ -57,10 +69,16 @@ export default function ForgotPasswordScreen({ navigation }) {
     }
     setSubmitting(true);
     try {
-      const res = await forgotPassword({ email: trimmed });
-      const msg = res?.message || 'If the account exists, reset instructions were sent.';
-      setInfo(msg);
-      startCooldown(COOLDOWN_SEC);
+      await sendForgotPasswordOtp({ email: trimmed });
+      // Move forward regardless of whether an account actually exists —
+      // the server returns the same generic response either way, and
+      // branching here would create the very enumeration vector we are
+      // protecting against. The next screen's behavior is identical.
+      startCooldown(DEFAULT_COOLDOWN_SEC);
+      navigation.navigate('VerifyOtp', {
+        email: trimmed,
+        cooldownLeft: DEFAULT_COOLDOWN_SEC,
+      });
     } catch (e) {
       const status = e?.response?.status;
       const details = e?.response?.data?.details;
@@ -77,8 +95,11 @@ export default function ForgotPasswordScreen({ navigation }) {
   }
 
   const canSend = email.trim().length > 0 && !submitting && cooldownLeft === 0;
-  const resendLabel =
-    cooldownLeft > 0 ? `Resend code (${cooldownLeft}s)` : 'Resend code';
+  const ctaLabel = submitting
+    ? 'Sending…'
+    : cooldownLeft > 0
+      ? `Resend in ${cooldownLeft}s`
+      : 'Send reset code';
 
   return (
     <KeyboardAvoidingView
@@ -92,18 +113,13 @@ export default function ForgotPasswordScreen({ navigation }) {
       >
         <Text style={styles.title}>Forgot password</Text>
         <Text style={styles.subtitle}>
-          Enter the email you use for {brand.name}. We’ll send a 6-digit code if an account
-          exists.
+          Enter the email you use for {brand.name}. We&apos;ll send a 6-digit
+          code if an account exists.
         </Text>
 
         {error ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-        {info ? (
-          <View style={styles.infoBanner}>
-            <Text style={styles.infoText}>{info}</Text>
           </View>
         ) : null}
 
@@ -118,40 +134,35 @@ export default function ForgotPasswordScreen({ navigation }) {
           keyboardType="email-address"
           textContentType="emailAddress"
           autoComplete="email"
+          returnKeyType="send"
+          onSubmitEditing={sendCode}
         />
 
         <AppButton
-          title={submitting ? 'Sending…' : 'Send reset code'}
+          title={ctaLabel}
           onPress={sendCode}
           disabled={!canSend}
           style={styles.primaryCta}
         />
 
         <Pressable
-          onPress={sendCode}
-          disabled={submitting || cooldownLeft > 0}
+          onPress={() =>
+            navigation.navigate('VerifyOtp', { email: email.trim() })
+          }
+          disabled={!email.trim() || submitting}
           style={({ pressed }) => [
-            styles.resendRow,
-            pressed && cooldownLeft === 0 && !submitting && { opacity: 0.7 },
+            styles.linkRow,
+            pressed && email.trim() && !submitting && { opacity: 0.7 },
           ]}
         >
           <Text
             style={[
-              styles.resendText,
-              (submitting || cooldownLeft > 0) && styles.resendTextDisabled,
+              styles.linkText,
+              (!email.trim() || submitting) && styles.linkTextDisabled,
             ]}
           >
-            {resendLabel}
+            I already have a code
           </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() =>
-            navigation.navigate('ResetPassword', { email: email.trim() })
-          }
-          style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.linkText}>I have a code — reset password</Text>
         </Pressable>
 
         <Pressable
@@ -194,20 +205,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   errorText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
-  infoBanner: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-  },
-  infoText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   primaryCta: { marginTop: 8, paddingVertical: 14, borderRadius: 12 },
-  resendRow: { alignSelf: 'center', marginTop: 16, paddingVertical: 8 },
-  resendText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
-  resendTextDisabled: { color: colors.muted, fontWeight: '600' },
-  linkRow: { alignSelf: 'center', marginTop: 12, paddingVertical: 8 },
+  linkRow: { alignSelf: 'center', marginTop: 16, paddingVertical: 8 },
   linkText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+  linkTextDisabled: { color: colors.muted, fontWeight: '600' },
   mutedLink: { color: colors.muted, fontSize: 14 },
 });

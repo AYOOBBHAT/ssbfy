@@ -71,11 +71,42 @@ export const userRepository = {
       .exec();
   },
 
-  async setStreak(userId, { streakCount, lastPracticeDate }) {
-    return User.findByIdAndUpdate(
-      userId,
+  /**
+   * Atomically claim today's daily-practice slot for a user.
+   *
+   * The "did anyone already complete today?" check lives INSIDE the DB
+   * filter, not in app code. This collapses the read-then-write race that
+   * could otherwise let two concurrent requests both pass an idempotency
+   * check and both fire `$inc: { dailyPracticeTotal: 1 }`.
+   *
+   * Filter semantics:
+   *   - `lastPracticeDate` is null (user has never completed), OR
+   *   - `lastPracticeDate` is strictly before today's UTC midnight
+   *     (last completion was on a previous UTC day).
+   *
+   * Only one update can match in a given UTC day. The winner gets the
+   * updated doc back. Every concurrent loser gets `null`, which the
+   * caller MUST treat as "already completed today" and re-read state.
+   *
+   * @param {string} userId
+   * @param {{ todayUtcMidnight: Date, nextStreak: number }} args
+   * @returns {Promise<object|null>} updated user lean doc, or null if
+   *   the day was already claimed by another concurrent write.
+   */
+  async claimDailyPracticeForToday(userId, { todayUtcMidnight, nextStreak }) {
+    return User.findOneAndUpdate(
       {
-        $set: { streakCount, lastPracticeDate },
+        _id: userId,
+        $or: [
+          { lastPracticeDate: null },
+          { lastPracticeDate: { $lt: todayUtcMidnight } },
+        ],
+      },
+      {
+        $set: {
+          streakCount: nextStreak,
+          lastPracticeDate: todayUtcMidnight,
+        },
         $inc: { dailyPracticeTotal: 1 },
       },
       { new: true }

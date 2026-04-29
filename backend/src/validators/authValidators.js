@@ -13,17 +13,40 @@ export const loginValidators = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
-export const forgotPasswordValidators = [
+/** STEP 1: send-otp — only an email is required. */
+export const sendOtpValidators = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
 ];
 
-export const resetPasswordValidators = [
+/** STEP 2: verify-otp — email + 6-digit code. */
+export const verifyOtpValidators = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('otp')
     .trim()
     .matches(/^\d{6}$/)
     .withMessage('OTP must be a 6-digit code'),
+];
+
+/**
+ * STEP 3: reset-password — email + opaque resetToken (issued by verify-otp)
+ * + new password + confirm password. The OTP is intentionally NOT accepted
+ * here: by this point it has been consumed and replaced by the resetToken,
+ * which means the OTP secret never travels in this request payload.
+ */
+export const resetPasswordValidators = [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('resetToken')
+    .isString()
+    .trim()
+    .isLength({ min: 16, max: 256 })
+    .withMessage('Reset token is required'),
   body('newPassword')
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters'),
+  body('confirmPassword')
+    .isLength({ min: 8 })
+    .withMessage('Confirm password must be at least 8 characters')
+    .bail()
+    .custom((value, { req }) => value === req.body.newPassword)
+    .withMessage('Passwords do not match'),
 ];

@@ -7,6 +7,8 @@ export { Test } from './Test.js';
 export { TestAttempt } from './TestAttempt.js';
 export { Result } from './Result.js';
 export { Payment } from './Payment.js';
+export { WebhookEvent } from './WebhookEvent.js';
 export { Note } from './Note.js';
 export { PdfNote } from './PdfNote.js';
 export { DeviceUsage } from './DeviceUsage.js';
+export { PasswordResetThrottle } from './PasswordResetThrottle.js';
