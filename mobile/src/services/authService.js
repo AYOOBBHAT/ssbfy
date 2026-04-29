@@ -37,4 +37,20 @@ export async function resetPassword({ email, otp, newPassword }) {
   return data?.data ?? {};
 }
 
+/**
+ * Change password for an authenticated user from Profile settings.
+ */
+export async function changePassword({
+  currentPassword,
+  newPassword,
+  confirmPassword,
+}) {
+  const { data } = await api.patch('/users/change-password', {
+    currentPassword,
+    newPassword,
+    confirmPassword,
+  });
+  return data?.data ?? {};
+}
+
 export { getApiErrorMessage };

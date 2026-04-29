@@ -5,6 +5,10 @@ export const paymentRepository = {
     return Payment.findOne({ razorpay_payment_id }).lean().exec();
   },
 
+  async findByOrderId(razorpay_order_id) {
+    return Payment.findOne({ razorpay_order_id }).lean().exec();
+  },
+
   async create(data) {
     const doc = await Payment.create(data);
     return doc.toObject();
@@ -15,6 +19,16 @@ export const paymentRepository = {
       { razorpay_payment_id },
       { $set: { subscriptionEndAt } },
       { new: true }
+    )
+      .lean()
+      .exec();
+  },
+
+  async updateByOrderId(razorpay_order_id, update) {
+    return Payment.findOneAndUpdate(
+      { razorpay_order_id },
+      { $set: update },
+      { new: true, runValidators: true }
     )
       .lean()
       .exec();

@@ -1,10 +1,12 @@
 import { body } from 'express-validator';
 
 export const createOrderValidators = [
-  body('amount')
-    .optional()
-    .isInt({ min: 1, max: 10_000_000 })
-    .withMessage('amount (INR) must be a positive integer'),
+  body('planId')
+    .exists({ checkFalsy: true })
+    .withMessage('planId is required')
+    .bail()
+    .isMongoId()
+    .withMessage('planId must be a valid id'),
 ];
 
 export const verifyPaymentValidators = [

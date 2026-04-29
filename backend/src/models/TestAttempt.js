@@ -109,6 +109,11 @@ testAttemptSchema.index({ userId: 1, testId: 1 });
 testAttemptSchema.index({ userId: 1, testId: 1, endTime: 1 });
 // Optimizes queries shaped like: { userId, endTime } (status lookup / resume checks).
 testAttemptSchema.index({ userId: 1, endTime: 1, testId: 1 });
+// Optimizes completed-attempt history scans sorted by recency.
+testAttemptSchema.index(
+  { userId: 1, testId: 1, endTime: -1, createdAt: -1 },
+  { partialFilterExpression: { endTime: { $ne: null } } }
+);
 
 /**
  * Prevent duplicate open attempts for the same user+test, regardless of tier.

@@ -27,6 +27,14 @@ export const userRepository = {
     return User.findById(id).lean().exec();
   },
 
+  async findByIdWithPassword(id) {
+    return User.findById(id).select('+password').exec();
+  },
+
+  async updatePassword(userId, hashedPassword) {
+    return User.updateOne({ _id: userId }, { $set: { password: hashedPassword } }).exec();
+  },
+
   /**
    * Atomically increments freeAttemptsUsed by 1 iff current value is < FREE_TEST_ATTEMPTS.
    * Returns the updated user doc, or null if the increment could not be applied (limit reached).
@@ -73,7 +81,10 @@ export const userRepository = {
       .exec();
   },
 
-  async setSubscriptionAfterPayment(userId, subscriptionEnd, plan) {
+  async setSubscriptionAfterPayment(
+    userId,
+    { subscriptionEnd, plan, currentPlanId = null, currentPlanType = null }
+  ) {
     return User.findByIdAndUpdate(
       userId,
       {
@@ -81,6 +92,8 @@ export const userRepository = {
           isPremium: true,
           subscriptionEnd,
           plan,
+          currentPlanId,
+          currentPlanType,
         },
       },
       { new: true }

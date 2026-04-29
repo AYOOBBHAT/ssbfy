@@ -34,6 +34,42 @@ export default function ProfileScreen({ navigation }) {
       </View>
 
       <Text style={styles.sectionLabel}>Account</Text>
+      <View style={styles.card}>
+        <Pressable
+          onPress={() => navigation.navigate('ChangePassword')}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
+          <Ionicons name="lock-closed-outline" size={22} color={colors.text} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Change Password</Text>
+            <Text style={styles.rowSub}>Update your account password securely</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+        </Pressable>
+      </View>
+      <View style={styles.card}>
+        <Pressable
+          onPress={() =>
+            isPremium
+              ? navigation.navigate('SavedMaterials')
+              : navigation.navigate('Premium', { from: 'saved-materials' })
+          }
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
+          <Ionicons
+            name={isPremium ? 'bookmark' : 'bookmark-outline'}
+            size={22}
+            color={isPremium ? colors.primary : colors.muted}
+          />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Saved Materials</Text>
+            <Text style={styles.rowSub}>
+              {isPremium ? 'Your bookmarked notes and PDFs' : 'Premium feature'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+        </Pressable>
+      </View>
       {!isPremium ? (
         <View style={styles.card}>
           <Pressable

@@ -3,10 +3,11 @@ import Razorpay from 'razorpay';
 import { env } from '../config/env.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { PREMIUM_SUBSCRIPTION_DAYS } from '../constants/access.js';
-import { hasActiveSubscription, PLAN_MONTHLY } from '../constants/subscription.js';
+import { hasActiveSubscription } from '../constants/subscription.js';
 import { AppError } from '../utils/AppError.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { paymentRepository } from '../repositories/paymentRepository.js';
+import { subscriptionPlanService } from './subscriptionPlanService.js';
 
 const RAZORPAY_ID_RE = /^[a-zA-Z0-9_-]+$/;
 
@@ -38,12 +39,6 @@ function getClient() {
   });
 }
 
-function subscriptionEndFromNow() {
-  const end = new Date(Date.now());
-  end.setDate(end.getDate() + PREMIUM_SUBSCRIPTION_DAYS);
-  return end;
-}
-
 function assertValidRazorpayIds(razorpay_order_id, razorpay_payment_id, razorpay_signature) {
   const orderId = String(razorpay_order_id ?? '').trim();
   const paymentId = String(razorpay_payment_id ?? '').trim();
@@ -63,31 +58,63 @@ function assertValidRazorpayIds(razorpay_order_id, razorpay_payment_id, razorpay
   return { orderId, paymentId, signature };
 }
 
-async function healSubscriptionForRecordedPayment(userId, paymentId) {
+function normalizeRecordedPlan(record) {
+  const type = record?.planType || null;
+  const days =
+    type === 'lifetime'
+      ? null
+      : Number.isInteger(record?.durationDays) && record.durationDays > 0
+      ? record.durationDays
+      : PREMIUM_SUBSCRIPTION_DAYS;
+  return { type, days };
+}
+
+function subscriptionEndFromPlan(user, { type, days }) {
+  if (type === 'lifetime') {
+    return null;
+  }
+  const now = Date.now();
+  const current = user?.subscriptionEnd ? new Date(user.subscriptionEnd).getTime() : 0;
+  const base = current > now ? new Date(current) : new Date(now);
+  base.setDate(base.getDate() + days);
+  return base;
+}
+
+async function healSubscriptionForRecordedPayment(userId, record) {
   let user = await userRepository.findById(userId);
   if (!user) {
     throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
   }
-  if (hasActiveSubscription(user)) {
+  if (hasActiveSubscription(user) || user?.isPremium === true) {
     return user;
   }
-  const subscriptionEnd = subscriptionEndFromNow();
-  user = await userRepository.setSubscriptionAfterPayment(userId, subscriptionEnd, PLAN_MONTHLY);
-  await paymentRepository.setSubscriptionEndAtByPaymentId(paymentId, subscriptionEnd);
+  const plan = normalizeRecordedPlan(record);
+  const subscriptionEnd = subscriptionEndFromPlan(user, plan);
+  user = await userRepository.setSubscriptionAfterPayment(userId, {
+    subscriptionEnd,
+    plan: plan.type || user?.plan || 'monthly',
+    currentPlanId: record?.planId || null,
+    currentPlanType: plan.type,
+  });
+  if (record?.razorpay_order_id) {
+    await paymentRepository.updateByOrderId(record.razorpay_order_id, { subscriptionEndAt: subscriptionEnd });
+  }
   console.log('[PAYMENT] Healing subscription for existing payment:', {
     userId: String(userId),
-    paymentId,
+    paymentId: record?.razorpay_payment_id,
   });
   return user;
 }
 
 export const paymentService = {
-  /**
-   * amountInr: whole rupees (e.g. 99). Razorpay expects amount in paise.
-   */
-  async createOrder(userId, amountInr) {
+  async createOrder(userId, planId) {
     const rzp = getClient();
-    const amountPaise = Math.round(Number(amountInr) * 100);
+    const plan = await subscriptionPlanService.getActivePlanById(planId);
+    if (!plan) {
+      throw new AppError('Subscription plan not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const amountPaise = Math.round(Number(plan.priceInr) * 100);
     if (!Number.isFinite(amountPaise) || amountPaise < 100) {
       throw new AppError('amount must be at least 1 INR', HTTP_STATUS.BAD_REQUEST);
     }
@@ -103,13 +130,28 @@ export const paymentService = {
       receipt,
       notes: {
         userId: String(userId),
+        planId: String(plan._id),
+        planType: String(plan.planType),
       },
+    });
+
+    await paymentRepository.create({
+      userId,
+      razorpay_order_id: order.id,
+      amount: Number(order.amount),
+      priceInr: Number(plan.priceInr),
+      planId: plan._id,
+      planType: plan.planType,
+      durationDays: plan.durationDays ?? null,
+      status: 'created',
+      subscriptionEndAt: null,
     });
 
     console.log('[PAYMENT] Order created:', {
       userId: String(userId),
       order_id: order.id,
       amount: order.amount,
+      planType: plan.planType,
     });
 
     return {
@@ -118,6 +160,11 @@ export const paymentService = {
       amount: order.amount,
       currency: order.currency,
       receipt: order.receipt,
+      plan: {
+        planId: String(plan._id),
+        planType: plan.planType,
+        name: plan.name,
+      },
     };
   },
 
@@ -146,7 +193,7 @@ export const paymentService = {
         console.log('[PAYMENT] Idempotency conflict — payment owned by another user:', { paymentId });
         throw new AppError('Payment already processed', HTTP_STATUS.CONFLICT);
       }
-      const user = await healSubscriptionForRecordedPayment(userId, paymentId);
+      const user = await healSubscriptionForRecordedPayment(userId, existing);
       console.log('[PAYMENT] Idempotent verify (already recorded):', {
         userId: String(userId),
         paymentId,
@@ -158,6 +205,11 @@ export const paymentService = {
         plan: user.plan,
         idempotent: true,
       };
+    }
+
+    const existingOrder = await paymentRepository.findByOrderId(orderId);
+    if (existingOrder && existingOrder.userId.toString() !== String(userId)) {
+      throw new AppError('Payment order does not belong to this user', HTTP_STATUS.CONFLICT);
     }
 
     const rzp = getClient();
@@ -187,40 +239,37 @@ export const paymentService = {
       throw new AppError('Payment not completed', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const subscriptionEnd = subscriptionEndFromNow();
+    const record = existingOrder || (await paymentRepository.create({
+      userId,
+      razorpay_order_id: orderId,
+      amount: Number(remote.amount),
+      priceInr: Math.round(Number(remote.amount) / 100),
+      planType: null,
+      durationDays: PREMIUM_SUBSCRIPTION_DAYS,
+      status: 'created',
+      subscriptionEndAt: null,
+    }));
 
-    try {
-      await paymentRepository.create({
-        userId,
-        razorpay_payment_id: paymentId,
-        razorpay_order_id: orderId,
-        amount: Number(remote.amount),
-        status: String(remote.status),
-        subscriptionEndAt: subscriptionEnd,
-      });
-    } catch (err) {
-      if (err?.code === 11000) {
-        const again = await paymentRepository.findByPaymentId(paymentId);
-        if (again?.userId.toString() === String(userId)) {
-          const user = await healSubscriptionForRecordedPayment(userId, paymentId);
-          console.log('[PAYMENT] Duplicate insert — idempotent path:', {
-            userId: String(userId),
-            paymentId,
-            subscriptionEnd: user.subscriptionEnd,
-          });
-          return {
-            user,
-            subscriptionEnd: user.subscriptionEnd,
-            plan: user.plan,
-            idempotent: true,
-          };
-        }
-      }
-      console.log('[PAYMENT] Payment record create failed:', { userId: String(userId), paymentId, message: err?.message });
-      throw err;
+    const plan = normalizeRecordedPlan(record);
+    const userBefore = await userRepository.findById(userId);
+    if (!userBefore) {
+      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }
+    const subscriptionEnd = subscriptionEndFromPlan(userBefore, plan);
 
-    const user = await userRepository.setSubscriptionAfterPayment(userId, subscriptionEnd, PLAN_MONTHLY);
+    await paymentRepository.updateByOrderId(orderId, {
+      razorpay_payment_id: paymentId,
+      amount: Number(remote.amount),
+      status: String(remote.status),
+      subscriptionEndAt: subscriptionEnd,
+    });
+
+    const user = await userRepository.setSubscriptionAfterPayment(userId, {
+      subscriptionEnd,
+      plan: plan.type || userBefore?.plan || 'monthly',
+      currentPlanId: record?.planId || null,
+      currentPlanType: plan.type,
+    });
     if (!user) {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }

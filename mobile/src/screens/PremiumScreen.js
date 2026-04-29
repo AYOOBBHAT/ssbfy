@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   verifyPremiumPayment,
   openRazorpayForOrder,
   formatPaymentError,
+  getSubscriptionPlans,
 } from '../services/paymentService';
 import { colors } from '../theme/colors';
 
@@ -25,33 +26,6 @@ const BENEFITS = [
   'Premium Topic-wise Notes',
   'Advanced Performance Tracking',
   'Faster Preparation with Smart Revision',
-];
-
-const PLANS = [
-  {
-    id: 'monthly',
-    title: 'Monthly Plan',
-    priceLabel: '₹99',
-    amountInr: 99,
-    recommended: true,
-    blurb: 'Best to get started',
-  },
-  {
-    id: 'quarterly',
-    title: 'Quarterly Plan',
-    priceLabel: '₹199',
-    amountInr: 199,
-    recommended: false,
-    blurb: 'More value per month',
-  },
-  {
-    id: 'lifetime',
-    title: 'Lifetime Offer',
-    priceLabel: '₹499',
-    amountInr: 499,
-    recommended: false,
-    blurb: 'Pay once, prep longer',
-  },
 ];
 
 const FROM_COPY = {
@@ -68,9 +42,9 @@ export default function PremiumScreen() {
   const { user, refreshUser } = useAuth();
   const from = route.params?.from || 'home';
 
-  const [selectedId, setSelectedId] = useState(
-    () => PLANS.find((p) => p.recommended)?.id ?? 'monthly'
-  );
+  const [plans, setPlans] = useState([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -79,10 +53,39 @@ export default function PremiumScreen() {
 
   const contextLine = FROM_COPY[from] ?? FROM_COPY.home;
 
-  const selectedPlan = useMemo(
-    () => PLANS.find((p) => p.id === selectedId) ?? PLANS[0],
-    [selectedId]
-  );
+  useEffect(() => {
+    let cancelled = false;
+    const loadPlans = async () => {
+      try {
+        setPlansLoading(true);
+        const data = await getSubscriptionPlans();
+        if (cancelled) return;
+        const rows = Array.isArray(data?.plans) ? data.plans : [];
+        setPlans(rows);
+        if (rows.length > 0) {
+          const preferred = rows.find((p) => p?.planType === 'monthly') || rows[0];
+          setSelectedId(String(preferred._id));
+        } else {
+          setSelectedId('');
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setPlans([]);
+        setError(formatPaymentError(e));
+      } finally {
+        if (!cancelled) setPlansLoading(false);
+      }
+    };
+    void loadPlans();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedPlan = useMemo(() => {
+    if (!plans.length) return null;
+    return plans.find((p) => String(p?._id) === String(selectedId)) || plans[0];
+  }, [plans, selectedId]);
 
   const goHome = useCallback(() => {
     navigation.navigate('Main', { screen: 'Home' });
@@ -93,7 +96,11 @@ export default function PremiumScreen() {
     setError(null);
     setBusy(true);
     try {
-      const order = await createPremiumOrder(selectedPlan.amountInr);
+      if (!selectedPlan?._id) {
+        setError('No subscription plans are available right now.');
+        return;
+      }
+      const order = await createPremiumOrder(selectedPlan._id);
       if (!order?.order_id || !order?.key_id) {
         setError('Could not start checkout. Please try again.');
         return;
@@ -122,7 +129,7 @@ export default function PremiumScreen() {
     } finally {
       setBusy(false);
     }
-  }, [busy, isPremium, selectedPlan.amountInr, user, refreshUser]);
+  }, [busy, isPremium, selectedPlan, user, refreshUser]);
 
   if (isPremium) {
     return (
@@ -184,31 +191,50 @@ export default function PremiumScreen() {
       </View>
 
       <Text style={styles.sectionLabel}>Choose your plan</Text>
-      {PLANS.map((plan) => {
-        const active = plan.id === selectedId;
+      {plansLoading ? (
+        <View style={styles.inlineLoading}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={styles.inlineLoadingText}>Loading plans...</Text>
+        </View>
+      ) : null}
+      {!plansLoading && plans.length === 0 ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>No active plans available right now.</Text>
+        </View>
+      ) : null}
+      {plans.map((plan) => {
+        const active = String(plan?._id) === String(selectedId);
+        const recommended = plan?.planType === 'monthly';
+        const title = `${plan?.name || 'Plan'} Plan`;
+        const priceLabel = `₹${Number(plan?.priceInr || 0)}`;
+        const blurb =
+          plan?.description ||
+          (plan?.planType === 'lifetime'
+            ? 'One payment, long-term prep access'
+            : `${Number(plan?.durationDays || 0)} days access`);
         return (
           <Pressable
-            key={plan.id}
-            onPress={() => setSelectedId(plan.id)}
+            key={String(plan?._id)}
+            onPress={() => setSelectedId(String(plan?._id))}
             disabled={busy}
             style={({ pressed }) => [
               styles.planCard,
               active && styles.planCardActive,
-              plan.recommended && styles.planCardRecommended,
+              recommended && styles.planCardRecommended,
               pressed && !busy && styles.pressed,
             ]}
           >
-            {plan.recommended ? (
+            {recommended ? (
               <View style={styles.recBadge}>
                 <Text style={styles.recBadgeText}>Recommended</Text>
               </View>
             ) : null}
             <View style={styles.planRow}>
               <View style={styles.planTextCol}>
-                <Text style={styles.planTitle}>{plan.title}</Text>
-                <Text style={styles.planBlurb}>{plan.blurb}</Text>
+                <Text style={styles.planTitle}>{title}</Text>
+                <Text style={styles.planBlurb}>{blurb}</Text>
               </View>
-              <Text style={styles.planPrice}>{plan.priceLabel}</Text>
+              <Text style={styles.planPrice}>{priceLabel}</Text>
               <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
                 {active ? <View style={styles.radioInner} /> : null}
               </View>
@@ -225,10 +251,10 @@ export default function PremiumScreen() {
 
       <Pressable
         onPress={handleUpgrade}
-        disabled={busy}
+        disabled={busy || plansLoading || plans.length === 0}
         style={({ pressed }) => [
           styles.primaryBtn,
-          busy && styles.primaryBtnDisabled,
+          (busy || plansLoading || plans.length === 0) && styles.primaryBtnDisabled,
           pressed && !busy && styles.pressed,
         ]}
       >
@@ -430,6 +456,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+  inlineLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  inlineLoadingText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
   pressed: { opacity: 0.85 },
 
   centerWrap: {

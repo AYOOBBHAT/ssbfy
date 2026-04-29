@@ -21,6 +21,17 @@ const userSchema = new mongoose.Schema(
     trialUsed: { type: Boolean, default: false },
     subscriptionEnd: { type: Date, default: null },
     plan: { type: String, default: null },
+    currentPlanId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SubscriptionPlan',
+      default: null,
+      index: true,
+    },
+    currentPlanType: {
+      type: String,
+      enum: ['monthly', 'quarterly', 'yearly', 'lifetime', null],
+      default: null,
+    },
     freeAttemptsUsed: { type: Number, default: 0, min: 0 },
     streakCount: { type: Number, default: 0, min: 0 },
     lastPracticeDate: { type: Date, default: null },

@@ -2,14 +2,22 @@ import api, { getApiErrorMessage } from './api.js';
 import RazorpayCheckout from 'react-native-razorpay';
 
 /**
- * @param {number} amountInr whole rupees (e.g. 99)
+ * @param {string} planId selected subscription plan id
  * @returns {Promise<{ order_id: string, key_id: string, amount: number, currency: string, receipt?: string }>}
  */
-export async function createPremiumOrder(amountInr) {
+export async function createPremiumOrder(planId) {
   const { data } = await api.post('/payments/create-order', {
-    amount: Math.round(Number(amountInr)) || undefined,
+    planId,
   });
   return data?.data ?? {};
+}
+
+export async function getSubscriptionPlans() {
+  const { data } = await api.get('/subscription-plans');
+  const payload = data?.data ?? {};
+  return {
+    plans: Array.isArray(payload.plans) ? payload.plans : [],
+  };
 }
 
 /**

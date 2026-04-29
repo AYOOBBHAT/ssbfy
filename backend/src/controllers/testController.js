@@ -105,37 +105,20 @@ export const testController = {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }
 
-    // Use distinct testIds (not full attempt docs) so this stays fast even
-    // for users with many retries.
-    const [openIds, completedIds] = await Promise.all([
-      testAttemptRepository.distinctOpenTestIdsByUser(userId),
-      testAttemptRepository.distinctCompletedTestIdsByUser(userId),
-    ]);
-
-    const openSet = new Set((openIds || []).map(String));
-    const completedSet = new Set((completedIds || []).map(String));
+    const rows = await testAttemptRepository.getStatusFlagsByUser(userId);
     const premium = isPremiumUser(user);
 
     // Shape: { [testId]: { hasOpenAttempt, hasCompletedAttempt, canRetry } }
     const status = {};
 
-    for (const t of openSet) {
-      status[t] = {
-        hasOpenAttempt: true,
-        hasCompletedAttempt: completedSet.has(t),
+    for (const row of rows || []) {
+      const testId = String(row?.testId ?? '');
+      if (!testId) continue;
+      status[testId] = {
+        hasOpenAttempt: !!row?.hasOpenAttempt,
+        hasCompletedAttempt: !!row?.hasCompletedAttempt,
         canRetry: premium,
       };
-    }
-    for (const t of completedSet) {
-      if (!status[t]) {
-        status[t] = {
-          hasOpenAttempt: false,
-          hasCompletedAttempt: true,
-          canRetry: premium,
-        };
-      } else {
-        status[t].hasCompletedAttempt = true;
-      }
     }
 
     return sendSuccess(res, { status }, 'Test status');

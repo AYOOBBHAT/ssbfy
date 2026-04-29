@@ -1,12 +1,10 @@
 import { paymentService } from '../services/paymentService.js';
-import { env } from '../config/env.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
 
 export const paymentController = {
   createOrder: asyncHandler(async (req, res) => {
-    const amountInr = req.body.amount != null ? req.body.amount : env.razorpayDefaultAmountInr;
-    const payload = await paymentService.createOrder(req.user.id, amountInr);
+    const payload = await paymentService.createOrder(req.user.id, req.body.planId);
     return sendCreated(res, payload, 'Order created');
   }),
 
@@ -26,6 +24,8 @@ export const paymentController = {
         subscriptionEnd,
         isPremium: user.isPremium,
         plan,
+        currentPlanId: user.currentPlanId ?? null,
+        currentPlanType: user.currentPlanType ?? null,
         idempotent,
       },
       'Payment verified'

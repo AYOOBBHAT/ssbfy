@@ -24,6 +24,8 @@ import NotesListScreen from '../screens/NotesListScreen';
 import NoteDetailScreen from '../screens/NoteDetailScreen';
 import PremiumScreen from '../screens/PremiumScreen';
 import SmartPracticeScreen from '../screens/SmartPracticeScreen';
+import SavedMaterialsScreen from '../screens/SavedMaterialsScreen';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import { colors, brand } from '../theme/colors';
 
 const RootStack = createNativeStackNavigator();
@@ -218,6 +220,16 @@ export default function AppNavigator() {
             name="Premium"
             component={PremiumScreen}
             options={{ title: 'Premium' }}
+          />
+          <RootStack.Screen
+            name="SavedMaterials"
+            component={SavedMaterialsScreen}
+            options={{ title: 'Saved Materials' }}
+          />
+          <RootStack.Screen
+            name="ChangePassword"
+            component={ChangePasswordScreen}
+            options={{ title: 'Change Password' }}
           />
         </>
       ) : (

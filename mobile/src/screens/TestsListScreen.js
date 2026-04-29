@@ -90,6 +90,11 @@ export default function TestsListScreen() {
           <Text style={styles.lead}>
             Full-length timed mocks aligned with your exam pattern. Tap start when you are ready.
           </Text>
+          {statusLoading && tests.length > 0 ? (
+            <View style={styles.syncInfo}>
+              <Text style={styles.syncInfoText}>Syncing test status...</Text>
+            </View>
+          ) : null}
           {statusError ? (
             <View style={styles.softWarn}>
               <Text style={styles.softWarnText}>
@@ -164,6 +169,7 @@ export default function TestsListScreen() {
             isStarting={isStarting}
             actionLabel={cta}
             ctaState={ctaState}
+            isPremium={isPremium}
           />
         );
       }}
@@ -235,6 +241,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.warning,
+  },
+  syncInfo: {
+    backgroundColor: colors.bg,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  syncInfoText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   softWarnText: {
     color: colors.warning,

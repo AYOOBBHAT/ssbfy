@@ -1,4 +1,5 @@
 import { TestAttempt } from '../models/TestAttempt.js';
+import mongoose from 'mongoose';
 
 export const testAttemptRepository = {
   async create(data) {
@@ -94,6 +95,41 @@ export const testAttemptRepository = {
 
   async distinctCompletedTestIdsByUser(userId) {
     return TestAttempt.distinct('testId', { userId, endTime: { $ne: null } }).exec();
+  },
+
+  /**
+   * One-pass status aggregation for all tests attempted by a user.
+   * Returns rows shaped like:
+   *   { testId: ObjectId, hasOpenAttempt: boolean, hasCompletedAttempt: boolean }
+   */
+  async getStatusFlagsByUser(userId) {
+    const normalizedUserId = new mongoose.Types.ObjectId(String(userId));
+    return TestAttempt.aggregate([
+      { $match: { userId: normalizedUserId } },
+      {
+        $group: {
+          _id: '$testId',
+          hasOpenAttempt: {
+            $max: {
+              $cond: [{ $eq: ['$endTime', null] }, 1, 0],
+            },
+          },
+          hasCompletedAttempt: {
+            $max: {
+              $cond: [{ $ne: ['$endTime', null] }, 1, 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          testId: '$_id',
+          hasOpenAttempt: { $eq: ['$hasOpenAttempt', 1] },
+          hasCompletedAttempt: { $eq: ['$hasCompletedAttempt', 1] },
+        },
+      },
+    ]).exec();
   },
 
   /**

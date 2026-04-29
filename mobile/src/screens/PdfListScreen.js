@@ -8,8 +8,9 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as WebBrowser from 'expo-web-browser';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage } from '../services/api';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
@@ -19,6 +20,11 @@ import {
   getPosts,
   resolvePdfUrl,
 } from '../services/pdfService';
+import {
+  getSavedMaterials,
+  toggleSavedMaterial,
+  PREMIUM_SAVE_MESSAGE,
+} from '../services/savedMaterialService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
 
@@ -55,6 +61,8 @@ export default function PdfListScreen() {
   const [pdfsError, setPdfsError] = useState(null);
 
   const [openingId, setOpeningId] = useState(null);
+  const [savedPdfIds, setSavedPdfIds] = useState(new Set());
+  const [savingId, setSavingId] = useState(null);
 
   // ---- Posts -------------------------------------------------------------
 
@@ -108,6 +116,34 @@ export default function PdfListScreen() {
     loadPdfs();
   }, [loadPdfs]);
 
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const loadSaved = async () => {
+        if (!userHasPremiumAccess(user)) {
+          setSavedPdfIds(new Set());
+          return;
+        }
+        try {
+          const data = await getSavedMaterials();
+          if (cancelled) return;
+          const next = new Set(
+            (data?.savedPdfs || [])
+              .map((p) => String(p?.pdfId || '').trim())
+              .filter(Boolean)
+          );
+          setSavedPdfIds(next);
+        } catch {
+          if (!cancelled) setSavedPdfIds(new Set());
+        }
+      };
+      void loadSaved();
+      return () => {
+        cancelled = true;
+      };
+    }, [user])
+  );
+
   // ---- Actions -----------------------------------------------------------
 
   /**
@@ -160,6 +196,32 @@ export default function PdfListScreen() {
       );
     } finally {
       setOpeningId(null);
+    }
+  };
+
+  const handleToggleSave = async (pdf) => {
+    const pdfId = String(pdf?._id || '').trim();
+    if (!pdfId) return;
+    if (!userHasPremiumAccess(user)) {
+      Alert.alert('Premium feature', 'Upgrade to save materials for later.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => navigation.navigate('Premium', { from: 'saved-materials' }) },
+      ]);
+      return;
+    }
+    setSavingId(pdfId);
+    try {
+      const result = await toggleSavedMaterial({ materialType: 'pdf', pdfId });
+      setSavedPdfIds((prev) => {
+        const next = new Set(prev);
+        if (result?.saved) next.add(pdfId);
+        else next.delete(pdfId);
+        return next;
+      });
+    } catch (e) {
+      Alert.alert('Could not update saved materials', getApiErrorMessage(e) || PREMIUM_SAVE_MESSAGE);
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -283,29 +345,42 @@ export default function PdfListScreen() {
     const title = item?.title || item?.fileName || 'Untitled PDF';
     const size = formatFileSize(item?.fileSize);
     const isOpening = openingId != null && String(openingId) === String(item?._id);
+    const pdfId = String(item?._id || '');
+    const isSaved = savedPdfIds.has(pdfId);
+    const isSaving = savingId != null && String(savingId) === pdfId;
     return (
-      <Pressable
-        onPress={() => handleOpenPdf(item)}
-        disabled={isOpening}
-        style={({ pressed }) => [
-          styles.pdfCard,
-          pressed && styles.btnPressed,
-          isOpening && styles.btnDisabled,
-        ]}
-      >
-        <View style={styles.pdfIconWrap}>
-          <Text style={styles.pdfIcon}>📄</Text>
-        </View>
-        <View style={styles.pdfTextBlock}>
-          <Text style={styles.pdfTitle} numberOfLines={2}>
-            {title}
-          </Text>
-          <Text style={styles.pdfMeta} numberOfLines={1}>
-            {size ? `${size} • ` : ''}Tap to open
-          </Text>
-        </View>
-        <Text style={styles.chevron}>{isOpening ? '…' : '›'}</Text>
-      </Pressable>
+      <View style={styles.pdfCard}>
+        <Pressable
+          onPress={() => handleOpenPdf(item)}
+          disabled={isOpening}
+          style={({ pressed }) => [styles.pdfMainArea, pressed && styles.btnPressed, isOpening && styles.btnDisabled]}
+        >
+          <View style={styles.pdfIconWrap}>
+            <Text style={styles.pdfIcon}>📄</Text>
+          </View>
+          <View style={styles.pdfTextBlock}>
+            <Text style={styles.pdfTitle} numberOfLines={2}>
+              {title}
+            </Text>
+            <Text style={styles.pdfMeta} numberOfLines={1}>
+              {size ? `${size} • ` : ''}Tap to open
+            </Text>
+          </View>
+          <Text style={styles.chevron}>{isOpening ? '…' : '›'}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => handleToggleSave(item)}
+          hitSlop={8}
+          disabled={isSaving}
+          style={({ pressed }) => [styles.saveBtn, pressed && styles.btnPressed, isSaving && styles.btnDisabled]}
+        >
+          <Ionicons
+            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={18}
+            color={isSaved ? colors.primary : colors.muted}
+          />
+        </Pressable>
+      </View>
     );
   };
 
@@ -409,13 +484,17 @@ const styles = StyleSheet.create({
   },
   listContent: { paddingBottom: 4 },
   pdfCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    position: 'relative',
     backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  pdfMainArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    paddingRight: 44,
   },
   pdfIconWrap: {
     width: 44,
@@ -431,6 +510,20 @@ const styles = StyleSheet.create({
   pdfTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   pdfMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
   chevron: { fontSize: 22, color: colors.muted, marginLeft: 8 },
+  saveBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    zIndex: 2,
+  },
 
   btnPressed: { opacity: 0.8 },
   btnDisabled: { opacity: 0.6 },

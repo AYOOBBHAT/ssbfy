@@ -6,8 +6,10 @@ import {
   FlatList,
   Pressable,
   ScrollView,
+  Alert,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage } from '../services/api';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
@@ -18,6 +20,11 @@ import {
   getTopicsForSubject,
   previewOf,
 } from '../services/noteService';
+import {
+  getSavedMaterials,
+  toggleSavedMaterial,
+  PREMIUM_SAVE_MESSAGE,
+} from '../services/savedMaterialService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
 
@@ -70,6 +77,8 @@ export default function NotesListScreen() {
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState(null);
+  const [savedNoteIds, setSavedNoteIds] = useState(new Set());
+  const [savingId, setSavingId] = useState(null);
 
   // ---- Load posts once -------------------------------------------------
   const loadPosts = useCallback(async () => {
@@ -172,6 +181,34 @@ export default function NotesListScreen() {
     loadNotes();
   }, [loadNotes]);
 
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const loadSaved = async () => {
+        if (!userHasPremiumAccess(user)) {
+          setSavedNoteIds(new Set());
+          return;
+        }
+        try {
+          const data = await getSavedMaterials();
+          if (cancelled) return;
+          const next = new Set(
+            (data?.savedNotes || [])
+              .map((n) => String(n?.noteId || '').trim())
+              .filter(Boolean)
+          );
+          setSavedNoteIds(next);
+        } catch {
+          if (!cancelled) setSavedNoteIds(new Set());
+        }
+      };
+      void loadSaved();
+      return () => {
+        cancelled = true;
+      };
+    }, [user])
+  );
+
   // ---- Handlers -------------------------------------------------------
 
   const activePosts = useMemo(
@@ -197,6 +234,32 @@ export default function NotesListScreen() {
   const openNote = (note) => {
     if (!note) return;
     navigation.navigate('NoteDetail', { note });
+  };
+
+  const handleToggleSave = async (note) => {
+    const noteId = String(note?._id || '').trim();
+    if (!noteId) return;
+    if (!userHasPremiumAccess(user)) {
+      Alert.alert('Premium feature', 'Upgrade to save materials for later.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => navigation.navigate('Premium', { from: 'saved-materials' }) },
+      ]);
+      return;
+    }
+    setSavingId(noteId);
+    try {
+      const result = await toggleSavedMaterial({ materialType: 'note', noteId });
+      setSavedNoteIds((prev) => {
+        const next = new Set(prev);
+        if (result?.saved) next.add(noteId);
+        else next.delete(noteId);
+        return next;
+      });
+    } catch (e) {
+      Alert.alert('Could not update saved materials', getApiErrorMessage(e) || PREMIUM_SAVE_MESSAGE);
+    } finally {
+      setSavingId(null);
+    }
   };
 
   // ---- Render helpers -------------------------------------------------
@@ -259,20 +322,34 @@ export default function NotesListScreen() {
   const renderNote = ({ item }) => {
     const title = item?.title || 'Untitled note';
     const preview = previewOf(item?.content, 100);
+    const noteId = String(item?._id || '');
+    const isSaved = savedNoteIds.has(noteId);
+    const isSaving = savingId != null && String(savingId) === noteId;
     return (
-      <Pressable
-        onPress={() => openNote(item)}
-        style={({ pressed }) => [styles.noteCard, pressed && styles.btnPressed]}
-      >
-        <Text style={styles.noteTitle} numberOfLines={2}>
-          {title}
-        </Text>
-        {preview ? (
-          <Text style={styles.notePreview} numberOfLines={2}>
-            {preview}
+      <View style={styles.noteCard}>
+        <Pressable
+          onPress={() => handleToggleSave(item)}
+          hitSlop={8}
+          disabled={isSaving}
+          style={({ pressed }) => [styles.saveBtn, pressed && styles.btnPressed, isSaving && styles.btnDisabled]}
+        >
+          <Ionicons
+            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={18}
+            color={isSaved ? colors.primary : colors.muted}
+          />
+        </Pressable>
+        <Pressable onPress={() => openNote(item)} style={({ pressed }) => [pressed && styles.btnPressed]}>
+          <Text style={styles.noteTitle} numberOfLines={2}>
+            {title}
           </Text>
-        ) : null}
-      </Pressable>
+          {preview ? (
+            <Text style={styles.notePreview} numberOfLines={2}>
+              {preview}
+            </Text>
+          ) : null}
+        </Pressable>
+      </View>
     );
   };
 
@@ -491,9 +568,26 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
+    position: 'relative',
+    paddingRight: 42,
+  },
+  saveBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    zIndex: 2,
   },
   noteTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   notePreview: { fontSize: 13, color: colors.muted, marginTop: 6, lineHeight: 18 },
 
   btnPressed: { opacity: 0.8 },
+  btnDisabled: { opacity: 0.6 },
 });

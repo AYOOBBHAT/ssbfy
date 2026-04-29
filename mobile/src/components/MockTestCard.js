@@ -32,6 +32,7 @@ export function MockTestCard({
   isStarting,
   actionLabel,
   ctaState,
+  isPremium = false,
 }) {
   const safeLabel = typeof actionLabel === 'string' && actionLabel.trim() ? actionLabel : 'Start test';
   const title = humanizeTitle(item?.title, index);
@@ -61,7 +62,9 @@ export function MockTestCard({
             {isLoading ? (
               <>
                 <View style={[styles.skelPill, styles.skelPillWide]} />
-                <View style={[styles.skelPill, styles.skelPillNarrow]} />
+                {isPremium ? (
+                  <View style={[styles.skelPill, styles.skelPillNarrow, styles.skelPillPremium]} />
+                ) : null}
               </>
             ) : null}
             {!isLoading && isResume ? (
@@ -190,10 +193,13 @@ const styles = StyleSheet.create({
   skelPill: {
     height: 22,
     borderRadius: 999,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: '#e2e8f0',
   },
   skelPillWide: { width: 118 },
   skelPillNarrow: { width: 84 },
+  skelPillPremium: {
+    backgroundColor: '#e0e7ff',
+  },
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -227,7 +233,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   startBtnSkeleton: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: '#e0e7ff',
   },
   startBtnDisabled: {
     backgroundColor: colors.muted,
@@ -237,7 +243,7 @@ const styles = StyleSheet.create({
     height: 14,
     width: 120,
     borderRadius: 7,
-    backgroundColor: '#bfdbfe',
+    backgroundColor: '#c7d2fe',
   },
   startBtnText: {
     color: colors.textOnPrimary,

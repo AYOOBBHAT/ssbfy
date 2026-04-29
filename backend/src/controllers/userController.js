@@ -7,4 +7,9 @@ export const userController = {
     const user = await userService.getProfile(req.user.id);
     return sendSuccess(res, { user }, 'Profile');
   }),
+
+  changePassword: asyncHandler(async (req, res) => {
+    await userService.changePassword(req.user.id, req.body);
+    return sendSuccess(res, null, 'Password updated successfully');
+  }),
 };
