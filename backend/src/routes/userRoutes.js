@@ -7,6 +7,7 @@ import { changePasswordValidators } from '../validators/userValidators.js';
 const router = Router();
 
 router.get('/me', authenticate, userController.me);
+router.get('/profile-analytics', authenticate, userController.profileAnalytics);
 router.patch(
   '/change-password',
   authenticate,

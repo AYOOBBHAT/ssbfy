@@ -4,6 +4,3 @@
  * any code that still imports the constant directly.
  */
 export const FREE_TEST_ATTEMPTS = 3;
-
-/** Default premium subscription length after successful payment (days). */
-export const PREMIUM_SUBSCRIPTION_DAYS = 30;

@@ -2,14 +2,15 @@ import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { env } from '../config/env.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
-import { PREMIUM_SUBSCRIPTION_DAYS } from '../constants/access.js';
-import { hasActiveSubscription } from '../constants/subscription.js';
 import { AppError } from '../utils/AppError.js';
+import { isPremiumUser } from '../utils/freeTierAccess.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { paymentRepository } from '../repositories/paymentRepository.js';
+import { subscriptionPlanRepository } from '../repositories/subscriptionPlanRepository.js';
 import { subscriptionPlanService } from './subscriptionPlanService.js';
 
 const RAZORPAY_ID_RE = /^[a-zA-Z0-9_-]+$/;
+const VERIFY_FAILED_MESSAGE = 'Payment verification failed. Please contact support.';
 
 function safeEqualHex(a, b) {
   try {
@@ -58,14 +59,23 @@ function assertValidRazorpayIds(razorpay_order_id, razorpay_payment_id, razorpay
   return { orderId, paymentId, signature };
 }
 
-function normalizeRecordedPlan(record) {
-  const type = record?.planType || null;
-  const days =
-    type === 'lifetime'
-      ? null
-      : Number.isInteger(record?.durationDays) && record.durationDays > 0
-      ? record.durationDays
-      : PREMIUM_SUBSCRIPTION_DAYS;
+/**
+ * Strict: read the plan snapshot off a Payment record. Throws 409 if the
+ * record is not a usable plan snapshot. NEVER silently substitutes a
+ * default duration — that was the historical bug.
+ */
+function planFromRecord(record) {
+  const type = record?.planType;
+  if (type === 'lifetime') {
+    return { type: 'lifetime', days: null };
+  }
+  if (!type) {
+    throw new AppError(VERIFY_FAILED_MESSAGE, HTTP_STATUS.CONFLICT);
+  }
+  const days = record?.durationDays;
+  if (!Number.isInteger(days) || days <= 0) {
+    throw new AppError(VERIFY_FAILED_MESSAGE, HTTP_STATUS.CONFLICT);
+  }
   return { type, days };
 }
 
@@ -80,19 +90,54 @@ function subscriptionEndFromPlan(user, { type, days }) {
   return base;
 }
 
+/**
+ * If the Payment snapshot is missing for an orderId at verify time, we can
+ * still recover safely: the Razorpay order's `notes.planId` was written by
+ * THIS server's `createOrder` and is tamper-proof from the client. We
+ * re-fetch the SubscriptionPlan and rebuild the snapshot. If anything is
+ * inconsistent, return null and the caller will reject the verify.
+ *
+ * Returns null on any failure — caller MUST throw 409, never silently grant.
+ */
+async function tryRecoverPlanFromOrderNotes(orderId, userId) {
+  try {
+    const rzp = getClient();
+    const order = await rzp.orders.fetch(orderId);
+    const notedUserId = order?.notes?.userId ? String(order.notes.userId) : '';
+    const notedPlanId = order?.notes?.planId ? String(order.notes.planId) : '';
+    if (!notedUserId || !notedPlanId) return null;
+    if (notedUserId !== String(userId)) return null;
+    const plan = await subscriptionPlanRepository.findById(notedPlanId);
+    if (!plan) return null;
+    const isLifetime = plan.planType === 'lifetime';
+    if (!isLifetime) {
+      if (!Number.isInteger(plan.durationDays) || plan.durationDays <= 0) return null;
+    }
+    return {
+      planId: plan._id,
+      planType: plan.planType,
+      durationDays: isLifetime ? null : plan.durationDays,
+      priceInr: Number(plan.priceInr),
+    };
+  } catch (err) {
+    console.log('[PAYMENT] Order notes recovery failed:', { orderId, message: err?.message });
+    return null;
+  }
+}
+
 async function healSubscriptionForRecordedPayment(userId, record) {
   let user = await userRepository.findById(userId);
   if (!user) {
     throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
   }
-  if (hasActiveSubscription(user) || user?.isPremium === true) {
+  if (isPremiumUser(user)) {
     return user;
   }
-  const plan = normalizeRecordedPlan(record);
+  const plan = planFromRecord(record);
   const subscriptionEnd = subscriptionEndFromPlan(user, plan);
   user = await userRepository.setSubscriptionAfterPayment(userId, {
     subscriptionEnd,
-    plan: plan.type || user?.plan || 'monthly',
+    plan: plan.type,
     currentPlanId: record?.planId || null,
     currentPlanType: plan.type,
   });
@@ -102,6 +147,7 @@ async function healSubscriptionForRecordedPayment(userId, record) {
   console.log('[PAYMENT] Healing subscription for existing payment:', {
     userId: String(userId),
     paymentId: record?.razorpay_payment_id,
+    planType: plan.type,
   });
   return user;
 }
@@ -212,6 +258,19 @@ export const paymentService = {
       throw new AppError('Payment order does not belong to this user', HTTP_STATUS.CONFLICT);
     }
 
+    // Race protection: if another concurrent verify already linked this
+    // order to this payment id, route through heal (which is a no-op for
+    // already-premium users, preventing double-grants).
+    if (existingOrder?.razorpay_payment_id === paymentId) {
+      const user = await healSubscriptionForRecordedPayment(userId, existingOrder);
+      return {
+        user,
+        subscriptionEnd: user.subscriptionEnd,
+        plan: user.plan,
+        idempotent: true,
+      };
+    }
+
     const rzp = getClient();
     let remote;
     try {
@@ -239,18 +298,53 @@ export const paymentService = {
       throw new AppError('Payment not completed', HTTP_STATUS.BAD_REQUEST);
     }
 
-    const record = existingOrder || (await paymentRepository.create({
-      userId,
-      razorpay_order_id: orderId,
-      amount: Number(remote.amount),
-      priceInr: Math.round(Number(remote.amount) / 100),
-      planType: null,
-      durationDays: PREMIUM_SUBSCRIPTION_DAYS,
-      status: 'created',
-      subscriptionEndAt: null,
-    }));
+    // Race protection: a concurrent verify may have claimed this order while
+    // the Razorpay network fetch was in flight. Re-check before granting.
+    const postFetch = await paymentRepository.findByOrderId(orderId);
+    if (postFetch?.razorpay_payment_id === paymentId) {
+      const user = await healSubscriptionForRecordedPayment(userId, postFetch);
+      return {
+        user,
+        subscriptionEnd: user.subscriptionEnd,
+        plan: user.plan,
+        idempotent: true,
+      };
+    }
 
-    const plan = normalizeRecordedPlan(record);
+    let record = postFetch || existingOrder;
+    if (!record) {
+      // Order was paid via Razorpay but no Payment snapshot exists in our DB
+      // (createOrder DB write failed, off-band order, etc). Recover SAFELY
+      // from the tamper-proof `notes.planId` we set at order creation.
+      // If we can't recover, REJECT — never silently assign a default duration.
+      const recovered = await tryRecoverPlanFromOrderNotes(orderId, userId);
+      if (!recovered) {
+        console.log('[PAYMENT] Verify rejected — missing Payment snapshot and no recoverable plan:', {
+          userId: String(userId),
+          orderId,
+          paymentId,
+        });
+        throw new AppError(VERIFY_FAILED_MESSAGE, HTTP_STATUS.CONFLICT);
+      }
+      record = await paymentRepository.create({
+        userId,
+        razorpay_order_id: orderId,
+        amount: Number(remote.amount),
+        priceInr: recovered.priceInr,
+        planId: recovered.planId,
+        planType: recovered.planType,
+        durationDays: recovered.durationDays,
+        status: 'created',
+        subscriptionEndAt: null,
+      });
+      console.log('[PAYMENT] Recovered plan snapshot from order notes:', {
+        userId: String(userId),
+        orderId,
+        planType: recovered.planType,
+      });
+    }
+
+    const plan = planFromRecord(record);
     const userBefore = await userRepository.findById(userId);
     if (!userBefore) {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
@@ -266,7 +360,7 @@ export const paymentService = {
 
     const user = await userRepository.setSubscriptionAfterPayment(userId, {
       subscriptionEnd,
-      plan: plan.type || userBefore?.plan || 'monthly',
+      plan: plan.type,
       currentPlanId: record?.planId || null,
       currentPlanType: plan.type,
     });
@@ -278,6 +372,7 @@ export const paymentService = {
       userId: String(userId),
       paymentId,
       orderId,
+      planType: plan.type,
       subscriptionEnd: user.subscriptionEnd,
       idempotent: false,
     });

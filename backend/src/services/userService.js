@@ -1,16 +1,30 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { userRepository } from '../repositories/userRepository.js';
+import { isPremiumUser } from '../utils/freeTierAccess.js';
 import bcrypt from 'bcryptjs';
 import { env } from '../config/env.js';
 
 export const userService = {
+  /**
+   * Returns the user document with `isPremium` overwritten with the computed
+   * truth value from `isPremiumUser`. The raw stored flag may be stale on
+   * legacy rows (e.g. an old timed plan that stayed `true` past its expiry);
+   * the client should never need to recompute the truth — we hand it the
+   * answer here so /me is the single contract for premium state.
+   *
+   * The shape is otherwise unchanged: `currentPlanType`, `currentPlanId`,
+   * `subscriptionEnd`, `plan` continue to come straight from the User model.
+   */
   async getProfile(userId) {
     const user = await userRepository.findById(userId);
     if (!user) {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }
-    return user;
+    return {
+      ...user,
+      isPremium: isPremiumUser(user),
+    };
   },
 
   async changePassword(userId, { currentPassword, newPassword, confirmPassword }) {

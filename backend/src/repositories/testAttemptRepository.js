@@ -144,6 +144,61 @@ export const testAttemptRepository = {
     }).exec();
   },
 
+  /**
+   * Single-pass aggregation for the profile analytics endpoint.
+   *
+   * Counts EVERY completed attempt (retries included) — never collapses by
+   * testId. `accuracy` is already a 0–100 percentage at write time, so we
+   * read it as-is and let the caller round.
+   *
+   * Returns:
+   *   {
+   *     totalMocks,             // # completed attempts
+   *     bestScore,              // max(accuracy)
+   *     averageAccuracy,        // mean(accuracy) — simple average
+   *     sumAccuracyXCount,      // sum(accuracy * questionCount)  → for weighted overall
+   *     totalQuestionsSolved,   // sum(questionCount)
+   *   }
+   * If the user has no completed attempts, returns null.
+   */
+  async aggregateProfileStats(userId) {
+    const normalizedUserId = new mongoose.Types.ObjectId(String(userId));
+    const rows = await TestAttempt.aggregate([
+      { $match: { userId: normalizedUserId, endTime: { $ne: null } } },
+      {
+        $project: {
+          accuracy: { $ifNull: ['$accuracy', 0] },
+          questionCount: { $size: { $ifNull: ['$questionIds', []] } },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalMocks: { $sum: 1 },
+          bestScore: { $max: '$accuracy' },
+          averageAccuracy: { $avg: '$accuracy' },
+          sumAccuracyXCount: { $sum: { $multiply: ['$accuracy', '$questionCount'] } },
+          totalQuestionsSolved: { $sum: '$questionCount' },
+        },
+      },
+      { $project: { _id: 0 } },
+    ]).exec();
+    return rows[0] || null;
+  },
+
+  /**
+   * Latest completed attempt's accuracy. Used for `latestScore` on profile
+   * analytics. Sorted by endTime DESC (createdAt as tiebreaker) so retries
+   * are reflected.
+   */
+  async findLatestCompletedByUser(userId) {
+    return TestAttempt.findOne({ userId, endTime: { $ne: null } })
+      .select('accuracy endTime createdAt')
+      .sort({ endTime: -1, createdAt: -1 })
+      .lean()
+      .exec();
+  },
+
   async finalizeAttempt(attemptId, userId, testId, payload) {
     return TestAttempt.findOneAndUpdate(
       {

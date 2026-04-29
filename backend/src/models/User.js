@@ -35,6 +35,12 @@ const userSchema = new mongoose.Schema(
     freeAttemptsUsed: { type: Number, default: 0, min: 0 },
     streakCount: { type: Number, default: 0, min: 0 },
     lastPracticeDate: { type: Date, default: null },
+    /**
+     * Lifetime total of daily-practice completions. Incremented exactly once
+     * per real (non-idempotent) completion in `dailyPracticeService`. Distinct
+     * from `streakCount` (which resets on missed days).
+     */
+    dailyPracticeTotal: { type: Number, default: 0, min: 0 },
 
     /** Hashed OTP for password reset — never returned by API; bcrypt. */
     passwordResetOtpHash: { type: String, select: false, default: null },

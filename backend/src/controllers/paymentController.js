@@ -1,6 +1,7 @@
 import { paymentService } from '../services/paymentService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
+import { isPremiumUser } from '../utils/freeTierAccess.js';
 
 export const paymentController = {
   createOrder: asyncHandler(async (req, res) => {
@@ -22,7 +23,7 @@ export const paymentController = {
       res,
       {
         subscriptionEnd,
-        isPremium: user.isPremium,
+        isPremium: isPremiumUser(user),
         plan,
         currentPlanId: user.currentPlanId ?? null,
         currentPlanType: user.currentPlanType ?? null,

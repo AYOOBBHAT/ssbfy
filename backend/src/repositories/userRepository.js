@@ -74,31 +74,61 @@ export const userRepository = {
   async setStreak(userId, { streakCount, lastPracticeDate }) {
     return User.findByIdAndUpdate(
       userId,
-      { $set: { streakCount, lastPracticeDate } },
+      {
+        $set: { streakCount, lastPracticeDate },
+        $inc: { dailyPracticeTotal: 1 },
+      },
       { new: true }
     )
       .lean()
       .exec();
   },
 
+  /**
+   * Writes the subscription state granted by a successful payment.
+   *
+   * Truth model:
+   * - Lifetime plan  → `isPremium: true`, `subscriptionEnd: null` (caller passes null).
+   * - Timed plan     → `isPremium: false`, `subscriptionEnd: <future date>`.
+   *
+   * The `isPremium` flag is no longer the access gate — `isPremiumUser` is —
+   * but we keep the flag set ONLY for lifetime so legacy queries that look
+   * for "permanent premium users" stay accurate.
+   *
+   * Defensive: a non-lifetime write will NOT overwrite an existing lifetime
+   * user (currentPlanType=lifetime OR isPremium=true with no subscriptionEnd).
+   * In that case the user is returned unchanged. This protects lifetime
+   * holders from being demoted by any unexpected downstream call.
+   */
   async setSubscriptionAfterPayment(
     userId,
     { subscriptionEnd, plan, currentPlanId = null, currentPlanType = null }
   ) {
-    return User.findByIdAndUpdate(
-      userId,
-      {
-        $set: {
-          isPremium: true,
-          subscriptionEnd,
-          plan,
-          currentPlanId,
-          currentPlanType,
-        },
-      },
-      { new: true }
-    )
-      .lean()
-      .exec();
+    const isLifetime = currentPlanType === 'lifetime';
+
+    const $set = {
+      isPremium: isLifetime,
+      subscriptionEnd,
+      plan,
+      currentPlanId,
+      currentPlanType,
+    };
+
+    if (isLifetime) {
+      return User.findByIdAndUpdate(userId, { $set }, { new: true }).lean().exec();
+    }
+
+    const filter = {
+      _id: userId,
+      $nor: [
+        { currentPlanType: 'lifetime' },
+        { isPremium: true, subscriptionEnd: null },
+      ],
+    };
+
+    const updated = await User.findOneAndUpdate(filter, { $set }, { new: true }).lean().exec();
+    if (updated) return updated;
+
+    return User.findById(userId).lean().exec();
   },
 };

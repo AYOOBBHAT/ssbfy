@@ -1,13 +1,54 @@
-import { View, Text, StyleSheet, Pressable, ScrollView, Platform } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { colors, brand } from '../theme/colors';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
+import { getSubscriptionStatus, formatPlanDate } from '../utils/subscriptionStatus';
+import { getProfileAnalytics } from '../services/profileAnalyticsService';
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
   const name = user?.name || 'Student';
   const isPremium = userHasPremiumAccess(user);
+  const plan = getSubscriptionStatus(user);
+
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          setAnalyticsLoading(true);
+          setAnalyticsError(false);
+          const data = await getProfileAnalytics();
+          if (!cancelled) setAnalytics(data);
+        } catch {
+          if (!cancelled) setAnalyticsError(true);
+        } finally {
+          if (!cancelled) setAnalyticsLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
+
+  const goPremium = (from) => navigation.navigate('Premium', { from });
+  const goToTests = () => navigation.navigate('Main', { screen: 'Tests' });
 
   return (
     <ScrollView
@@ -25,13 +66,17 @@ export default function ProfileScreen({ navigation }) {
             {user.email}
           </Text>
         ) : null}
-        {isPremium ? (
-          <View style={styles.premiumPill}>
-            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-            <Text style={styles.premiumPillText}>Premium active</Text>
-          </View>
-        ) : null}
       </View>
+
+      <PlanCard plan={plan} onPress={goPremium} />
+
+      <Text style={styles.sectionLabel}>Progress & Performance</Text>
+      <ProgressSection
+        analytics={analytics}
+        loading={analyticsLoading}
+        error={analyticsError}
+        onStart={goToTests}
+      />
 
       <Text style={styles.sectionLabel}>Account</Text>
       <View style={styles.card}>
@@ -70,21 +115,6 @@ export default function ProfileScreen({ navigation }) {
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>
       </View>
-      {!isPremium ? (
-        <View style={styles.card}>
-          <Pressable
-            onPress={() => navigation.navigate('Premium', { from: 'profile' })}
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-          >
-            <Ionicons name="star-outline" size={22} color={colors.primary} />
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>Go Premium</Text>
-              <Text style={styles.rowSub}>Unlimited practice & full library</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-          </Pressable>
-        </View>
-      ) : null}
       <Text style={styles.brandFoot}>
         {brand.name} — {brand.tagline}
       </Text>
@@ -101,13 +131,299 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
+function PlanCard({ plan, onPress }) {
+  const visual = visualForStatus(plan.status);
+
+  const onCta = () => {
+    if (plan.status === 'free') return onPress('profile');
+    if (plan.status === 'expired') return onPress('renew');
+    return onPress('manage');
+  };
+
+  return (
+    <View
+      style={[
+        styles.planCard,
+        { backgroundColor: visual.surface, borderColor: visual.border },
+      ]}
+    >
+      <View style={styles.planHeaderRow}>
+        <View style={[styles.planIconWrap, { backgroundColor: visual.iconBg }]}>
+          <Ionicons name={visual.icon} size={22} color={visual.iconColor} />
+        </View>
+        <View style={styles.planHeaderText}>
+          <Text style={[styles.planTitle, { color: visual.titleColor }]}>
+            {visual.title}
+          </Text>
+          <Text style={styles.planSubtitle} numberOfLines={2}>
+            {planSubtitleFor(plan)}
+          </Text>
+        </View>
+      </View>
+
+      {plan.status === 'active' && plan.subscriptionEnd ? (
+        <View style={styles.planMetaRow}>
+          <Ionicons name="calendar-outline" size={14} color={colors.muted} />
+          <Text style={styles.planMetaText}>
+            Valid till {formatPlanDate(plan.subscriptionEnd)}
+          </Text>
+        </View>
+      ) : null}
+
+      {plan.status === 'expired' && plan.subscriptionEnd ? (
+        <View style={styles.planMetaRow}>
+          <Ionicons name="time-outline" size={14} color={colors.muted} />
+          <Text style={styles.planMetaText}>
+            Expired on {formatPlanDate(plan.subscriptionEnd)}
+          </Text>
+        </View>
+      ) : null}
+
+      <Pressable
+        onPress={onCta}
+        style={({ pressed }) => [
+          styles.planCta,
+          { backgroundColor: visual.ctaBg },
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text style={[styles.planCtaText, { color: visual.ctaText }]}>
+          {ctaLabelFor(plan.status)}
+        </Text>
+        <Ionicons name="chevron-forward" size={18} color={visual.ctaText} />
+      </Pressable>
+    </View>
+  );
+}
+
+function planSubtitleFor(plan) {
+  if (plan.status === 'free') {
+    return 'Limited free mock tests available';
+  }
+  if (plan.status === 'lifetime') {
+    return 'Lifetime Access — never expires';
+  }
+  if (plan.status === 'active') {
+    const days = plan.daysRemaining;
+    const planLabel = plan.planName ? `${plan.planName} Plan` : 'Premium';
+    if (typeof days === 'number' && days > 0 && days <= 30) {
+      return `${planLabel} • ${days} day${days === 1 ? '' : 's'} remaining`;
+    }
+    return planLabel;
+  }
+  if (plan.status === 'expired') {
+    const planLabel = plan.planName ? `${plan.planName} Plan` : 'Premium';
+    return `Your ${planLabel} has ended. Renew to continue full access.`;
+  }
+  return '';
+}
+
+function ctaLabelFor(status) {
+  switch (status) {
+    case 'free':
+      return 'Go Premium';
+    case 'active':
+      return 'Renew / Manage Plan';
+    case 'lifetime':
+      return 'Manage Plan';
+    case 'expired':
+      return 'Renew Premium';
+    default:
+      return 'Go Premium';
+  }
+}
+
+function visualForStatus(status) {
+  switch (status) {
+    case 'lifetime':
+      return {
+        title: 'Lifetime Premium 👑',
+        icon: 'star',
+        iconColor: colors.accent,
+        iconBg: colors.accentSoft,
+        surface: colors.accentSoft,
+        border: colors.accentBorder,
+        titleColor: colors.text,
+        ctaBg: colors.accent,
+        ctaText: '#ffffff',
+      };
+    case 'active':
+      return {
+        title: 'Premium Active ✅',
+        icon: 'shield-checkmark',
+        iconColor: colors.success,
+        iconBg: colors.successSoft,
+        surface: colors.successSoft,
+        border: colors.success,
+        titleColor: colors.text,
+        ctaBg: colors.primary,
+        ctaText: colors.textOnPrimary,
+      };
+    case 'expired':
+      return {
+        title: 'Premium Expired',
+        icon: 'time-outline',
+        iconColor: colors.warning,
+        iconBg: colors.warningSoft,
+        surface: colors.warningSoft,
+        border: colors.warning,
+        titleColor: colors.text,
+        ctaBg: colors.primary,
+        ctaText: colors.textOnPrimary,
+      };
+    case 'free':
+    default:
+      return {
+        title: 'Free Plan',
+        icon: 'star-outline',
+        iconColor: colors.primary,
+        iconBg: colors.primarySoft,
+        surface: colors.card,
+        border: colors.border,
+        titleColor: colors.text,
+        ctaBg: colors.primary,
+        ctaText: colors.textOnPrimary,
+      };
+  }
+}
+
+function ProgressSection({ analytics, loading, error, onStart }) {
+  if (loading && !analytics) {
+    return (
+      <View style={[styles.progressCard, styles.progressLoading]}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.progressLoadingText}>Loading your progress…</Text>
+      </View>
+    );
+  }
+
+  if (error && !analytics) {
+    return (
+      <View style={[styles.progressCard, styles.progressEmpty]}>
+        <Ionicons name="cloud-offline-outline" size={26} color={colors.muted} />
+        <Text style={styles.progressEmptyTitle}>Progress unavailable</Text>
+        <Text style={styles.progressEmptySub}>
+          We couldn’t load your stats just now. Please try again in a moment.
+        </Text>
+      </View>
+    );
+  }
+
+  const a = analytics || {};
+  const totalMocks = Number(a.totalMocks) || 0;
+  const isNewUser = totalMocks === 0;
+
+  if (isNewUser) {
+    return (
+      <View style={[styles.progressCard, styles.progressEmpty]}>
+        <View style={styles.progressEmptyIconWrap}>
+          <Ionicons name="rocket-outline" size={24} color={colors.primary} />
+        </View>
+        <Text style={styles.progressEmptyTitle}>No progress yet</Text>
+        <Text style={styles.progressEmptySub}>
+          Start your first mock test to track your progress.
+        </Text>
+        <Pressable
+          onPress={onStart}
+          style={({ pressed }) => [styles.progressEmptyCta, pressed && styles.pressed]}
+        >
+          <Text style={styles.progressEmptyCtaText}>Take a Test</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textOnPrimary} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  const bestScore = Number(a.bestScore) || 0;
+  const currentStreak = Number(a.currentStreak) || 0;
+  const latestScore = Number(a.latestScore) || 0;
+  const averageScore = Number(a.averageScore) || 0;
+  const overallAccuracy = Number(a.overallAccuracy) || 0;
+  const totalQuestionsSolved = Number(a.totalQuestionsSolved) || 0;
+  const dailyPracticeCount = Number(a.dailyPracticeCount) || 0;
+  const smartPracticeCount = Number(a.smartPracticeCount) || 0;
+
+  return (
+    <View style={styles.progressCard}>
+      <View style={styles.heroStatsRow}>
+        <View style={[styles.heroStat, styles.heroStatBest]}>
+          <View style={styles.heroStatHead}>
+            <Ionicons name="trophy" size={14} color={colors.success} />
+            <Text style={[styles.heroStatLabel, { color: colors.success }]}>Best Score</Text>
+          </View>
+          <Text style={styles.heroStatValue}>{bestScore}%</Text>
+        </View>
+        <View style={[styles.heroStat, styles.heroStatStreak]}>
+          <View style={styles.heroStatHead}>
+            <Ionicons name="flame" size={14} color={colors.accent} />
+            <Text style={[styles.heroStatLabel, { color: colors.accent }]}>Current Streak</Text>
+          </View>
+          <Text style={styles.heroStatValue}>
+            {currentStreak} <Text style={styles.heroStatUnit}>{currentStreak === 1 ? 'Day' : 'Days'}</Text>
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.statGrid}>
+        <SmallStat label="Total Mocks" value={String(totalMocks)} />
+        <SmallStat label="Latest Score" value={`${latestScore}%`} />
+        <SmallStat label="Average Score" value={`${averageScore}%`} />
+        <SmallStat label="Accuracy" value={`${overallAccuracy}%`} />
+      </View>
+
+      <View style={styles.progressFooter}>
+        <View style={styles.progressFooterItem}>
+          <Ionicons name="checkmark-done-outline" size={14} color={colors.muted} />
+          <Text style={styles.progressFooterText}>
+            {compactNumber(totalQuestionsSolved)} questions solved
+          </Text>
+        </View>
+        {dailyPracticeCount > 0 ? (
+          <View style={styles.progressFooterItem}>
+            <Ionicons name="calendar-outline" size={14} color={colors.muted} />
+            <Text style={styles.progressFooterText}>
+              {dailyPracticeCount} daily {dailyPracticeCount === 1 ? 'practice' : 'practices'}
+            </Text>
+          </View>
+        ) : null}
+        {smartPracticeCount > 0 ? (
+          <View style={styles.progressFooterItem}>
+            <Ionicons name="bulb-outline" size={14} color={colors.muted} />
+            <Text style={styles.progressFooterText}>
+              {smartPracticeCount} smart {smartPracticeCount === 1 ? 'session' : 'sessions'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function SmallStat({ label, value }) {
+  return (
+    <View style={styles.smallStat}>
+      <Text style={styles.smallStatLabel}>{label}</Text>
+      <Text style={styles.smallStatValue}>{value}</Text>
+    </View>
+  );
+}
+
+function compactNumber(n) {
+  const v = Number(n) || 0;
+  if (v >= 1000) {
+    const k = Math.round((v / 1000) * 10) / 10;
+    return `${k}k`;
+  }
+  return String(v);
+}
+
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
   hero: {
     alignItems: 'center',
-    paddingVertical: 24,
-    marginBottom: 8,
+    paddingTop: 24,
+    paddingBottom: 16,
   },
   avatar: {
     width: 72,
@@ -142,23 +458,233 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     paddingHorizontal: 24,
   },
-  premiumPill: {
+
+  planCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    marginTop: 4,
+    marginBottom: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 14,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  planHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  planIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planHeaderText: { flex: 1, minWidth: 0 },
+  planTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  planSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  planMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: colors.successSoft,
-    borderWidth: 1,
-    borderColor: colors.success,
   },
-  premiumPillText: {
+  planMetaText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.success,
+    color: colors.text,
   },
+  planCta: {
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  planCtaText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  progressCard: {
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  progressLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 18,
+  },
+  progressLoadingText: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+  progressEmpty: {
+    alignItems: 'center',
+    paddingVertical: 22,
+    paddingHorizontal: 16,
+  },
+  progressEmptyIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  progressEmptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 4,
+  },
+  progressEmptySub: {
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+    maxWidth: 320,
+  },
+  progressEmptyCta: {
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  progressEmptyCtaText: {
+    color: colors.textOnPrimary,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  heroStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  heroStat: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+  },
+  heroStatBest: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
+  },
+  heroStatStreak: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentBorder,
+  },
+  heroStatHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroStatLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  heroStatValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
+    letterSpacing: -0.5,
+  },
+  heroStatUnit: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.muted,
+  },
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+    gap: 8,
+  },
+  smallStat: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    backgroundColor: colors.bg,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  smallStatLabel: {
+    fontSize: 11,
+    color: colors.muted,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  smallStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 2,
+  },
+  progressFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  progressFooterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  progressFooterText: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '500',
+  },
+
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
