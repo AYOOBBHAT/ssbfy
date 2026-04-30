@@ -5,6 +5,7 @@ import { getSupabaseServiceClient, isSupabasePdfStorageConfigured } from '../con
 import { env } from '../config/env.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
+import { logger } from '../utils/logger.js';
 
 /** Must match the Storage bucket name in Supabase Dashboard (default: pdf-notes). */
 const DEFAULT_PDF_BUCKET = 'pdf-notes';
@@ -121,8 +122,8 @@ export async function uploadTempPdfToSupabase(localFilePath) {
   const { publicUrl: fileUrl } = getPdfNotesPublicUrl(inBucket);
 
   // Exact URL written to MongoDB (must match Supabase Dashboard → Copy public URL shape).
-  console.log('[pdf-storage] fileUrl persisted to MongoDB (Supabase getPublicUrl):', fileUrl);
-  console.log('[pdf-storage] object path in bucket (storedName):', inBucket, 'bucket:', bucket);
+  logger.info('[pdf-storage] fileUrl persisted to MongoDB (Supabase getPublicUrl):', fileUrl);
+  logger.info('[pdf-storage] object path in bucket (storedName):', inBucket, 'bucket:', bucket);
 
   return {
     fileUrl,
@@ -144,9 +145,9 @@ export async function removePdfObjectFromSupabase(storedName) {
   try {
     const { error } = await supabase.storage.from(bucket).remove([inBucket]);
     if (error) {
-      console.warn('[supabase] failed to remove PDF object', { inBucket, error: error.message });
+      logger.warn('[supabase] failed to remove PDF object', { inBucket, error: error.message });
     }
   } catch (e) {
-    console.warn('[supabase] remove PDF exception', { inBucket, error: e?.message });
+    logger.warn('[supabase] remove PDF exception', { inBucket, error: e?.message });
   }
 }

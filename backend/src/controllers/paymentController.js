@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
 import { isPremiumUser } from '../utils/freeTierAccess.js';
 import { AppError } from '../utils/AppError.js';
+import { logger } from '../utils/logger.js';
 
 export const paymentController = {
   /**
@@ -13,7 +14,7 @@ export const paymentController = {
   webhook: asyncHandler(async (req, res) => {
     const secret = env.razorpayWebhookSecret;
     if (!secret) {
-      console.error('[PAYMENT WEBHOOK] RAZORPAY_WEBHOOK_SECRET is not set');
+      logger.error('[PAYMENT WEBHOOK] RAZORPAY_WEBHOOK_SECRET is not set');
       return res.status(503).json({
         success: false,
         message: 'Webhook signing not configured',
@@ -28,7 +29,7 @@ export const paymentController = {
 
     const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
     if (expected.length !== sig.length || !safeEqualHex(expected, sig)) {
-      console.warn('[PAYMENT WEBHOOK] Signature verification failed');
+      logger.warn('[PAYMENT WEBHOOK] Signature verification failed');
       return res.status(400).json({ success: false, message: 'Invalid signature' });
     }
 
@@ -44,7 +45,7 @@ export const paymentController = {
       return res.status(200).json({ success: true, ...result });
     } catch (err) {
       if (err instanceof AppError && err.statusCode < 500) {
-        console.warn('[PAYMENT WEBHOOK] Ack 200 (non-retryable):', err.message);
+        logger.warn('[PAYMENT WEBHOOK] Ack 200 (non-retryable):', err.message);
         return res.status(200).json({
           success: true,
           handled: false,

@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { subscriptionPlanRepository } from '../repositories/subscriptionPlanRepository.js';
+import { logger } from '../utils/logger.js';
 
 const PLAN_TYPES = ['monthly', 'quarterly', 'yearly', 'lifetime'];
 
@@ -288,7 +289,7 @@ export const adminSubscriptionPlanService = {
     // value. Either way, this plan ends up active again.
     await subscriptionPlanRepository.setActiveById(planId, true);
 
-    console.log(
+    logger.info(
       '[ADMIN] Atomic disable rolled back — would leave 0 active plans:',
       { planId: String(planId) }
     );

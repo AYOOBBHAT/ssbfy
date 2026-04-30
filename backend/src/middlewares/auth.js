@@ -2,6 +2,7 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { ROLE_VALUES, ROLES } from '../constants/roles.js';
 import { AppError } from '../utils/AppError.js';
 import { verifyToken } from '../utils/jwt.js';
+import { logger } from '../utils/logger.js';
 
 export function authenticate(req, res, next) {
   const header = req.headers.authorization;
@@ -60,7 +61,7 @@ export function authOptional(req, res, next) {
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      console.log('[ACCESS] Forbidden — required:', roles, 'got:', req.user?.role || 'anonymous');
+      logger.info('[ACCESS] Forbidden — required:', roles, 'got:', req.user?.role || 'anonymous');
       return next(new AppError('Forbidden', HTTP_STATUS.FORBIDDEN));
     }
     next();

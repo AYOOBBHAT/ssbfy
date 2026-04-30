@@ -9,6 +9,7 @@ import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
 import { FREE_TEST_LIMIT_MESSAGE, isPremiumUser } from '../utils/freeTierAccess.js';
+import { logger } from '../utils/logger.js';
 
 export const testController = {
   list: asyncHandler(async (req, res) => {
@@ -64,7 +65,7 @@ export const testController = {
 
     await userRepository.incrementFreeAttemptsUsed(userId);
 
-    console.log('[ACCESS] Device free attempt consumed (post-start):', {
+    logger.info('[ACCESS] Device free attempt consumed (post-start):', {
       deviceId: deviceId.slice(0, 12),
       freeAttemptsUsed: updatedDevice.freeAttemptsUsed,
       userId: String(userId),

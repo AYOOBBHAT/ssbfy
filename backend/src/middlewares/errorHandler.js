@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { env } from '../config/env.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
+import { logger } from '../utils/logger.js';
 
 function isMongoDuplicate(err) {
   return err.code === 11000;
@@ -50,7 +51,7 @@ export function errorHandler(err, req, res, next) {
   }
 
   if (env.nodeEnv !== 'production') {
-    console.error(err);
+    logger.error(err);
   }
 
   return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({

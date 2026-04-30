@@ -3,6 +3,7 @@ import { AppError } from '../utils/AppError.js';
 import { topicRepository } from '../repositories/topicRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
+import { logger } from '../utils/logger.js';
 
 export const topicService = {
   async list(filter = {}) {
@@ -121,7 +122,7 @@ export const topicService = {
     // reorders which go through the generic "updated" line.
     if (patch.isActive !== undefined && Boolean(patch.isActive) !== existing.isActive) {
       const verb = update.isActive ? 'enabled' : 'disabled';
-      console.log(`[ADMIN] Topic ${verb}:`, {
+      logger.info(`[ADMIN] Topic ${verb}:`, {
         id: String(existing._id),
         name: existing.name,
         userId: actorId,
@@ -130,7 +131,7 @@ export const topicService = {
     const nonStatusTouched =
       update.name !== undefined || update.order !== undefined;
     if (nonStatusTouched) {
-      console.log('[ADMIN] Topic updated:', {
+      logger.info('[ADMIN] Topic updated:', {
         id: String(existing._id),
         changes: pickChanges(existing, update),
         userId: actorId,

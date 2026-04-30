@@ -8,7 +8,6 @@ import {
   ScrollView,
   Pressable,
   Image,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -42,13 +41,6 @@ export default function LoginScreen({ navigation }) {
   function handleForgotPassword() {
     if (authSubmitting) return;
     navigation.navigate('ForgotPassword');
-  }
-
-  function handleGooglePlaceholder() {
-    Alert.alert(
-      'Coming soon',
-      'Google sign-in will be available in a future update.'
-    );
   }
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !authSubmitting;
@@ -155,27 +147,6 @@ export default function LoginScreen({ navigation }) {
               style={styles.primaryCta}
               textStyle={styles.primaryCtaText}
             />
-
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <Pressable
-              onPress={handleGooglePlaceholder}
-              disabled={authSubmitting}
-              style={({ pressed }) => [
-                styles.googleButton,
-                pressed && !authSubmitting && styles.googleButtonPressed,
-                authSubmitting && styles.googleButtonDisabled,
-              ]}
-            >
-              <View style={styles.googleG}>
-                <Text style={styles.googleGText}>G</Text>
-              </View>
-              <Text style={styles.googleLabel}>Continue with Google</Text>
-            </Pressable>
 
             <Pressable
               onPress={() => navigation.navigate('Signup')}

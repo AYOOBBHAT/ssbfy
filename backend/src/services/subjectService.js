@@ -2,6 +2,7 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
+import { logger } from '../utils/logger.js';
 
 export const subjectService = {
   async list(filter = {}) {
@@ -141,7 +142,7 @@ export const subjectService = {
     // line so the audit trail is complete, not just status-focused.
     if (patch.isActive !== undefined && Boolean(patch.isActive) !== existing.isActive) {
       const verb = update.isActive ? 'enabled' : 'disabled';
-      console.log(`[ADMIN] Subject ${verb}:`, {
+      logger.info(`[ADMIN] Subject ${verb}:`, {
         id: String(existing._id),
         name: existing.name,
         userId: actorId,
@@ -150,7 +151,7 @@ export const subjectService = {
     const nonStatusTouched =
       update.name !== undefined || update.order !== undefined;
     if (nonStatusTouched) {
-      console.log('[ADMIN] Subject updated:', {
+      logger.info('[ADMIN] Subject updated:', {
         id: String(existing._id),
         changes: pickChanges(existing, update),
         userId: actorId,

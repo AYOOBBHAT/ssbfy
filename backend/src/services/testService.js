@@ -4,6 +4,7 @@ import { testRepository } from '../repositories/testRepository.js';
 import { questionRepository } from '../repositories/questionRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Walk Question → (Subject, Topic) and split the provided id list into:
@@ -142,7 +143,7 @@ export const testService = {
       // parse them. One line per bad reference is enough — they share a
       // reason + id, nothing secret.
       for (const entry of invalid) {
-        console.warn('[test.create] invalid question reference', entry);
+        logger.warn('[test.create] invalid question reference', entry);
       }
       throw new AppError(
         'Test contains inactive or invalid questions',

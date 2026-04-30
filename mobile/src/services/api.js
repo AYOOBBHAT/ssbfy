@@ -1,10 +1,19 @@
 import axios from 'axios';
+import logger from '../utils/logger';
 
 /**
- * API base URL (LAN IP + `/api`). Change once for the whole app.
- * Do not use localhost — devices cannot reach your machine's loopback.
+ * API base URL is env-configurable for release channels.
+ * Must be HTTPS for production safety.
  */
-const API_BASE_URL = 'https://ssbfy.onrender.com/api';
+const PROD_API_FALLBACK = 'https://ssbfy.onrender.com/api';
+const API_BASE_URL = (() => {
+  const raw = String(process.env.EXPO_PUBLIC_API_BASE_URL || PROD_API_FALLBACK).trim();
+  const normalized = raw.replace(/\/+$/, '');
+  if (!normalized.startsWith('https://')) {
+    return PROD_API_FALLBACK;
+  }
+  return normalized;
+})();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -44,9 +53,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 401) {
-      console.log('[AUTH] Token expired or invalid');
+      logger.warn('[AUTH] Token expired or invalid');
     }
-    console.log('[API ERROR]:', error?.response?.data ?? error?.message ?? error);
+    logger.error('[API ERROR]:', error?.response?.data ?? error?.message ?? error);
     return Promise.reject(error);
   }
 );

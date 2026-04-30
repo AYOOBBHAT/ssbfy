@@ -9,6 +9,7 @@ import { paymentRepository } from '../repositories/paymentRepository.js';
 import { webhookEventRepository } from '../repositories/webhookEventRepository.js';
 import { subscriptionPlanRepository } from '../repositories/subscriptionPlanRepository.js';
 import { subscriptionPlanService } from './subscriptionPlanService.js';
+import { logger } from '../utils/logger.js';
 
 const RAZORPAY_ID_RE = /^[a-zA-Z0-9_-]+$/;
 const VERIFY_FAILED_MESSAGE = 'Payment verification failed. Please contact support.';
@@ -124,7 +125,7 @@ async function tryRecoverPlanFromOrderNotes(orderId, userId) {
       priceInr: Number(plan.priceInr),
     };
   } catch (err) {
-    console.log('[PAYMENT] Order notes recovery failed:', { orderId, message: err?.message });
+    logger.info('[PAYMENT] Order notes recovery failed:', { orderId, message: err?.message });
     return null;
   }
 }
@@ -136,7 +137,7 @@ async function readUserIdFromRazorpayOrder(orderId) {
     const uid = order?.notes?.userId ? String(order.notes.userId) : '';
     return uid || null;
   } catch (err) {
-    console.log('[PAYMENT] Order fetch for webhook userId failed:', {
+    logger.info('[PAYMENT] Order fetch for webhook userId failed:', {
       orderId,
       message: err?.message,
     });
@@ -165,7 +166,7 @@ async function healSubscriptionForRecordedPayment(userId, record) {
       subscriptionEndAt: subscriptionEnd,
     });
   }
-  console.log('[PAYMENT] Healing subscription for existing payment:', {
+  logger.info('[PAYMENT] Healing subscription for existing payment:', {
     userId: String(userId),
     paymentId: record?.razorpay_payment_id,
     planType: plan.type,
@@ -215,12 +216,12 @@ async function finalizePaidOrderFromTrustedState({
   const existing = await paymentRepository.findByPaymentId(paymentId);
   if (existing) {
     if (existing.userId.toString() !== String(userId)) {
-      console.log('[PAYMENT] Idempotency conflict — payment owned by another user:', { paymentId });
+      logger.info('[PAYMENT] Idempotency conflict — payment owned by another user:', { paymentId });
       throw new AppError('Payment already processed', HTTP_STATUS.CONFLICT);
     }
     await patchOrderVerificationMerge(existing.razorpay_order_id, incomeSource, webhookMeta);
     const user = await healSubscriptionForRecordedPayment(userId, existing);
-    console.log('[PAYMENT] Idempotent finalize (payment row exists):', {
+    logger.info('[PAYMENT] Idempotent finalize (payment row exists):', {
       userId: String(userId),
       paymentId,
       incomeSource,
@@ -265,7 +266,7 @@ async function finalizePaidOrderFromTrustedState({
   if (!record) {
     const recovered = await tryRecoverPlanFromOrderNotes(orderId, userId);
     if (!recovered) {
-      console.log('[PAYMENT] Finalize rejected — missing Payment snapshot and no recoverable plan:', {
+      logger.info('[PAYMENT] Finalize rejected — missing Payment snapshot and no recoverable plan:', {
         userId: String(userId),
         orderId,
         paymentId,
@@ -286,7 +287,7 @@ async function finalizePaidOrderFromTrustedState({
       verifiedByWebhook: false,
       verificationSource: null,
     });
-    console.log('[PAYMENT] Recovered plan snapshot from order notes (finalize):', {
+    logger.info('[PAYMENT] Recovered plan snapshot from order notes (finalize):', {
       userId: String(userId),
       orderId,
       planType: recovered.planType,
@@ -329,7 +330,7 @@ async function finalizePaidOrderFromTrustedState({
     throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
   }
 
-  console.log('[PAYMENT] Activation successful (finalize):', {
+  logger.info('[PAYMENT] Activation successful (finalize):', {
     userId: String(userId),
     paymentId,
     orderId,
@@ -391,7 +392,7 @@ export const paymentService = {
       verificationSource: null,
     });
 
-    console.log('[PAYMENT] Order created:', {
+    logger.info('[PAYMENT] Order created:', {
       userId: String(userId),
       order_id: order.id,
       amount: order.amount,
@@ -427,7 +428,7 @@ export const paymentService = {
       .digest('hex');
 
     if (expected.length !== signature.length || !safeEqualHex(expected, signature)) {
-      console.log('[PAYMENT] Signature verification failed:', { userId: String(userId), paymentId });
+      logger.info('[PAYMENT] Signature verification failed:', { userId: String(userId), paymentId });
       throw new AppError('Invalid payment signature', HTTP_STATUS.BAD_REQUEST);
     }
 
@@ -436,7 +437,7 @@ export const paymentService = {
     try {
       remote = await rzp.payments.fetch(paymentId);
     } catch (err) {
-      console.log('[PAYMENT] Razorpay fetch failed:', {
+      logger.info('[PAYMENT] Razorpay fetch failed:', {
         userId: String(userId),
         paymentId,
         message: err?.message,
@@ -445,7 +446,7 @@ export const paymentService = {
     }
 
     if (!remote || String(remote.order_id) !== orderId) {
-      console.log('[PAYMENT] Order id mismatch:', { userId: String(userId), paymentId });
+      logger.info('[PAYMENT] Order id mismatch:', { userId: String(userId), paymentId });
       throw new AppError('Payment does not match order', HTTP_STATUS.BAD_REQUEST);
     }
 
@@ -455,7 +456,7 @@ export const paymentService = {
       lateCheck?.razorpay_payment_id &&
       lateCheck.razorpay_payment_id !== paymentId
     ) {
-      console.log('[PAYMENT] Order already linked to another payment:', {
+      logger.info('[PAYMENT] Order already linked to another payment:', {
         orderId,
         expected: paymentId,
         existing: lateCheck.razorpay_payment_id,
@@ -491,7 +492,7 @@ export const paymentService = {
         event: eventName || 'unknown',
       });
       if (!inserted) {
-        console.log('[PAYMENT WEBHOOK] Duplicate event ignored:', { eventId, eventName });
+        logger.info('[PAYMENT WEBHOOK] Duplicate event ignored:', { eventId, eventName });
         return { handled: false, duplicate: true };
       }
     }
@@ -499,7 +500,7 @@ export const paymentService = {
     if (eventName === 'payment.captured' || eventName === 'payment.authorized') {
       const entity = parsedBody?.payload?.payment?.entity;
       if (!entity?.id || !entity.order_id) {
-        console.log('[PAYMENT WEBHOOK] Missing payment entity fields:', { eventName });
+        logger.info('[PAYMENT WEBHOOK] Missing payment entity fields:', { eventName });
         return { handled: false, reason: 'bad_payload' };
       }
       const paymentId = String(entity.id);
@@ -512,7 +513,7 @@ export const paymentService = {
       if (row?.userId) userId = String(row.userId);
       if (!userId) userId = await readUserIdFromRazorpayOrder(orderId);
       if (!userId) {
-        console.log('[PAYMENT WEBHOOK] No userId for order; cannot activate:', { orderId });
+        logger.info('[PAYMENT WEBHOOK] No userId for order; cannot activate:', { orderId });
         return { handled: false, reason: 'no_user' };
       }
 
@@ -540,14 +541,14 @@ export const paymentService = {
         const resp = await rzp.orders.fetchPayments(orderId);
         items = resp?.items || [];
       } catch (err) {
-        console.log('[PAYMENT WEBHOOK] fetchPayments failed:', { orderId, message: err?.message });
+        logger.info('[PAYMENT WEBHOOK] fetchPayments failed:', { orderId, message: err?.message });
         return { handled: false, reason: 'fetch_failed' };
       }
       const captured = items.find(
         (p) => p.status === 'captured' || p.status === 'authorized'
       );
       if (!captured) {
-        console.log('[PAYMENT WEBHOOK] order.paid but no captured payment in list:', { orderId });
+        logger.info('[PAYMENT WEBHOOK] order.paid but no captured payment in list:', { orderId });
         return { handled: false, reason: 'no_capture' };
       }
       let userId = null;
@@ -575,7 +576,7 @@ export const paymentService = {
         const row = await paymentRepository.findByOrderId(orderId);
         const ps = String(row?.paymentStatus || '').toLowerCase();
         if (ps === 'paid' || ps === 'captured' || ps === 'authorized') {
-          console.log('[PAYMENT WEBHOOK] Ignoring payment.failed — order already paid:', { orderId });
+          logger.info('[PAYMENT WEBHOOK] Ignoring payment.failed — order already paid:', { orderId });
           return { handled: true, eventName, reason: 'ignored_after_success' };
         }
         await paymentRepository.updateByOrderId(orderId, {
@@ -596,7 +597,7 @@ export const paymentService = {
         const row = await paymentRepository.findByOrderId(orderId);
         const ps = String(row?.paymentStatus || '').toLowerCase();
         if (ps === 'paid' || ps === 'captured' || ps === 'authorized') {
-          console.log('[PAYMENT WEBHOOK] Ignoring order terminal event — already paid:', {
+          logger.info('[PAYMENT WEBHOOK] Ignoring order terminal event — already paid:', {
             orderId,
             eventName,
           });
@@ -613,7 +614,7 @@ export const paymentService = {
       return { handled: true, eventName };
     }
 
-    console.log('[PAYMENT WEBHOOK] Unhandled event (acked):', { eventName });
+    logger.info('[PAYMENT WEBHOOK] Unhandled event (acked):', { eventName });
     return { handled: false, eventName, reason: 'unhandled' };
   },
 
@@ -634,7 +635,7 @@ export const paymentService = {
       const resp = await rzp.orders.fetchPayments(oid);
       items = resp?.items || [];
     } catch (err) {
-      console.log('[PAYMENT] Admin reconcile fetchPayments failed:', { oid, message: err?.message });
+      logger.info('[PAYMENT] Admin reconcile fetchPayments failed:', { oid, message: err?.message });
       throw new AppError('Could not reach Razorpay', HTTP_STATUS.BAD_GATEWAY);
     }
 

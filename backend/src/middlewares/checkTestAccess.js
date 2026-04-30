@@ -6,6 +6,7 @@ import { userRepository } from '../repositories/userRepository.js';
 import { deviceUsageRepository } from '../repositories/deviceUsageRepository.js';
 import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
 import { FREE_TEST_LIMIT_MESSAGE, isPremiumUser } from '../utils/freeTierAccess.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Requires `authenticate` first (sets req.user).
@@ -55,7 +56,7 @@ export const checkTestAccess = asyncHandler(async (req, res, next) => {
   const doc = await deviceUsageRepository.findByDeviceId(deviceId);
   const used = doc?.freeAttemptsUsed ?? 0;
   if (used >= limit) {
-    console.log('[ACCESS] Device free limit (pre-flight):', {
+    logger.info('[ACCESS] Device free limit (pre-flight):', {
       deviceId: deviceId.slice(0, 12),
       used,
       limit,

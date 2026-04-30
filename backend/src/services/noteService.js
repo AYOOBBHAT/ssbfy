@@ -4,6 +4,7 @@ import { noteRepository } from '../repositories/noteRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Walk Post → Subject → Topic and verify the triple is internally
@@ -177,7 +178,7 @@ export const noteService = {
       update.isActive !== before.isActive
     ) {
       const actorId = actor?.id ? String(actor.id) : 'unknown';
-      console.log(
+      logger.info(
         `[ADMIN] Note ${update.isActive ? 'enabled' : 'disabled'}:`,
         { id: String(id), userId: actorId }
       );

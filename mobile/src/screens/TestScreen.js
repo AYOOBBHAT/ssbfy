@@ -11,6 +11,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import api, { getApiErrorMessage } from '../services/api';
 import { submitTest } from '../services/testService';
 import { completeDailyPractice } from '../services/dailyPracticeService';
+import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
 import { colors } from '../theme/colors';
 
@@ -419,7 +420,7 @@ export default function TestScreen() {
         try {
           await completeDailyPractice();
         } catch (e) {
-          console.log('[DAILY] complete failed:', getApiErrorMessage(e));
+          logger.info('[DAILY] complete failed:', getApiErrorMessage(e));
         }
 
         navigation.navigate('Result', {

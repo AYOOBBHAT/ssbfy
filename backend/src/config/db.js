@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { env, isProd } from './env.js';
+import { logger } from '../utils/logger.js';
 
 export async function connectDb() {
   mongoose.set('strictQuery', true);
@@ -17,9 +18,9 @@ export async function connectDb() {
       await Promise.all(
         mongoose.modelNames().map((name) => mongoose.model(name).syncIndexes())
       );
-      console.log('[DB] Production indexes synced successfully');
+      logger.info('[DB] Production indexes synced successfully');
     } catch (err) {
-      console.error('[DB] Production index sync failed', err);
+      logger.error('[DB] Production index sync failed', err);
     }
   }
 }

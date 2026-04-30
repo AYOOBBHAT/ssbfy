@@ -17,6 +17,7 @@ import { User } from '../models/User.js';
 import { PasswordResetThrottle } from '../models/PasswordResetThrottle.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { sendPasswordResetOtp } from './emailService.js';
+import { logger } from '../utils/logger.js';
 
 /* -------------------- helpers -------------------- */
 
@@ -152,7 +153,7 @@ export const passwordResetService = {
       // identical to success so deliverability issues never reveal account
       // existence. We also clear OTP state so the account does not sit on
       // an unactionable hash.
-      console.error(
+      logger.error(
         '[forgot-password] Resend / email delivery failed:',
         err?.message || err
       );

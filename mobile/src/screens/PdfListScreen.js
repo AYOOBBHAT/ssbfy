@@ -20,6 +20,7 @@ import {
   getPosts,
   resolvePdfUrl,
 } from '../services/pdfService';
+import logger from '../utils/logger';
 import {
   getSavedMaterials,
   toggleSavedMaterial,
@@ -162,15 +163,13 @@ export default function PdfListScreen() {
     const id = pdf?._id;
     const finalUrl = resolvePdfUrl(pdf?.fileUrl);
     if (__DEV__) {
-      // eslint-disable-next-line no-console
-      console.log('PDF API RESPONSE (open):', {
+      logger.debug('PDF API RESPONSE (open):', {
         _id: pdf?._id,
         fileUrl: pdf?.fileUrl,
         storedName: pdf?.storedName,
         fileName: pdf?.fileName,
       });
-      // eslint-disable-next-line no-console
-      console.log('FINAL PDF URL:', finalUrl);
+      logger.debug('FINAL PDF URL:', finalUrl);
     }
     if (!finalUrl) {
       Alert.alert('Cannot open', 'This PDF has no valid link.');

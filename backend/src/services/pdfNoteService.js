@@ -3,6 +3,7 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { pdfNoteRepository } from '../repositories/pdfNoteRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
+import { logger } from '../utils/logger.js';
 
 function uniqueObjectIds(input) {
   const out = [];
@@ -159,7 +160,7 @@ export const pdfNoteService = {
     );
 
     const firstPostId = oids[0];
-    console.log('[PdfNote] saving fileUrl to MongoDB (exact value):', fileUrl);
+    logger.info('[PdfNote] saving fileUrl to MongoDB (exact value):', fileUrl);
     const created = await pdfNoteRepository.create({
       title: trimmedTitle,
       postIds: oids,
@@ -212,7 +213,7 @@ export const pdfNoteService = {
       update.isActive !== before.isActive
     ) {
       const actorId = actor?.id ? String(actor.id) : 'unknown';
-      console.log(
+      logger.info(
         `[ADMIN] PDF note ${update.isActive ? 'enabled' : 'disabled'}:`,
         { id: String(id), userId: actorId }
       );

@@ -2,6 +2,7 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { questionRepository } from '../repositories/questionRepository.js';
 import { userRepository } from '../repositories/userRepository.js';
+import { logger } from '../utils/logger.js';
 
 const DAILY_PRACTICE_LIMIT = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -79,7 +80,7 @@ export const dailyPracticeService = {
       // we return the canonical post-write state and an honest
       // `alreadyCompletedToday: true`. Crucially, we did NOT increment.
       const fresh = await userRepository.findById(userId);
-      console.log('[STREAK] claim lost (already completed today)', {
+      logger.info('[STREAK] claim lost (already completed today)', {
         userId: String(userId),
         streakCount: fresh?.streakCount ?? currentStreak,
         lastPracticeDate: fresh?.lastPracticeDate ?? lastDate,
@@ -91,7 +92,7 @@ export const dailyPracticeService = {
       };
     }
 
-    console.log('[STREAK] updated', {
+    logger.info('[STREAK] updated', {
       userId,
       streakCount: updated.streakCount,
       lastPracticeDate: updated.lastPracticeDate,

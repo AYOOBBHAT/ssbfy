@@ -11,6 +11,7 @@ import {
   resolvePdfUrl,
 } from '../services/pdfService';
 import { getApiErrorMessage } from '../services/api';
+import logger from '../utils/logger';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
 
@@ -360,7 +361,7 @@ export default function ResultScreen() {
         });
         if (!cancelled) setTopicMap(map);
       } catch (e) {
-        console.log('[TOPICS] failed to load:', getApiErrorMessage(e));
+        logger.info('[TOPICS] failed to load:', getApiErrorMessage(e));
       }
     })();
     return () => {
@@ -444,15 +445,13 @@ export default function ResultScreen() {
     const id = pdf?._id;
     const finalUrl = resolvePdfUrl(pdf?.fileUrl);
     if (__DEV__) {
-      // eslint-disable-next-line no-console
-      console.log('PDF API RESPONSE (open):', {
+      logger.debug('PDF API RESPONSE (open):', {
         _id: pdf?._id,
         fileUrl: pdf?.fileUrl,
         storedName: pdf?.storedName,
         fileName: pdf?.fileName,
       });
-      // eslint-disable-next-line no-console
-      console.log('FINAL PDF URL:', finalUrl);
+      logger.debug('FINAL PDF URL:', finalUrl);
     }
     if (!finalUrl) return;
     setOpeningPdfId(id);
