@@ -148,14 +148,36 @@ function PlanCard({ plan, onPress }) {
       ]}
     >
       <View style={styles.planHeaderRow}>
-        <View style={[styles.planIconWrap, { backgroundColor: visual.iconBg }]}>
+        <View
+          style={[
+            styles.planIconWrap,
+            { backgroundColor: visual.iconBg },
+            visual.iconWrapRadius != null && { borderRadius: visual.iconWrapRadius },
+          ]}
+        >
           <Ionicons name={visual.icon} size={22} color={visual.iconColor} />
         </View>
         <View style={styles.planHeaderText}>
-          <Text style={[styles.planTitle, { color: visual.titleColor }]}>
+          {plan.status === 'free' ? (
+            <Text style={styles.planCurrentLabel}>CURRENT PLAN</Text>
+          ) : null}
+          <Text
+            style={[
+              styles.planTitle,
+              { color: visual.titleColor },
+              visual.titleFontWeight != null && { fontWeight: visual.titleFontWeight },
+            ]}
+          >
             {visual.title}
           </Text>
-          <Text style={styles.planSubtitle} numberOfLines={2}>
+          <Text
+            style={[
+              styles.planSubtitle,
+              plan.status === 'free' && styles.planSubtitleFree,
+              visual.subtitleColor != null && { color: visual.subtitleColor },
+            ]}
+            numberOfLines={2}
+          >
             {planSubtitleFor(plan)}
           </Text>
         </View>
@@ -183,6 +205,7 @@ function PlanCard({ plan, onPress }) {
         onPress={onCta}
         style={({ pressed }) => [
           styles.planCta,
+          plan.status === 'free' && styles.planCtaFree,
           { backgroundColor: visual.ctaBg },
           pressed && styles.pressed,
         ]}
@@ -198,7 +221,7 @@ function PlanCard({ plan, onPress }) {
 
 function planSubtitleFor(plan) {
   if (plan.status === 'free') {
-    return 'Limited free mock tests available';
+    return 'Limited access to mock tests and features';
   }
   if (plan.status === 'lifetime') {
     return 'Lifetime Access — never expires';
@@ -249,15 +272,17 @@ function visualForStatus(status) {
       };
     case 'active':
       return {
-        title: 'Premium Active ✅',
-        icon: 'shield-checkmark',
-        iconColor: colors.success,
-        iconBg: colors.successSoft,
-        surface: colors.successSoft,
-        border: colors.success,
-        titleColor: colors.text,
-        ctaBg: colors.primary,
-        ctaText: colors.textOnPrimary,
+        title: 'Premium Active',
+        icon: 'checkmark-circle',
+        iconColor: '#4F46E5',
+        iconBg: '#E0E7FF',
+        surface: '#EEF2FF',
+        border: '#6366F1',
+        titleColor: '#4338CA',
+        titleFontWeight: '700',
+        subtitleColor: '#4B5563',
+        ctaBg: '#4F46E5',
+        ctaText: '#FFFFFF',
       };
     case 'expired':
       return {
@@ -276,13 +301,16 @@ function visualForStatus(status) {
       return {
         title: 'Free Plan',
         icon: 'star-outline',
-        iconColor: colors.primary,
-        iconBg: colors.primarySoft,
-        surface: colors.card,
-        border: colors.border,
-        titleColor: colors.text,
-        ctaBg: colors.primary,
-        ctaText: colors.textOnPrimary,
+        iconColor: '#4F46E5',
+        iconBg: '#E0E7FF',
+        iconWrapRadius: 12,
+        surface: '#F8FAFF',
+        border: '#E0E7FF',
+        titleColor: '#1F2937',
+        titleFontWeight: '700',
+        subtitleColor: '#6B7280',
+        ctaBg: '#4F46E5',
+        ctaText: '#FFFFFF',
       };
   }
 }
@@ -348,10 +376,10 @@ function ProgressSection({ analytics, loading, error, onStart }) {
       <View style={styles.heroStatsRow}>
         <View style={[styles.heroStat, styles.heroStatBest]}>
           <View style={styles.heroStatHead}>
-            <Ionicons name="trophy" size={14} color={colors.success} />
-            <Text style={[styles.heroStatLabel, { color: colors.success }]}>Best Score</Text>
+            <Ionicons name="trophy" size={14} color="#4338CA" />
+            <Text style={[styles.heroStatLabel, styles.heroStatLabelBest]}>Best Score</Text>
           </View>
-          <Text style={styles.heroStatValue}>{bestScore}%</Text>
+          <Text style={[styles.heroStatValue, styles.heroStatValueBest]}>{bestScore}%</Text>
         </View>
         <View style={[styles.heroStat, styles.heroStatStreak]}>
           <View style={styles.heroStatHead}>
@@ -488,6 +516,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   planHeaderText: { flex: 1, minWidth: 0 },
+  planCurrentLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
   planTitle: {
     fontSize: 17,
     fontWeight: '800',
@@ -498,6 +533,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 4,
     lineHeight: 18,
+  },
+  planSubtitleFree: {
+    marginTop: 6,
   },
   planMetaRow: {
     flexDirection: 'row',
@@ -519,6 +557,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+  },
+  planCtaFree: {
+    paddingHorizontal: 16,
   },
   planCtaText: {
     fontSize: 15,
@@ -606,8 +647,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   heroStatBest: {
-    backgroundColor: colors.successSoft,
-    borderColor: colors.success,
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
   },
   heroStatStreak: {
     backgroundColor: colors.accentSoft,
@@ -624,12 +665,18 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
+  heroStatLabelBest: {
+    color: '#4338CA',
+  },
   heroStatValue: {
     fontSize: 26,
     fontWeight: '800',
     color: colors.text,
     marginTop: 6,
     letterSpacing: -0.5,
+  },
+  heroStatValueBest: {
+    color: '#111827',
   },
   heroStatUnit: {
     fontSize: 14,

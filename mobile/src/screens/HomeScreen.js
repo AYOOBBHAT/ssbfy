@@ -17,7 +17,6 @@ import {
 } from '../services/api';
 import { getDailyPractice } from '../services/dailyPracticeService';
 import { colors, brand } from '../theme/colors';
-import { userHasPremiumAccess } from '../utils/premiumAccess';
 
 function greetingForHour() {
   const h = new Date().getHours();
@@ -69,7 +68,6 @@ export default function HomeScreen() {
   const name = user?.name || 'there';
   const streak = Number(user?.streakCount) || 0;
   const streakLabel = streak === 1 ? 'day' : 'days';
-  const isPremium = userHasPremiumAccess(user);
   const greet = greetingForHour();
 
   return (
@@ -84,45 +82,30 @@ export default function HomeScreen() {
           <Text style={styles.wave}>👋</Text>
         </Text>
         <Text style={styles.taglinePrompt}>Ready for today&apos;s practice?</Text>
-        {user?.email ? (
-          <Text style={styles.emailHint} numberOfLines={1}>
-            {user.email}
-          </Text>
-        ) : null}
       </View>
 
-      {isPremium ? (
-        <View style={styles.premiumActiveCard}>
-          <View style={styles.premiumActiveIcon}>
-            <Ionicons name="checkmark-circle" size={22} color={colors.success} />
-          </View>
-          <View style={styles.premiumActiveText}>
-            <Text style={styles.premiumActiveTitle}>Premium active</Text>
-            <Text style={styles.premiumActiveSub}>
-              Full access to mocks, PDFs, and unlimited practice on this device.
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <Pressable
-          onPress={() => navigation.navigate('Premium', { from: 'home' })}
-          style={({ pressed }) => [styles.premiumCta, pressed && styles.pressed]}
-        >
+      {user?.isPremium !== true ? (
+        <View style={styles.premiumCta}>
           <View style={styles.premiumCtaIconWrap}>
-            <Ionicons name="star" size={26} color={colors.primaryDark} />
+            <Ionicons name="rocket-outline" size={28} color="#4F46E5" />
           </View>
           <View style={styles.premiumCtaBody}>
-            <Text style={styles.premiumCtaTitle}>Go Premium</Text>
+            <Text style={styles.premiumCtaTitle}>Unlock Premium 🚀</Text>
             <Text style={styles.premiumCtaSub}>
-              Unlimited mocks, full PDF access, advanced practice & more
+              Unlimited mocks, full PDF access, and advanced practice
             </Text>
-            <View style={styles.premiumCtaRow}>
-              <Text style={styles.premiumCtaLink}>View plans</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.primary} />
-            </View>
+            <Pressable
+              onPress={() => navigation.navigate('Premium', { from: 'home' })}
+              style={({ pressed }) => [
+                styles.premiumCtaButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.premiumCtaButtonText}>Go Premium</Text>
+            </Pressable>
           </View>
-        </Pressable>
-      )}
+        </View>
+      ) : null}
 
       <View style={styles.heroCard}>
         <View style={styles.heroTop}>
@@ -130,9 +113,6 @@ export default function HomeScreen() {
             <Text style={styles.heroKicker}>Today&apos;s practice</Text>
             <Text style={styles.heroTitle}>10 questions</Text>
             <Text style={styles.heroSub}>Sharpen skills with a quick, focused drill.</Text>
-          </View>
-          <View style={styles.heroIconBadge}>
-            <Ionicons name="locate" size={26} color={colors.primary} />
           </View>
         </View>
         <View style={styles.streakRow}>
@@ -235,14 +215,6 @@ export default function HomeScreen() {
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>
-        <View style={styles.studyDivider} />
-        <View style={[styles.studyRow, styles.studyRowDisabled]}>
-          <Ionicons name="bookmark-outline" size={22} color={colors.muted} />
-          <View style={styles.studyRowText}>
-            <Text style={[styles.studyRowTitle, styles.mutedTitle]}>Saved material</Text>
-            <Text style={styles.studyRowSub}>Coming soon — bookmark PDFs & notes</Text>
-          </View>
-        </View>
       </View>
 
       <Text style={styles.footerBrand}>
@@ -281,82 +253,60 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 22,
   },
-  emailHint: {
-    fontSize: 11,
-    color: colors.muted,
-    marginTop: 12,
-    opacity: 0.85,
-  },
-
-  premiumActiveCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors.successSoft,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.success,
-    ...shadowCard,
-  },
-  premiumActiveIcon: { marginRight: 12, marginTop: 2 },
-  premiumActiveText: { flex: 1 },
-  premiumActiveTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  premiumActiveSub: {
-    fontSize: 13,
-    color: colors.muted,
-    marginTop: 4,
-    lineHeight: 18,
-  },
 
   premiumCta: {
     flexDirection: 'row',
-    backgroundColor: colors.card,
+    alignItems: 'flex-start',
+    backgroundColor: '#EEF2FF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    ...shadowCard,
+    borderWidth: 1.2,
+    borderColor: '#6366F1',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#312E81',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 10,
+      },
+      android: { elevation: 7 },
+    }),
   },
   premiumCtaIconWrap: {
     width: 52,
     height: 52,
-    borderRadius: 14,
-    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
+    backgroundColor: '#E0E7FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
-    borderWidth: 1,
-    borderColor: colors.primary,
   },
   premiumCtaBody: { flex: 1 },
   premiumCtaTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.primaryText,
-    letterSpacing: -0.2,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4338CA',
+    letterSpacing: -0.3,
+    marginBottom: 8,
   },
   premiumCtaSub: {
-    fontSize: 13,
-    color: colors.muted,
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  premiumCtaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    gap: 6,
-  },
-  premiumCtaLink: {
     fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 22,
+  },
+  premiumCtaButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#4F46E5',
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    marginTop: 14,
+  },
+  premiumCtaButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '700',
-    color: colors.primary,
   },
 
   heroCard: {
@@ -371,9 +321,6 @@ const styles = StyleSheet.create({
     ...shadowCard,
   },
   heroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 16,
   },
   heroKicker: {
@@ -396,16 +343,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 20,
     maxWidth: '88%',
-  },
-  heroIconBadge: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.primary,
   },
   streakRow: {
     flexDirection: 'row',
@@ -512,7 +449,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-  studyRowDisabled: { opacity: 0.65 },
   studyDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border,
@@ -520,7 +456,6 @@ const styles = StyleSheet.create({
   },
   studyRowText: { flex: 1 },
   studyRowTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
-  mutedTitle: { color: colors.muted },
   studyRowSub: { fontSize: 12, color: colors.muted, marginTop: 2, lineHeight: 16 },
 
   footerBrand: {
