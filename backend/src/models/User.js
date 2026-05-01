@@ -61,6 +61,6 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-userSchema.index({ email: 1 });
+// Unique email index comes from `unique: true` on the path — do not add a second `schema.index({ email })`.
 
 export const User = mongoose.model('User', userSchema);

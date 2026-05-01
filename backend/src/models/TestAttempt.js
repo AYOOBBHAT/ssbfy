@@ -79,13 +79,11 @@ const testAttemptSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     testId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Test',
       required: true,
-      index: true,
     },
     questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Question' }],
     answers: { type: [answerItemSchema], default: [] },
@@ -106,8 +104,8 @@ const testAttemptSchema = new mongoose.Schema(
 );
 
 testAttemptSchema.index({ userId: 1, testId: 1 });
-testAttemptSchema.index({ userId: 1, testId: 1, endTime: 1 });
-// Optimizes queries shaped like: { userId, endTime } (status lookup / resume checks).
+// Note: do not add a second non-partial { userId, testId, endTime } index — it duplicates
+// the partial unique index below (same key pattern).
 testAttemptSchema.index({ userId: 1, endTime: 1, testId: 1 });
 // Optimizes completed-attempt history scans sorted by recency.
 testAttemptSchema.index(
