@@ -60,24 +60,32 @@ export async function openRazorpayForOrder(order, user) {
   }
 }
 
+/** True when the user backed out of checkout (not a flaky UPI/SDK error). */
+export function isPaymentCancelledError(error) {
+  if (!error) return false;
+  const code = error.code != null ? String(error.code) : '';
+  const desc = typeof error.description === 'string' ? error.description : '';
+  const lower = `${code} ${desc}`.toLowerCase();
+  return (
+    lower.includes('cancel') ||
+    code === '2' ||
+    code === 'BACK_BUTTON' ||
+    desc.toLowerCase().includes('payment cancelled')
+  );
+}
+
 /**
  * Maps Razorpay / network / API failures to short, trustworthy copy.
  */
 export function formatPaymentError(error) {
   if (!error) return 'Something went wrong. Please try again.';
 
-  const code = error.code != null ? String(error.code) : '';
-  const desc = typeof error.description === 'string' ? error.description : '';
-  const lower = `${code} ${desc}`.toLowerCase();
-
-  if (
-    lower.includes('cancel') ||
-    code === '2' ||
-    code === 'BACK_BUTTON' ||
-    desc.toLowerCase().includes('payment cancelled')
-  ) {
+  if (isPaymentCancelledError(error)) {
     return 'Payment was cancelled.';
   }
+
+  const code = error.code != null ? String(error.code) : '';
+  const desc = typeof error.description === 'string' ? error.description : '';
 
   if (error.message && String(error.message).includes('dev build')) {
     return String(error.message);

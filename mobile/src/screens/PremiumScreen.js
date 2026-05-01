@@ -16,6 +16,7 @@ import {
   openRazorpayForOrder,
   formatPaymentError,
   getSubscriptionPlans,
+  isPaymentCancelledError,
 } from '../services/paymentService';
 import { colors } from '../theme/colors';
 
@@ -46,6 +47,8 @@ export default function PremiumScreen() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [selectedId, setSelectedId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationHint, setVerificationHint] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
@@ -91,10 +94,28 @@ export default function PremiumScreen() {
     navigation.navigate('Main', { screen: 'Home' });
   }, [navigation]);
 
+  /** `GET /users/me` via refreshUser — matches backend premium (timed + lifetime). */
+  const confirmPremiumFromBackend = useCallback(async () => {
+    let u = await refreshUser?.();
+    if (userHasPremiumAccess(u)) return true;
+    await new Promise((r) => setTimeout(r, 4000));
+    u = await refreshUser?.();
+    return userHasPremiumAccess(u);
+  }, [refreshUser]);
+
   const handleUpgrade = useCallback(async () => {
     if (busy || isPremium) return;
     setError(null);
     setBusy(true);
+    setVerifying(false);
+    setVerificationHint('');
+
+    const failNotConfirmed = () => {
+      setError(
+        'Payment could not be confirmed yet. If you were charged, wait a moment and check Profile, or contact support.'
+      );
+    };
+
     try {
       if (!selectedPlan?._id) {
         setError('No subscription plans are available right now.');
@@ -106,30 +127,70 @@ export default function PremiumScreen() {
         return;
       }
 
-      const paymentData = await openRazorpayForOrder(order, user);
+      let paymentData = null;
+      try {
+        paymentData = await openRazorpayForOrder(order, user);
+      } catch (openErr) {
+        if (isPaymentCancelledError(openErr)) {
+          setError('Payment was cancelled.');
+          return;
+        }
+        setVerifying(true);
+        setVerificationHint('Checking payment status...');
+        const ok = await confirmPremiumFromBackend();
+        if (ok) {
+          setSuccess(true);
+          return;
+        }
+        failNotConfirmed();
+        return;
+      }
+
+      setVerifying(true);
+      setVerificationHint('Verifying payment...');
+
       const orderId = paymentData?.razorpay_order_id;
       const paymentId = paymentData?.razorpay_payment_id;
       const signature = paymentData?.razorpay_signature;
 
-      if (!orderId || !paymentId || !signature) {
-        setError('Payment did not return a complete receipt. Please contact support if you were charged.');
-        return;
+      if (orderId && paymentId && signature) {
+        try {
+          await verifyPremiumPayment({
+            razorpay_order_id: orderId,
+            razorpay_payment_id: paymentId,
+            razorpay_signature: signature,
+          });
+        } catch {
+          // Client verify can fail while webhook still activates premium.
+        }
       }
 
-      await verifyPremiumPayment({
-        razorpay_order_id: orderId,
-        razorpay_payment_id: paymentId,
-        razorpay_signature: signature,
-      });
-
-      await refreshUser?.();
-      setSuccess(true);
+      const ok = await confirmPremiumFromBackend();
+      if (ok) {
+        setSuccess(true);
+        return;
+      }
+      failNotConfirmed();
     } catch (e) {
+      setVerifying(true);
+      setVerificationHint('Checking payment status...');
+      try {
+        const ok = await confirmPremiumFromBackend();
+        if (ok) {
+          setSuccess(true);
+          return;
+        }
+      } finally {
+        setVerifying(false);
+        setVerificationHint('');
+      }
       setError(formatPaymentError(e));
     } finally {
       setBusy(false);
+      setVerifying(false);
+      setVerificationHint('');
     }
-  }, [busy, isPremium, selectedPlan, user, refreshUser]);
+  }, [busy, isPremium, selectedPlan, user, refreshUser, confirmPremiumFromBackend]);
 
   if (isPremium) {
     return (
@@ -216,12 +277,12 @@ export default function PremiumScreen() {
           <Pressable
             key={String(plan?._id)}
             onPress={() => setSelectedId(String(plan?._id))}
-            disabled={busy}
+            disabled={busy || verifying}
             style={({ pressed }) => [
               styles.planCard,
               active && styles.planCardActive,
               recommended && styles.planCardRecommended,
-              pressed && !busy && styles.pressed,
+              pressed && !busy && !verifying && styles.pressed,
             ]}
           >
             {recommended ? (
@@ -249,16 +310,23 @@ export default function PremiumScreen() {
         </View>
       ) : null}
 
+      {verifying && verificationHint ? (
+        <View style={styles.verifyingBanner}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={styles.verifyingText}>{verificationHint}</Text>
+        </View>
+      ) : null}
+
       <Pressable
         onPress={handleUpgrade}
-        disabled={busy || plansLoading || plans.length === 0}
+        disabled={busy || verifying || plansLoading || plans.length === 0}
         style={({ pressed }) => [
           styles.primaryBtn,
-          (busy || plansLoading || plans.length === 0) && styles.primaryBtnDisabled,
-          pressed && !busy && styles.pressed,
+          (busy || verifying || plansLoading || plans.length === 0) && styles.primaryBtnDisabled,
+          pressed && !busy && !verifying && styles.pressed,
         ]}
       >
-        {busy ? (
+        {busy || verifying ? (
           <ActivityIndicator color={colors.textOnPrimary} />
         ) : (
           <Text style={styles.primaryBtnText}>Upgrade Now</Text>
@@ -267,8 +335,11 @@ export default function PremiumScreen() {
 
       <Pressable
         onPress={() => (navigation.canGoBack() ? navigation.goBack() : goHome())}
-        disabled={busy}
-        style={({ pressed }) => [styles.secondaryBtn, pressed && !busy && styles.pressed]}
+        disabled={busy || verifying}
+        style={({ pressed }) => [
+          styles.secondaryBtn,
+          pressed && !busy && !verifying && styles.pressed,
+        ]}
       >
         <Text style={styles.secondaryBtnText}>Maybe Later</Text>
       </Pressable>
@@ -424,6 +495,25 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  verifyingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+  },
+  verifyingText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primaryText,
+    lineHeight: 20,
   },
 
   primaryBtn: {
