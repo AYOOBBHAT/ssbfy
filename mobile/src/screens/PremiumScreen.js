@@ -37,6 +37,10 @@ const FROM_COPY = {
   home: 'Upgrade when you’re ready — no pressure.',
 };
 
+/** Shown while polling `GET /users/me` — never trust Razorpay UI alone. */
+const VERIFYING_HINT = 'Verifying payment...';
+const BACKEND_POLL_MS = 3000;
+
 export default function PremiumScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -98,7 +102,7 @@ export default function PremiumScreen() {
   const confirmPremiumFromBackend = useCallback(async () => {
     let u = await refreshUser?.();
     if (userHasPremiumAccess(u)) return true;
-    await new Promise((r) => setTimeout(r, 4000));
+    await new Promise((r) => setTimeout(r, BACKEND_POLL_MS));
     u = await refreshUser?.();
     return userHasPremiumAccess(u);
   }, [refreshUser]);
@@ -135,19 +139,11 @@ export default function PremiumScreen() {
           setError('Payment was cancelled.');
           return;
         }
-        setVerifying(true);
-        setVerificationHint('Checking payment status...');
-        const ok = await confirmPremiumFromBackend();
-        if (ok) {
-          setSuccess(true);
-          return;
-        }
-        failNotConfirmed();
-        return;
+        // UPI/SDK may report failure while webhook still captures — verify via backend only.
       }
 
       setVerifying(true);
-      setVerificationHint('Verifying payment...');
+      setVerificationHint(VERIFYING_HINT);
 
       const orderId = paymentData?.razorpay_order_id;
       const paymentId = paymentData?.razorpay_payment_id;
@@ -161,7 +157,7 @@ export default function PremiumScreen() {
             razorpay_signature: signature,
           });
         } catch {
-          // Client verify can fail while webhook still activates premium.
+          /* client verify optional; webhook + /me is truth */
         }
       }
 
@@ -173,7 +169,7 @@ export default function PremiumScreen() {
       failNotConfirmed();
     } catch (e) {
       setVerifying(true);
-      setVerificationHint('Checking payment status...');
+      setVerificationHint(VERIFYING_HINT);
       try {
         const ok = await confirmPremiumFromBackend();
         if (ok) {

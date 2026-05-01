@@ -74,17 +74,24 @@ export function isPaymentCancelledError(error) {
   );
 }
 
+/** Default when Razorpay/API is vague — prefer checking backend over alarming copy. */
+const CHECKING_STATUS = 'Checking payment status...';
+
+function isGenericSomethingWrong(msg) {
+  if (msg == null) return false;
+  return /something\s+went\s+wrong/i.test(String(msg));
+}
+
 /**
  * Maps Razorpay / network / API failures to short, trustworthy copy.
  */
 export function formatPaymentError(error) {
-  if (!error) return 'Something went wrong. Please try again.';
+  if (!error) return CHECKING_STATUS;
 
   if (isPaymentCancelledError(error)) {
     return 'Payment was cancelled.';
   }
 
-  const code = error.code != null ? String(error.code) : '';
   const desc = typeof error.description === 'string' ? error.description : '';
 
   if (error.message && String(error.message).includes('dev build')) {
@@ -102,10 +109,16 @@ export function formatPaymentError(error) {
     return 'Network issue. Check your connection and try again.';
   }
 
-  if (apiMsg && apiMsg !== 'Something went wrong') {
+  if (apiMsg) {
+    if (isGenericSomethingWrong(apiMsg) || apiMsg === 'Something went wrong') {
+      return CHECKING_STATUS;
+    }
     return apiMsg;
   }
 
-  if (desc) return desc;
-  return 'Payment could not be completed. Please try again.';
+  if (desc) {
+    if (isGenericSomethingWrong(desc)) return CHECKING_STATUS;
+    return desc;
+  }
+  return CHECKING_STATUS;
 }
