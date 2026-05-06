@@ -66,7 +66,7 @@ export default function PrivacyPolicy() {
             <li>Contact us for privacy-related concerns</li>
           </ul>
           <p>
-            Email: <a href="mailto: support.ssbfy@gmail.com">support@ssbfy.com</a>
+            Email: <a href="mailto: support.ssbfy@gmail.com"> support.ssbfy@gmail.com</a>
           </p>
         </section>
 
