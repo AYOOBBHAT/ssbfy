@@ -183,8 +183,41 @@ function projectQuestion(q) {
   };
 }
 
-function projectQuestions(list) {
-  return Array.isArray(list) ? list.map(projectQuestion) : list;
+/**
+ * Strip answers and explanation for student-facing / untrusted API responses.
+ * Full scoring and admin flows must use {@link projectQuestion} / repo reads instead.
+ */
+function normalizeRef(ref) {
+  if (ref == null) return ref;
+  if (typeof ref === 'object' && ref !== null && ref._id != null) {
+    const { _id, name } = ref;
+    return name != null ? { _id, name } : _id;
+  }
+  return ref;
+}
+
+export function projectPublicQuestion(q) {
+  if (!q) return q;
+  const postIds = Array.isArray(q.postIds)
+    ? q.postIds.map((p) => (p && typeof p === 'object' && p._id != null ? p._id : p))
+    : q.postIds;
+
+  return {
+    _id: q._id,
+    questionText: q.questionText,
+    options: Array.isArray(q.options) ? [...q.options] : [],
+    subjectId: normalizeRef(q.subjectId),
+    topicId: normalizeRef(q.topicId),
+    postIds,
+    difficulty: q.difficulty,
+    questionType: q.questionType || QUESTION_TYPES.SINGLE_CORRECT,
+    questionImage: q.questionImage || '',
+    year: q.year ?? null,
+  };
+}
+
+export function projectPublicQuestions(list) {
+  return Array.isArray(list) ? list.map(projectPublicQuestion) : list;
 }
 
 /**
@@ -313,7 +346,7 @@ export const questionService = {
         throw new AppError(`Invalid question id in ids: ${id}`, HTTP_STATUS.BAD_REQUEST);
       }
     }
-    const questions = projectQuestions(
+    const questions = projectPublicQuestions(
       await questionRepository.findActiveByIds(idTokens)
     );
     return { questions, total: questions.length, limit: questions.length, skip: 0 };
@@ -353,7 +386,7 @@ export const questionService = {
       questionRepository.findAll(filter, { limit, skip, sort }),
     ]);
 
-    return { questions: projectQuestions(questions), total, limit, skip };
+    return { questions: projectPublicQuestions(questions), total, limit, skip };
   },
 
   /**
@@ -494,7 +527,7 @@ export const questionService = {
     if (!Array.isArray(topicIds) || topicIds.length === 0) {
       throw new AppError('topicIds is required', HTTP_STATUS.BAD_REQUEST);
     }
-    const questions = projectQuestions(
+    const questions = projectPublicQuestions(
       await questionRepository.findRandomByTopics(topicIds, limit)
     );
     // A caller with only sparse / brand-new topics might legitimately get
@@ -532,7 +565,7 @@ export const questionService = {
     }
 
     const raw = await questionRepository.findRandomSmartPractice(match, safeLimit);
-    return { questions: projectQuestions(raw) };
+    return { questions: projectPublicQuestions(raw) };
   },
 
   async getById(id) {
@@ -540,7 +573,7 @@ export const questionService = {
     if (!q || !q.isActive) {
       throw new AppError('Question not found', HTTP_STATUS.NOT_FOUND);
     }
-    return projectQuestion(q);
+    return projectPublicQuestion(q);
   },
 
   async create(body) {

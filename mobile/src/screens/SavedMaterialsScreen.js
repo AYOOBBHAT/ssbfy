@@ -5,7 +5,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import { getApiErrorMessage } from '../services/api';
 import { getSavedMaterials, toggleSavedMaterial } from '../services/savedMaterialService';
-import { resolvePdfUrl } from '../services/pdfService';
+import { resolvePdfOpenUrl } from '../services/pdfService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
 
@@ -23,7 +23,7 @@ export default function SavedMaterialsScreen() {
   const [savedNotes, setSavedNotes] = useState([]);
   const [workingId, setWorkingId] = useState(null);
   const openSavedPdf = async (item) => {
-    const finalUrl = resolvePdfUrl(item?.fileUrl);
+    const finalUrl = resolvePdfOpenUrl(item);
     if (!finalUrl) {
       Alert.alert('Cannot open', 'This PDF has no valid link.');
       return;

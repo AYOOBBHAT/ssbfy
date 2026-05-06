@@ -14,7 +14,7 @@ export const pdfNoteRepository = {
       title: data.title,
       postIds: data.postIds,
       postId: data.postId,
-      fileUrl: data.fileUrl,
+      fileUrl: data.fileUrl ?? '',
       fileName: data.fileName,
       storedName: data.storedName,
       fileSize: data.fileSize,

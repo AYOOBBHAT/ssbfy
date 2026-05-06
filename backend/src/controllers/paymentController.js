@@ -7,53 +7,76 @@ import { isPremiumUser } from '../utils/freeTierAccess.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * Log-safe fields only (no raw body, signatures, or secrets).
+ */
+function webhookLogContext(parsed) {
+  const eventType = String(parsed?.event || '');
+  const eventId =
+    parsed?.id != null && String(parsed.id).trim() ? String(parsed.id).trim() : null;
+
+  let orderId = null;
+  let paymentId = null;
+  const payEnt = parsed?.payload?.payment?.entity;
+  if (payEnt) {
+    if (payEnt.order_id != null) orderId = String(payEnt.order_id);
+    if (payEnt.id != null) paymentId = String(payEnt.id);
+  }
+  const ordEnt = parsed?.payload?.order?.entity;
+  if (ordEnt?.id != null && !orderId) orderId = String(ordEnt.id);
+
+  return { eventId, eventType, orderId, paymentId };
+}
+
 export const paymentController = {
   /**
    * Public Razorpay webhook — `RAZORPAY_WEBHOOK_SECRET` + raw body HMAC only.
    */
-  webhook: asyncHandler(async (req, res) => {
-    const secret = env.razorpayWebhookSecret;
-    if (!secret) {
-      logger.error('[PAYMENT WEBHOOK] RAZORPAY_WEBHOOK_SECRET is not set');
-      return res.status(503).json({
-        success: false,
-        message: 'Webhook signing not configured',
-      });
-    }
-
-    const sig = String(req.get('X-Razorpay-Signature') || '').trim();
-    const raw = req.rawBody;
-    if (!sig || !Buffer.isBuffer(raw) || raw.length === 0) {
-      return res.status(400).json({ success: false, message: 'Invalid webhook request' });
-    }
-
-    const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
-    if (expected.length !== sig.length || !safeEqualHex(expected, sig)) {
-      logger.warn('[PAYMENT WEBHOOK] Signature verification failed');
-      return res.status(400).json({ success: false, message: 'Invalid signature' });
-    }
-
-    let parsed;
+  webhook: asyncHandler(async (req, res, next) => {
     try {
-      parsed = JSON.parse(raw.toString('utf8'));
-    } catch {
-      return res.status(400).json({ success: false, message: 'Invalid JSON body' });
-    }
-
-    try {
-      const result = await paymentService.processRazorpayWebhookEvent(parsed);
-      return res.status(200).json({ success: true, ...result });
-    } catch (err) {
-      if (err instanceof AppError && err.statusCode < 500) {
-        logger.warn('[PAYMENT WEBHOOK] Ack 200 (non-retryable):', err.message);
-        return res.status(200).json({
-          success: true,
-          handled: false,
-          reason: 'app_error',
-          message: err.message,
-        });
+      const secret = env.razorpayWebhookSecret;
+      if (!secret) {
+        logger.error('[PAYMENT WEBHOOK] signing secret not configured');
+        return res.sendStatus(200);
       }
-      throw err;
+
+      const sig = String(req.get('X-Razorpay-Signature') || '').trim();
+      const raw = req.rawBody;
+      if (!sig || !Buffer.isBuffer(raw) || raw.length === 0) {
+        logger.warn('[PAYMENT WEBHOOK] missing signature or raw body');
+        return res.sendStatus(200);
+      }
+
+      const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+      if (expected.length !== sig.length || !safeEqualHex(expected, sig)) {
+        logger.warn('[PAYMENT WEBHOOK] signature verification failed');
+        return res.sendStatus(200);
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw.toString('utf8'));
+      } catch {
+        logger.warn('[PAYMENT WEBHOOK] invalid JSON body');
+        return res.sendStatus(200);
+      }
+
+      const ctx = webhookLogContext(parsed);
+
+      try {
+        await paymentService.processRazorpayWebhookEvent(parsed);
+        return res.sendStatus(200);
+      } catch (err) {
+        if (err instanceof AppError && err.statusCode < 500) {
+          logger.warn('Webhook acknowledged (non-retryable)', { ...ctx, statusCode: err.statusCode });
+          return res.sendStatus(200);
+        }
+        logger.error('Webhook processing failed', { ...ctx, errorName: err?.name });
+        return next(err);
+      }
+    } catch (err) {
+      logger.error('Webhook unexpected failure', { errorName: err?.name });
+      return next(err);
     }
   }),
 

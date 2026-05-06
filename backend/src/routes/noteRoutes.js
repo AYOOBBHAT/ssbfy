@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { noteController } from '../controllers/noteController.js';
 import { pdfNoteController } from '../controllers/pdfNoteController.js';
 import { adminChain } from '../middlewares/adminGuard.js';
-import { authOptional } from '../middlewares/auth.js';
+import { authOptional, authenticate } from '../middlewares/auth.js';
 import { validateRequest } from '../middlewares/validate.js';
 import { handlePdfUpload } from '../middlewares/upload.js';
 import {
@@ -23,12 +23,11 @@ const router = Router();
 // Declared BEFORE the text-note routes because `GET /pdfs` must not be
 // captured by any `/:id` pattern on text notes below.
 
-// `authOptional` so an authenticated admin can pass `includeInactive=true`
-// from the management UI; anonymous callers always get the active-only
-// list (the controller gates the flag on role).
+// Premium or admin only; anonymous callers get 401. Admins may pass
+// `includeInactive=true` for the management UI.
 router.get(
   '/pdfs',
-  authOptional,
+  authenticate,
   listPdfNotesValidators,
   validateRequest,
   pdfNoteController.list

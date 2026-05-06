@@ -15,15 +15,16 @@ import savedMaterialRoutes from './savedMaterialRoutes.js';
 import subscriptionPlanRoutes from './subscriptionPlanRoutes.js';
 import adminSubscriptionPlanRoutes from './adminSubscriptionPlanRoutes.js';
 import adminPaymentRoutes from './adminPaymentRoutes.js';
+import { apiLimiter } from '../middlewares/upstashRateLimiter.js';
 
 const router = Router();
 
 router.use('/auth', authRoutes);
-router.use('/users', userRoutes);
+router.use('/users', apiLimiter, userRoutes);
 router.use('/posts', postRoutes);
 router.use('/subjects', subjectRoutes);
 router.use('/topics', topicRoutes);
-router.use('/questions', questionRoutes);
+router.use('/questions', apiLimiter, questionRoutes);
 router.use('/tests', testRoutes);
 router.use('/notes', noteRoutes);
 router.use('/results', resultRoutes);

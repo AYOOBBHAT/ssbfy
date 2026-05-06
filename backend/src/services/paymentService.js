@@ -492,7 +492,7 @@ export const paymentService = {
         event: eventName || 'unknown',
       });
       if (!inserted) {
-        logger.info('[PAYMENT WEBHOOK] Duplicate event ignored:', { eventId, eventName });
+        logger.info('Webhook processed', { eventId, eventType: eventName, orderId: null, paymentId: null });
         return { handled: false, duplicate: true };
       }
     }
@@ -500,7 +500,13 @@ export const paymentService = {
     if (eventName === 'payment.captured' || eventName === 'payment.authorized') {
       const entity = parsedBody?.payload?.payment?.entity;
       if (!entity?.id || !entity.order_id) {
-        logger.info('[PAYMENT WEBHOOK] Missing payment entity fields:', { eventName });
+        logger.info('Webhook processed', {
+          eventId,
+          eventType: eventName,
+          orderId: null,
+          paymentId: null,
+          reason: 'bad_payload',
+        });
         return { handled: false, reason: 'bad_payload' };
       }
       const paymentId = String(entity.id);
@@ -513,7 +519,13 @@ export const paymentService = {
       if (row?.userId) userId = String(row.userId);
       if (!userId) userId = await readUserIdFromRazorpayOrder(orderId);
       if (!userId) {
-        logger.info('[PAYMENT WEBHOOK] No userId for order; cannot activate:', { orderId });
+        logger.info('Webhook processed', {
+          eventId,
+          eventType: eventName,
+          orderId,
+          paymentId,
+          reason: 'no_user',
+        });
         return { handled: false, reason: 'no_user' };
       }
 
@@ -526,6 +538,12 @@ export const paymentService = {
         incomeSource: 'webhook',
         webhookMeta: { eventId },
       });
+      logger.info('Webhook processed', {
+        eventId,
+        eventType: eventName,
+        orderId,
+        paymentId,
+      });
       return { handled: true, eventName };
     }
 
@@ -533,6 +551,13 @@ export const paymentService = {
       const orderEnt = parsedBody?.payload?.order?.entity;
       const orderId = orderEnt?.id ? String(orderEnt.id) : null;
       if (!orderId) {
+        logger.info('Webhook processed', {
+          eventId,
+          eventType: eventName,
+          orderId: null,
+          paymentId: null,
+          reason: 'bad_payload',
+        });
         return { handled: false, reason: 'bad_payload' };
       }
       const rzp = getClient();
@@ -541,30 +566,59 @@ export const paymentService = {
         const resp = await rzp.orders.fetchPayments(orderId);
         items = resp?.items || [];
       } catch (err) {
-        logger.info('[PAYMENT WEBHOOK] fetchPayments failed:', { orderId, message: err?.message });
+        logger.info('Webhook processed', {
+          eventId,
+          eventType: eventName,
+          orderId,
+          paymentId: null,
+          reason: 'fetch_failed',
+          errorName: err?.name,
+        });
         return { handled: false, reason: 'fetch_failed' };
       }
       const captured = items.find(
         (p) => p.status === 'captured' || p.status === 'authorized'
       );
       if (!captured) {
-        logger.info('[PAYMENT WEBHOOK] order.paid but no captured payment in list:', { orderId });
+        logger.info('Webhook processed', {
+          eventId,
+          eventType: eventName,
+          orderId,
+          paymentId: null,
+          reason: 'no_capture',
+        });
         return { handled: false, reason: 'no_capture' };
       }
       let userId = null;
       const row = await paymentRepository.findByOrderId(orderId);
       if (row?.userId) userId = String(row.userId);
       if (!userId) userId = await readUserIdFromRazorpayOrder(orderId);
-      if (!userId) return { handled: false, reason: 'no_user' };
+      if (!userId) {
+        logger.info('Webhook processed', {
+          eventId,
+          eventType: eventName,
+          orderId,
+          paymentId: String(captured.id),
+          reason: 'no_user',
+        });
+        return { handled: false, reason: 'no_user' };
+      }
 
+      const paymentIdPaid = String(captured.id);
       await finalizePaidOrderFromTrustedState({
         userId,
         orderId,
-        paymentId: String(captured.id),
+        paymentId: paymentIdPaid,
         amountPaise: Number(captured.amount),
         remoteStatus: captured.status,
         incomeSource: 'webhook',
         webhookMeta: { eventId },
+      });
+      logger.info('Webhook processed', {
+        eventId,
+        eventType: eventName,
+        orderId,
+        paymentId: paymentIdPaid,
       });
       return { handled: true, eventName };
     }
@@ -576,7 +630,13 @@ export const paymentService = {
         const row = await paymentRepository.findByOrderId(orderId);
         const ps = String(row?.paymentStatus || '').toLowerCase();
         if (ps === 'paid' || ps === 'captured' || ps === 'authorized') {
-          logger.info('[PAYMENT WEBHOOK] Ignoring payment.failed — order already paid:', { orderId });
+          logger.info('Webhook processed', {
+            eventId,
+            eventType: eventName,
+            orderId,
+            paymentId: entity?.id != null ? String(entity.id) : null,
+            reason: 'ignored_after_success',
+          });
           return { handled: true, eventName, reason: 'ignored_after_success' };
         }
         await paymentRepository.updateByOrderId(orderId, {
@@ -587,6 +647,12 @@ export const paymentService = {
           lastWebhookEventId: eventId || undefined,
         });
       }
+      logger.info('Webhook processed', {
+        eventId,
+        eventType: eventName,
+        orderId,
+        paymentId: entity?.id != null ? String(entity.id) : null,
+      });
       return { handled: true, eventName };
     }
 
@@ -597,9 +663,12 @@ export const paymentService = {
         const row = await paymentRepository.findByOrderId(orderId);
         const ps = String(row?.paymentStatus || '').toLowerCase();
         if (ps === 'paid' || ps === 'captured' || ps === 'authorized') {
-          logger.info('[PAYMENT WEBHOOK] Ignoring order terminal event — already paid:', {
+          logger.info('Webhook processed', {
+            eventId,
+            eventType: eventName,
             orderId,
-            eventName,
+            paymentId: null,
+            reason: 'ignored_after_success',
           });
           return { handled: true, eventName, reason: 'ignored_after_success' };
         }
@@ -611,10 +680,22 @@ export const paymentService = {
           lastWebhookEventId: eventId || undefined,
         });
       }
+      logger.info('Webhook processed', {
+        eventId,
+        eventType: eventName,
+        orderId,
+        paymentId: null,
+      });
       return { handled: true, eventName };
     }
 
-    logger.info('[PAYMENT WEBHOOK] Unhandled event (acked):', { eventName });
+    logger.info('Webhook processed', {
+      eventId,
+      eventType: eventName,
+      orderId: null,
+      paymentId: null,
+      reason: 'unhandled',
+    });
     return { handled: false, eventName, reason: 'unhandled' };
   },
 

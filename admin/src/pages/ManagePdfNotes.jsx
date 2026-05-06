@@ -326,9 +326,9 @@ export default function ManagePdfNotes() {
                     <div className="helper" style={{ opacity: 0.9 }}>
                       {formatSize(pdf.fileSize)} · {formatDate(pdf.createdAt)}
                     </div>
-                    {pdf.fileUrl ? (
+                    {pdf.signedUrl ? (
                       <a
-                        href={pdf.fileUrl}
+                        href={pdf.signedUrl}
                         target="_blank"
                         rel="noreferrer noopener"
                         className="helper"

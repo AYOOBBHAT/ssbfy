@@ -8,11 +8,24 @@ import {
   signupValidators,
   verifyOtpValidators,
 } from '../validators/authValidators.js';
+import { authLimiter, otpLimiter } from '../middlewares/upstashRateLimiter.js';
 
 const router = Router();
 
-router.post('/signup', signupValidators, validateRequest, authController.signup);
-router.post('/login', loginValidators, validateRequest, authController.login);
+router.post(
+  '/signup',
+  authLimiter,
+  signupValidators,
+  validateRequest,
+  authController.signup
+);
+router.post(
+  '/login',
+  authLimiter,
+  loginValidators,
+  validateRequest,
+  authController.login
+);
 
 /**
  * Forgot Password flow (logged-out users only).
@@ -37,6 +50,8 @@ router.post('/login', loginValidators, validateRequest, authController.login);
  */
 router.post(
   '/forgot-password/send-otp',
+  authLimiter,
+  otpLimiter,
   sendOtpValidators,
   validateRequest,
   authController.sendOtp
@@ -44,6 +59,8 @@ router.post(
 
 router.post(
   '/forgot-password/verify-otp',
+  authLimiter,
+  otpLimiter,
   verifyOtpValidators,
   validateRequest,
   authController.verifyOtp
@@ -51,6 +68,7 @@ router.post(
 
 router.post(
   '/forgot-password/reset-password',
+  authLimiter,
   resetPasswordValidators,
   validateRequest,
   authController.resetPassword

@@ -61,7 +61,7 @@ export const savedMaterialRepository = {
           materialType: 1,
           pdfId: '$pdf._id',
           title: '$pdf.title',
-          fileUrl: '$pdf.fileUrl',
+          storedName: '$pdf.storedName',
           postTitle: '$post.name',
           postName: '$post.name',
           createdAt: '$createdAt',

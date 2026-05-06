@@ -15,10 +15,8 @@ const EXAM_PDFS_PREFIX = 'exam-pdfs';
 
 /**
  * The Storage API sometimes returns a path that already includes the bucket
- * segment, or a `fullPath` that duplicates it. `getPublicUrl` expects only
- * the key *inside* the bucket — otherwise the URL can point at
- * `/storage/v1/s3/...` or a broken doubled path. Normalize so we only ever
- * pass a bucket-relative key to `getPublicUrl`.
+ * segment, or a `fullPath` that duplicates it. `createSignedUrl` / `remove`
+ * expect only the key *inside* the bucket. Normalize to avoid doubled paths.
  */
 export function normalizePathWithinBucket(rawPath, bucket) {
   if (typeof rawPath !== 'string' || !rawPath.trim()) {
@@ -47,11 +45,10 @@ function assertReady() {
 }
 
 /**
- * Build the canonical public URL for an object in `pdf-notes` using ONLY
- * supabase.storage.from(bucket).getPublicUrl(path) → data.publicUrl.
- * No string concatenation.
+ * Short-lived signed URL for a bucket-relative object key (private bucket).
+ * @param {string} pathWithinBucket - Key inside the configured bucket, e.g. exam-pdfs/foo.pdf
  */
-export function getPdfNotesPublicUrl(pathWithinBucket) {
+export async function getSignedPdfUrl(pathWithinBucket) {
   assertReady();
   const supabase = getSupabaseServiceClient();
   if (!supabase) {
@@ -60,32 +57,26 @@ export function getPdfNotesPublicUrl(pathWithinBucket) {
   const bucket = getPdfBucket();
   const inBucket = normalizePathWithinBucket(pathWithinBucket, bucket);
   if (!inBucket) {
-    throw new AppError('Missing path for public URL', HTTP_STATUS.BAD_REQUEST);
+    throw new AppError('Missing path for signed URL', HTTP_STATUS.BAD_REQUEST);
   }
-  const { data } = supabase.storage.from(bucket).getPublicUrl(inBucket);
-  const publicUrl = data?.publicUrl;
-  if (!publicUrl || !/^https:\/\//i.test(String(publicUrl))) {
-    throw new AppError('Storage did not return a public HTTPS URL', HTTP_STATUS.BAD_GATEWAY);
-  }
-  const u = String(publicUrl).trim();
-  if (u.includes('/storage/v1/s3')) {
+  const ttl = env.pdfSignedUrlTtlSeconds;
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(inBucket, ttl);
+  if (error) {
     throw new AppError(
-      'Refusing invalid Storage URL shape (/storage/v1/s3). Check object path and bucket name.',
+      error.message || 'Failed to create signed PDF URL',
       HTTP_STATUS.BAD_GATEWAY
     );
   }
-  if (!u.includes('/storage/v1/object/public/')) {
-    throw new AppError(
-      'Public URL must use /storage/v1/object/public/ (Supabase). Check SUPABASE_URL and bucket.',
-      HTTP_STATUS.BAD_GATEWAY
-    );
+  const signedUrl = data?.signedUrl?.trim();
+  if (!signedUrl || !/^https:\/\//i.test(signedUrl)) {
+    throw new AppError('Storage did not return a signed HTTPS URL', HTTP_STATUS.BAD_GATEWAY);
   }
-  return { publicUrl: u, inBucket, bucket };
+  return signedUrl;
 }
 
 /**
- * Upload a local temp PDF into Supabase Storage. Persists `data.publicUrl`
- * from getPublicUrl only. `storedName` = bucket-relative key (for remove).
+ * Upload a local temp PDF into Supabase Storage (private bucket).
+ * Returns only the bucket-relative `storedName` — never a permanent public URL.
  */
 export async function uploadTempPdfToSupabase(localFilePath) {
   assertReady();
@@ -119,15 +110,8 @@ export async function uploadTempPdfToSupabase(localFilePath) {
     throw new AppError('Storage upload returned no usable path', HTTP_STATUS.BAD_GATEWAY);
   }
 
-  const { publicUrl: fileUrl } = getPdfNotesPublicUrl(inBucket);
-
-  // Exact URL written to MongoDB (must match Supabase Dashboard → Copy public URL shape).
-  logger.info('[pdf-storage] fileUrl persisted to MongoDB (Supabase getPublicUrl):', fileUrl);
-  logger.info('[pdf-storage] object path in bucket (storedName):', inBucket, 'bucket:', bucket);
-
   return {
-    fileUrl,
-    /** Path within bucket — used for delete/rollback and stored in DB */
+    /** Path within bucket — used for signing, delete/rollback, and stored in DB */
     storedName: inBucket,
   };
 }
@@ -145,9 +129,9 @@ export async function removePdfObjectFromSupabase(storedName) {
   try {
     const { error } = await supabase.storage.from(bucket).remove([inBucket]);
     if (error) {
-      logger.warn('[supabase] failed to remove PDF object', { inBucket, error: error.message });
+      logger.warn('[supabase] failed to remove PDF object', { error: error.message });
     }
   } catch (e) {
-    logger.warn('[supabase] remove PDF exception', { inBucket, error: e?.message });
+    logger.warn('[supabase] remove PDF exception', { error: e?.message });
   }
 }

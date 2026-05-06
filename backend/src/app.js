@@ -4,33 +4,46 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import './models/index.js';
 import apiRoutes from './routes/index.js';
-import { env } from './config/env.js';
+import { env, normalizeCorsOrigin } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
+
+const CORS_DENIED_MESSAGE = 'Not allowed by CORS';
+
+/** Production: ALLOWED_ORIGINS only (no *). Dev: any origin. Mobile & Razorpay webhook pass when Origin is absent. */
+const corsOptions = {
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin(origin, callback) {
+    if (env.nodeEnv === 'development') {
+      return callback(null, true);
+    }
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (env.allowedOrigins.includes(normalizeCorsOrigin(origin))) {
+      return callback(null, true);
+    }
+    return callback(new Error(CORS_DENIED_MESSAGE));
+  },
+};
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
-// CORS — open to the world for API access.
-// - Mobile (React Native) clients do not send an Origin header at all, so CORS
-//   is effectively bypassed for them; this config is mainly for web clients.
-// - We use Bearer tokens (not cookies), so `credentials: true` is intentionally
-//   omitted — it is incompatible with origin: "*" per the CORS spec.
-// - The `cors` package handles OPTIONS preflight automatically.
-app.use(
-  cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(
   express.json({
     limit: '1mb',
     verify: (req, res, buf) => {
       // Razorpay webhook HMAC is computed over the raw JSON bytes.
-      if (req.originalUrl === '/api/payments/webhook') {
+      const pathOnly = String(req.originalUrl || '').split('?')[0];
+      if (pathOnly === '/api/payments/webhook') {
         req.rawBody = buf;
       }
     },
@@ -52,6 +65,12 @@ app.get('/api', (req, res) => {
 app.use('/api', apiRoutes);
 
 app.use(notFoundHandler);
+app.use((err, req, res, next) => {
+  if (err?.message === CORS_DENIED_MESSAGE) {
+    return res.status(403).json({ success: false, message: CORS_DENIED_MESSAGE });
+  }
+  return next(err);
+});
 app.use(errorHandler);
 
 export default app;

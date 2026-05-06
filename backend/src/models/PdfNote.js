@@ -29,12 +29,12 @@ const pdfNoteSchema = new mongoose.Schema(
       },
     ],
 
-    // Public URL the clients actually fetch. For local disk storage this
-    // is something like "/uploads/pdfs/abc123.pdf"; for a future S3 or
-    // Cloudinary migration this becomes the absolute CDN URL. The model
-    // is storage-agnostic — only the service/middleware knows how it was
-    // produced.
-    fileUrl: { type: String, required: true },
+    /**
+     * Legacy absolute URL for older rows (e.g. public Supabase / Cloudinary).
+     * New uploads keep this empty; clients must use short-lived `signedUrl`
+     * from the API. Do not expose this field in HTTP responses.
+     */
+    fileUrl: { type: String, default: '' },
 
     // Original name the uploader picked — shown in the UI so students
     // see "Syllabus.pdf" instead of the random storage id.

@@ -349,10 +349,9 @@ export async function updateNote(id, { title, content, isActive } = {}) {
 /* ---------------- PDF Notes ---------------- */
 
 /**
- * List uploaded PDF notes. Pass `{ postId }` to scope to a post and
- * `{ includeInactive: true }` to include disabled uploads (admin-only
- * on the server; the server silently drops the flag for non-admins).
- * PDFs with `postIds` containing that post are included.
+ * List uploaded PDF notes. Requires authentication; premium or admin.
+ * Pass `{ postId }` to scope to a post and `{ includeInactive: true }` (admin only).
+ * Each item includes a short-lived `signedUrl`, not a permanent public URL.
  */
 export async function getPdfNotes(params = {}) {
   const query = {};

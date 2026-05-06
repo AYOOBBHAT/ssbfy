@@ -8,7 +8,7 @@ import { getNotes, previewOf } from '../services/noteService';
 import {
   formatFileSize,
   getPdfNotes,
-  resolvePdfUrl,
+  resolvePdfOpenUrl,
 } from '../services/pdfService';
 import { getApiErrorMessage } from '../services/api';
 import logger from '../utils/logger';
@@ -443,12 +443,11 @@ export default function ResultScreen() {
    */
   const handleOpenPdf = async (pdf) => {
     const id = pdf?._id;
-    const finalUrl = resolvePdfUrl(pdf?.fileUrl);
+    const finalUrl = resolvePdfOpenUrl(pdf);
     if (__DEV__) {
       logger.debug('PDF API RESPONSE (open):', {
         _id: pdf?._id,
-        fileUrl: pdf?.fileUrl,
-        storedName: pdf?.storedName,
+        signedUrl: pdf?.signedUrl,
         fileName: pdf?.fileName,
       });
       logger.debug('FINAL PDF URL:', finalUrl);

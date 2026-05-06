@@ -6,12 +6,14 @@ import { AppError } from '../utils/AppError.js';
 import { uploadTempPdfToSupabase, removePdfObjectFromSupabase } from '../services/pdfSupabaseStorage.js';
 import { unlinkTempFile } from '../middlewares/upload.js';
 import { ROLES } from '../constants/roles.js';
+import { userRepository } from '../repositories/userRepository.js';
+import { isPremiumUser } from '../utils/freeTierAccess.js';
+import { logger } from '../utils/logger.js';
 
 /**
- * Admin-only bypass: an authenticated admin may pass `includeInactive=true`
- * on the GET to see disabled PDFs in the management UI. Anyone else
- * (anonymous or authenticated non-admin) always gets the active-only
- * list, even if they try to sneak the flag.
+ * Admin-only flag: an authenticated admin may pass `includeInactive=true`
+ * on the GET to see disabled PDFs in the management UI. Non-admins always
+ * get the active-only list, even if they try to sneak the flag.
  */
 function shouldIncludeInactive(req) {
   const wanted = String(req.query.includeInactive || '').toLowerCase() === 'true';
@@ -19,10 +21,25 @@ function shouldIncludeInactive(req) {
 }
 
 export const pdfNoteController = {
-  /** GET /api/notes/pdfs?postId=&includeInactive= */
+  /** GET /api/notes/pdfs?postId=&includeInactive= — requires auth; premium or admin. */
   list: asyncHandler(async (req, res) => {
+    const user = await userRepository.findById(req.user.id);
+    if (!user) {
+      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+    }
+    const isAdmin = req.user.role === ROLES.ADMIN;
+    if (!isPremiumUser(user) && !isAdmin) {
+      throw new AppError('Premium required', HTTP_STATUS.FORBIDDEN);
+    }
+
+    logger.info('[PdfNote] list', {
+      userId: String(req.user.id),
+      isAdmin,
+      premium: isPremiumUser(user),
+    });
+
     const { postId } = req.query;
-    const pdfs = await pdfNoteService.list({
+    const pdfs = await pdfNoteService.listForClient({
       postId,
       includeInactive: shouldIncludeInactive(req),
     });
@@ -49,7 +66,7 @@ export const pdfNoteController = {
    *   - title  (required)
    *   - postIds (JSON) and/or postId (legacy)
    *
-   * Flow: temp file → Supabase Storage (public URL) → MongoDB metadata →
+   * Flow: temp file → Supabase Storage (private object) → MongoDB metadata →
    * delete temp file. If DB write fails, remove the Storage object and temp file.
    */
   upload: asyncHandler(async (req, res) => {
@@ -65,7 +82,7 @@ export const pdfNoteController = {
     let supabaseObjectPath = null;
 
     try {
-      const { fileUrl, storedName } = await uploadTempPdfToSupabase(localPath);
+      const { storedName } = await uploadTempPdfToSupabase(localPath);
       supabaseObjectPath = storedName;
 
       const { title, postId, postIds } = req.body;
@@ -74,13 +91,15 @@ export const pdfNoteController = {
         title,
         postId,
         postIds,
-        fileUrl,
+        fileUrl: '',
         fileName: file.originalname,
         storedName,
         fileSize: Number(file.size) || 0,
         mimeType: file.mimetype || 'application/pdf',
         uploadedBy: req.user?.id || null,
       });
+
+      logger.info('PDF uploaded', { pdfId: String(note._id) });
 
       return sendCreated(res, { pdf: note }, 'PDF uploaded');
     } catch (err) {

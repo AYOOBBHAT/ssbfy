@@ -3,6 +3,7 @@ import { AppError } from '../utils/AppError.js';
 import { savedMaterialRepository } from '../repositories/savedMaterialRepository.js';
 import { noteRepository } from '../repositories/noteRepository.js';
 import { pdfNoteRepository } from '../repositories/pdfNoteRepository.js';
+import { getSignedPdfUrl } from './pdfSupabaseStorage.js';
 
 function makePreview(content, max = 120) {
   const normalized = typeof content === 'string' ? content.replace(/\s+/g, ' ').trim() : '';
@@ -57,14 +58,33 @@ export const savedMaterialService = {
     ]);
 
     return {
-      savedPdfs: (savedPdfs || []).map((p) => ({
-        savedId: p.savedId,
-        pdfId: p.pdfId,
-        title: p.title || 'Untitled PDF',
-        fileUrl: p.fileUrl || '',
-        postTitle: p.postTitle || p.postName || '',
-        createdAt: p.createdAt,
-      })),
+      savedPdfs: (
+        await Promise.all(
+          (savedPdfs || []).map(async (p) => {
+            const key = typeof p.storedName === 'string' ? p.storedName.trim() : '';
+            if (!key) {
+              return null;
+            }
+            let signedUrl = '';
+            try {
+              signedUrl = await getSignedPdfUrl(key);
+            } catch {
+              signedUrl = '';
+            }
+            if (!signedUrl) {
+              return null;
+            }
+            return {
+              savedId: p.savedId,
+              pdfId: p.pdfId,
+              title: p.title || 'Untitled PDF',
+              signedUrl,
+              postTitle: p.postTitle || p.postName || '',
+              createdAt: p.createdAt,
+            };
+          })
+        )
+      ).filter(Boolean),
       savedNotes: (savedNotes || []).map((n) => ({
         savedId: n.savedId,
         noteId: n.noteId,

@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -49,6 +50,13 @@ export default function ProfileScreen({ navigation }) {
 
   const goPremium = (from) => navigation.navigate('Premium', { from });
   const goToTests = () => navigation.navigate('Main', { screen: 'Tests' });
+  const openLegalUrl = useCallback(async (url) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      // Silently ignore if device cannot open URL.
+    }
+  }, []);
 
   return (
     <ScrollView
@@ -113,6 +121,31 @@ export default function ProfileScreen({ navigation }) {
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+        </Pressable>
+      </View>
+      <Text style={styles.sectionLabel}>Legal</Text>
+      <View style={styles.card}>
+        <Pressable
+          onPress={() => openLegalUrl('https://ssbfy.vercel.app/privacy-policy')}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
+          <Ionicons name="document-text-outline" size={22} color={colors.text} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Privacy Policy</Text>
+            <Text style={styles.rowSub}>How we collect and use your data</Text>
+          </View>
+          <Ionicons name="open-outline" size={20} color={colors.muted} />
+        </Pressable>
+        <Pressable
+          onPress={() => openLegalUrl('https://ssbfy.vercel.app/terms-and-conditions')}
+          style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.pressed]}
+        >
+          <Ionicons name="shield-checkmark-outline" size={22} color={colors.text} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Terms & Conditions</Text>
+            <Text style={styles.rowSub}>Usage rules, payments, and subscriptions</Text>
+          </View>
+          <Ionicons name="open-outline" size={20} color={colors.muted} />
         </Pressable>
       </View>
       <Text style={styles.brandFoot}>
@@ -766,6 +799,10 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
   rowSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  rowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
   brandFoot: {
     fontSize: 12,
     color: colors.muted,

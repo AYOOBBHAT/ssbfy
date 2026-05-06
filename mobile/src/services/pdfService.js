@@ -42,6 +42,14 @@ export function resolvePdfUrl(fileUrl) {
 }
 
 /**
+ * Prefer short-lived `signedUrl` from the API; fall back to legacy `fileUrl` if present.
+ */
+export function resolvePdfOpenUrl(pdfOrRow) {
+  const raw = pdfOrRow?.signedUrl || pdfOrRow?.fileUrl;
+  return resolvePdfUrl(raw);
+}
+
+/**
  * Format a raw byte count as a human-readable size. Returns `''` for
  * missing/invalid values so callers can conditionally render the label.
  */
@@ -91,8 +99,8 @@ export function clearPdfCaches() {
  * returns every active PDF, which is what we want for the "All posts"
  * browse view.
  *
- * Returns `{ pdfs: [...] }`. Each pdf includes `fileUrl`, `fileName`,
- * `fileSize`, `mimeType`, `title`, etc.
+ * Returns `{ pdfs: [...] }`. Each item includes `signedUrl` (short-lived),
+ * `pdfId`, `title`, `postTitle`, `createdAt`, and metadata — not a permanent public URL.
  */
 export async function getPdfNotes(postId) {
   const params = {};

@@ -18,7 +18,7 @@ import {
   formatFileSize,
   getPdfNotes,
   getPosts,
-  resolvePdfUrl,
+  resolvePdfOpenUrl,
 } from '../services/pdfService';
 import logger from '../utils/logger';
 import {
@@ -36,7 +36,7 @@ import { colors } from '../theme/colors';
  *   1. Load posts → let the user pick one (or accept the `postId` passed
  *      via route params, when we came here from an "X Notes" button).
  *   2. Whenever the selected post changes, fetch `/notes/pdfs?postId=…`.
- *   3. Tap a PDF → open `fileUrl` in an in-app browser via
+ *   3. Tap a PDF → open `signedUrl` (short-lived) in an in-app browser via
  *      `WebBrowser.openBrowserAsync`. On Android this uses a Chrome
  *      Custom Tab, on iOS an SFSafariViewController — both render PDFs
  *      inline and keep the user inside our app (the browser sheet
@@ -100,6 +100,11 @@ export default function PdfListScreen() {
       setPdfs([]);
       return;
     }
+    if (!userHasPremiumAccess(user)) {
+      setPdfs([]);
+      setPdfsError(null);
+      return;
+    }
     setPdfsError(null);
     setPdfsLoading(true);
     try {
@@ -111,7 +116,7 @@ export default function PdfListScreen() {
     } finally {
       setPdfsLoading(false);
     }
-  }, [selectedPostId]);
+  }, [selectedPostId, user]);
 
   useEffect(() => {
     loadPdfs();
@@ -161,12 +166,11 @@ export default function PdfListScreen() {
    */
   const handleOpenPdf = async (pdf) => {
     const id = pdf?._id;
-    const finalUrl = resolvePdfUrl(pdf?.fileUrl);
+    const finalUrl = resolvePdfOpenUrl(pdf);
     if (__DEV__) {
       logger.debug('PDF API RESPONSE (open):', {
         _id: pdf?._id,
-        fileUrl: pdf?.fileUrl,
-        storedName: pdf?.storedName,
+        signedUrl: pdf?.signedUrl,
         fileName: pdf?.fileName,
       });
       logger.debug('FINAL PDF URL:', finalUrl);

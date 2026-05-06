@@ -4,6 +4,7 @@ import { AppError } from '../utils/AppError.js';
 import { pdfNoteRepository } from '../repositories/pdfNoteRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
 import { logger } from '../utils/logger.js';
+import { getSignedPdfUrl } from './pdfSupabaseStorage.js';
 
 function uniqueObjectIds(input) {
   const out = [];
@@ -91,16 +92,70 @@ function normalizePdfNoteDoc(doc) {
         ? uniqueObjectIds([doc.postId])
         : [];
 
-  // New rows store a full public HTTPS URL (Supabase). Legacy rows may be
-  // Cloudinary or relative paths — never run Cloudinary/Supabase URL rebuilds;
-  // pass through absolute URLs as-is so old PDFs keep working.
-  const url = typeof doc.fileUrl === 'string' ? doc.fileUrl.trim() : '';
   return {
     ...doc,
     postIds: effective,
     postId: doc.postId ?? effective[0] ?? null,
-    fileUrl: url,
   };
+}
+
+async function loadPostTitleMap(postIdStrings) {
+  const unique = [...new Set((postIdStrings || []).filter(Boolean))];
+  if (!unique.length) return new Map();
+  const oids = unique.map((id) => new mongoose.Types.ObjectId(String(id)));
+  const posts = await postRepository.findByIds(oids);
+  return new Map(posts.map((p) => [String(p._id), p.name || p.slug || '']));
+}
+
+/**
+ * Wire shape for PDF notes: no permanent `fileUrl`, no storage `storedName`.
+ * `signedUrl` is short-lived (see env `pdfSignedUrlTtlSeconds`).
+ */
+async function pdfDocToClientDto(doc, postTitleMap) {
+  if (!doc) return doc;
+  const normalized = normalizePdfNoteDoc(doc);
+  const path = typeof normalized.storedName === 'string' ? normalized.storedName.trim() : '';
+  if (!path) {
+    logger.warn('[PdfNote] skipping PDF without storedName', { id: String(normalized._id) });
+    return null;
+  }
+  const first = normalized.postIds?.[0] || normalized.postId;
+  const postTitle = first ? postTitleMap.get(String(first)) || '' : '';
+  let signedUrl = '';
+  try {
+    signedUrl = await getSignedPdfUrl(path);
+  } catch (e) {
+    logger.warn('[PdfNote] createSignedUrl failed', {
+      id: String(normalized._id),
+      message: e?.message,
+    });
+  }
+  return {
+    _id: normalized._id,
+    pdfId: String(normalized._id),
+    title: normalized.title,
+    fileName: normalized.fileName,
+    fileSize: normalized.fileSize,
+    mimeType: normalized.mimeType,
+    postIds: normalized.postIds,
+    postId: normalized.postId,
+    isActive: normalized.isActive !== false,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    signedUrl,
+    postTitle,
+  };
+}
+
+async function enrichSinglePdfForClient(doc) {
+  const normalized = normalizePdfNoteDoc(doc);
+  const path = typeof normalized.storedName === 'string' ? normalized.storedName.trim() : '';
+  if (!path) {
+    return null;
+  }
+  const first = normalized.postIds?.[0] || normalized.postId;
+  const postTitleMap = first ? await loadPostTitleMap([String(first)]) : new Map();
+  return pdfDocToClientDto(normalized, postTitleMap);
 }
 
 function mapList(docs) {
@@ -118,17 +173,28 @@ function buildListFilterForPost(postId) {
 
 export const pdfNoteService = {
   /**
-   * List PDF notes, optionally scoped to a post. Active-only by default
-   * so the student-facing GET never leaks disabled uploads.
+   * List PDF notes for authorized clients (premium or admin).
+   * Each row includes a short-lived `signedUrl`; never exposes `fileUrl` or `storedName`.
    */
-  async list({ postId, includeInactive = false } = {}) {
+  async listForClient({ postId, includeInactive = false } = {}) {
     const filter = {};
     if (postId) {
       Object.assign(filter, buildListFilterForPost(postId));
     }
     if (!includeInactive) filter.isActive = true;
     const rows = await pdfNoteRepository.findAll(filter);
-    return mapList(rows);
+    const normalized = mapList(rows);
+    const firstPostKeys = normalized
+      .map((d) => {
+        const first = d.postIds?.[0] || d.postId;
+        return first ? String(first) : null;
+      })
+      .filter(Boolean);
+    const postTitleMap = await loadPostTitleMap(firstPostKeys);
+    const items = await Promise.all(
+      normalized.map((doc) => pdfDocToClientDto(doc, postTitleMap))
+    );
+    return items.filter(Boolean);
   },
 
   /**
@@ -160,19 +226,25 @@ export const pdfNoteService = {
     );
 
     const firstPostId = oids[0];
-    logger.info('[PdfNote] saving fileUrl to MongoDB (exact value):', fileUrl);
     const created = await pdfNoteRepository.create({
       title: trimmedTitle,
       postIds: oids,
       postId: firstPostId,
-      fileUrl,
+      fileUrl: fileUrl || '',
       fileName,
       storedName,
       fileSize,
       mimeType,
       uploadedBy,
     });
-    return normalizePdfNoteDoc(created);
+    const out = await enrichSinglePdfForClient(created);
+    if (!out) {
+      throw new AppError(
+        'PDF record is missing storage metadata (storedName)',
+        HTTP_STATUS.INTERNAL_SERVER_ERROR
+      );
+    }
+    return out;
   },
 
   /**
@@ -206,7 +278,13 @@ export const pdfNoteService = {
     }
 
     const updated = await pdfNoteRepository.updateById(id, update);
-    const out = normalizePdfNoteDoc(updated);
+    const out = await enrichSinglePdfForClient(updated);
+    if (!out) {
+      throw new AppError(
+        'PDF note is missing storage metadata (storedName)',
+        HTTP_STATUS.INTERNAL_SERVER_ERROR
+      );
+    }
 
     if (
       typeof update.isActive === 'boolean' &&
