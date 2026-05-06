@@ -36,9 +36,10 @@ export const profileAnalyticsService = {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }
 
-    const [agg, latest] = await Promise.all([
+    const [agg, latest, recentAttemptsRaw] = await Promise.all([
       testAttemptRepository.aggregateProfileStats(userId),
       testAttemptRepository.findLatestCompletedByUser(userId),
+      testAttemptRepository.findRecentCompletedByUser(userId, 5),
     ]);
 
     const totalMocks = Number(agg?.totalMocks) || 0;
@@ -52,6 +53,21 @@ export const profileAnalyticsService = {
         : 0;
     const latestScore = pctInt(latest?.accuracy);
 
+    const recentAttempts = (Array.isArray(recentAttemptsRaw) ? recentAttemptsRaw : []).map((a) => {
+      const t = a?.testId && typeof a.testId === 'object' ? a.testId : null;
+      return {
+        id: String(a?._id ?? ''),
+        testId: String(t?._id ?? a?.testId ?? ''),
+        testTitle: t?.title ?? null,
+        attemptNumber: a?.attemptNumber ?? null,
+        accuracy: pctInt(a?.accuracy),
+        score: Number.isFinite(Number(a?.score)) ? Number(a.score) : null,
+        timeTaken: Number.isFinite(Number(a?.timeTaken)) ? Number(a.timeTaken) : null,
+        endTime: a?.endTime ?? null,
+        createdAt: a?.createdAt ?? null,
+      };
+    });
+
     return {
       totalMocks,
       bestScore,
@@ -62,6 +78,7 @@ export const profileAnalyticsService = {
       currentStreak: Math.max(0, Number(user.streakCount) || 0),
       dailyPracticeCount: Math.max(0, Number(user.dailyPracticeTotal) || 0),
       smartPracticeCount: 0,
+      recentAttempts,
     };
   },
 };

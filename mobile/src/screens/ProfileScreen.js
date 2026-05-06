@@ -403,6 +403,14 @@ function ProgressSection({ analytics, loading, error, onStart }) {
   const totalQuestionsSolved = Number(a.totalQuestionsSolved) || 0;
   const dailyPracticeCount = Number(a.dailyPracticeCount) || 0;
   const smartPracticeCount = Number(a.smartPracticeCount) || 0;
+  const recentAttempts = Array.isArray(a.recentAttempts) ? a.recentAttempts : [];
+
+  const formatMmSs = (totalSeconds) => {
+    const s = Math.max(0, Number(totalSeconds) || 0);
+    const mm = Math.floor(s / 60);
+    const ss = s % 60;
+    return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  };
 
   return (
     <View style={styles.progressCard}>
@@ -456,6 +464,39 @@ function ProgressSection({ analytics, loading, error, onStart }) {
           </View>
         ) : null}
       </View>
+
+      {recentAttempts.length > 0 ? (
+        <View style={styles.recentAttemptsBlock}>
+          <Text style={styles.recentAttemptsTitle}>Recent mock attempts</Text>
+          {recentAttempts.slice(0, 5).map((att, idx) => {
+            const title = att?.testTitle ? String(att.testTitle) : 'Mock Test';
+            const attemptNo =
+              att?.attemptNumber != null ? `Attempt #${String(att.attemptNumber)}` : `Attempt ${idx + 1}`;
+            const endTime = att?.endTime ? new Date(att.endTime).toLocaleString() : '—';
+            const accuracy = att?.accuracy != null ? `${String(att.accuracy)}%` : '—';
+            const timeTaken =
+              att?.timeTaken != null && Number.isFinite(Number(att.timeTaken))
+                ? ` • ${formatMmSs(Number(att.timeTaken))}`
+                : '';
+            return (
+              <View key={att?.id || `${idx}`} style={styles.recentAttemptRow}>
+                <View style={styles.recentAttemptLeft}>
+                  <Text style={styles.recentAttemptName} numberOfLines={1}>
+                    {title}
+                  </Text>
+                  <Text style={styles.recentAttemptMeta} numberOfLines={1}>
+                    {attemptNo} • {endTime}
+                    {timeTaken}
+                  </Text>
+                </View>
+                <View style={styles.recentAttemptRight}>
+                  <Text style={styles.recentAttemptScore}>{accuracy}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -764,6 +805,32 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: '500',
   },
+
+  recentAttemptsBlock: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  recentAttemptsTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 10,
+  },
+  recentAttemptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  recentAttemptLeft: { flex: 1, paddingRight: 12, minWidth: 0 },
+  recentAttemptName: { fontSize: 14, fontWeight: '700', color: colors.text },
+  recentAttemptMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
+  recentAttemptRight: { alignItems: 'flex-end' },
+  recentAttemptScore: { fontSize: 14, fontWeight: '800', color: colors.text },
 
   sectionLabel: {
     fontSize: 12,

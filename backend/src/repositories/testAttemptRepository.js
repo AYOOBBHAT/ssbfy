@@ -199,6 +199,21 @@ export const testAttemptRepository = {
       .exec();
   },
 
+  /**
+   * Recent completed attempts for profile UI.
+   * Includes retries; sorted by endTime DESC (createdAt as tiebreaker).
+   */
+  async findRecentCompletedByUser(userId, limit = 5) {
+    const lim = Math.min(Math.max(Number(limit) || 5, 1), 20);
+    return TestAttempt.find({ userId, endTime: { $ne: null } })
+      .select('testId attemptNumber accuracy score timeTaken endTime createdAt')
+      .sort({ endTime: -1, createdAt: -1 })
+      .limit(lim)
+      .populate({ path: 'testId', select: 'title duration type' })
+      .lean()
+      .exec();
+  },
+
   async finalizeAttempt(attemptId, userId, testId, payload) {
     return TestAttempt.findOneAndUpdate(
       {

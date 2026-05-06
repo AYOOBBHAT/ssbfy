@@ -7,6 +7,7 @@ import api from './api.js';
  *   {
  *     totalMocks, bestScore, latestScore, averageScore, overallAccuracy,
  *     totalQuestionsSolved, currentStreak, dailyPracticeCount, smartPracticeCount
+ *     recentAttempts
  *   }
  *
  * All numeric fields are guaranteed to be safe integers (>= 0).
@@ -24,6 +25,7 @@ export async function getProfileAnalytics() {
     currentStreak: toSafeInt(payload.currentStreak),
     dailyPracticeCount: toSafeInt(payload.dailyPracticeCount),
     smartPracticeCount: toSafeInt(payload.smartPracticeCount),
+    recentAttempts: Array.isArray(payload.recentAttempts) ? payload.recentAttempts : [],
   };
 }
 

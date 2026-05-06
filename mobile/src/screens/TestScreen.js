@@ -261,7 +261,8 @@ export default function TestScreen() {
   const navigateToResult = useCallback(
     (data) => {
       const payload = data || {};
-      navigation.navigate('Result', {
+      // Replace TestScreen so back from Result cannot return to a submitted attempt.
+      navigation.replace('Result', {
         testId,
         score: payload.score ?? 0,
         accuracy: payload.accuracy ?? 0,
@@ -318,19 +319,9 @@ export default function TestScreen() {
         };
 
         let payload;
-        if (autoSubmit) {
-          payload = questionIds.map(buildAnswerEntry);
-        } else {
-          const unanswered = questionIds.filter((qid) => {
-            const v = answers[String(qid)];
-            return !Array.isArray(v) || v.length === 0;
-          });
-          if (unanswered.length > 0) {
-            setSubmitError('Please answer every question before submitting.');
-            return;
-          }
-          payload = questionIds.map(buildAnswerEntry);
-        }
+        // Always allow skipping. Unanswered questions are sent with an empty
+        // `selectedOptionIndexes` array (and legacy scalar = null).
+        payload = questionIds.map(buildAnswerEntry);
 
         const data = await submitTest(testId, payload);
         navigateToResult(data);
@@ -349,15 +340,22 @@ export default function TestScreen() {
   }, [executeSubmit]);
 
   const handleSubmitPress = useCallback(() => {
+    if (attemptedCount === 0) {
+      Alert.alert('Submit Test', 'Submit without answering any questions?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Submit', onPress: confirmManualSubmit },
+      ]);
+      return;
+    }
     Alert.alert('Submit Test', 'Are you sure you want to submit?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Submit', onPress: confirmManualSubmit },
     ]);
-  }, [confirmManualSubmit]);
+  }, [confirmManualSubmit, attemptedCount]);
 
   const handleFinishLocal = useCallback(async () => {
     if (isRetry) {
-      navigation.navigate('Result', {
+      navigation.replace('Result', {
         retry: true,
         retryAnswers: answers,
         retryQuestions: questions.filter((q) => q !== undefined),
@@ -423,7 +421,7 @@ export default function TestScreen() {
           logger.info('[DAILY] complete failed:', getApiErrorMessage(e));
         }
 
-        navigation.navigate('Result', {
+        navigation.replace('Result', {
           score: correctCount,
           accuracy,
           timeTaken: 0,

@@ -19,6 +19,7 @@ import TestsListScreen from '../screens/TestsListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import TestScreen from '../screens/TestScreen';
 import ResultScreen from '../screens/ResultScreen';
+import ReviewAnswersScreen from '../screens/ReviewAnswersScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import PdfListScreen from '../screens/PdfListScreen';
 import NotesListScreen from '../screens/NotesListScreen';
@@ -202,6 +203,11 @@ export default function AppNavigator() {
           />
           <RootStack.Screen name="Test" component={TestScreen} options={{ title: 'Test' }} />
           <RootStack.Screen name="Result" component={ResultScreen} options={{ title: 'Result' }} />
+          <RootStack.Screen
+            name="ReviewAnswers"
+            component={ReviewAnswersScreen}
+            options={{ title: 'Review Answers' }}
+          />
           <RootStack.Screen
             name="PdfList"
             component={PdfListScreen}

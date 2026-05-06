@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, FlatList } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
@@ -214,21 +214,6 @@ export default function ResultScreen() {
     );
   }
 
-  const reviewItems = useMemo(() => {
-    return (Array.isArray(questions) ? questions : []).map((q) => {
-      const qid = String(q?._id ?? '');
-      const userArr = toIndexArray(userAnswers ? userAnswers[qid] : undefined);
-      const correctArr = getCorrectSetFor(qid, q);
-      return {
-        key: qid,
-        question: q,
-        userSet: userArr,
-        correctSet: correctArr,
-      };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, userAnswers, correctAnswerMap]);
-
   const wrongQuestions = useMemo(() => {
     return (Array.isArray(questions) ? questions : []).filter((q) => {
       const qid = String(q?._id ?? '');
@@ -247,6 +232,15 @@ export default function ResultScreen() {
     () => wrongQuestions.map((q) => String(q._id)),
     [wrongQuestions]
   );
+
+  const handleReviewAnswers = () => {
+    navigation.navigate('ReviewAnswers', {
+      questions: Array.isArray(questions) ? questions : [],
+      userAnswers: userAnswers && typeof userAnswers === 'object' ? userAnswers : {},
+      correctAnswers: Array.isArray(correctAnswers) ? correctAnswers : [],
+      retry,
+    });
+  };
 
   const retryStats = useMemo(() => {
     if (!isRetry) return null;
@@ -723,7 +717,13 @@ export default function ResultScreen() {
 
       {weakTopicIds.length > 0 ? renderRecommendations() : null}
 
-      <Text style={styles.sectionTitle}>Review Answers</Text>
+      <Text style={styles.sectionTitle}>Review</Text>
+      <Pressable
+        onPress={handleReviewAnswers}
+        style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
+      >
+        <Text style={styles.primaryBtnText}>Review Answers</Text>
+      </Pressable>
     </View>
   );
 
@@ -868,74 +868,6 @@ export default function ResultScreen() {
     );
   };
 
-  const renderItem = ({ item, index }) => {
-    const { question, userSet, correctSet } = item || {};
-    const options = Array.isArray(question?.options) ? question.options : [];
-    const explanation =
-      typeof question?.explanation === 'string' && question.explanation.trim()
-        ? question.explanation
-        : null;
-    const unanswered = !Array.isArray(userSet) || userSet.length === 0;
-    const isMulti =
-      question?.questionType === 'multiple_correct' ||
-      (Array.isArray(correctSet) && correctSet.length > 1);
-    const isOverallCorrect =
-      Array.isArray(correctSet) &&
-      correctSet.length > 0 &&
-      indexSetsEqual(userSet, correctSet);
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.qHeaderRow}>
-          <Text style={styles.qIndex}>Q{index + 1}</Text>
-          {isMulti ? (
-            <View style={styles.multiBadge}>
-              <Text style={styles.multiBadgeText}>Multiple Correct</Text>
-            </View>
-          ) : null}
-          {!unanswered ? (
-            <View
-              style={[
-                styles.verdictBadge,
-                isOverallCorrect ? styles.verdictBadgeOk : styles.verdictBadgeBad,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.verdictBadgeText,
-                  isOverallCorrect
-                    ? styles.verdictBadgeTextOk
-                    : styles.verdictBadgeTextBad,
-                ]}
-              >
-                {isOverallCorrect ? 'Correct' : 'Wrong'}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-        <Text style={styles.qText}>{question?.questionText ?? '(missing question)'}</Text>
-        {options.map((opt, i) => (
-          <View key={i} style={[styles.optionRow, getOptionStyle(i, correctSet, userSet)]}>
-            <Text style={styles.optionText}>
-              {`${String.fromCharCode(65 + i)}. ${opt ?? ''}`}
-            </Text>
-          </View>
-        ))}
-        <Text style={styles.metaLine}>
-          Your answer{userSet?.length > 1 ? 's' : ''}:{' '}
-          {unanswered ? 'Not answered' : formatIndexList(userSet, options)}
-        </Text>
-        <Text style={styles.metaLine}>
-          Correct answer{correctSet?.length > 1 ? 's' : ''}:{' '}
-          {formatIndexList(correctSet, options)}
-        </Text>
-        {explanation ? (
-          <Text style={styles.explanation}>Explanation: {explanation}</Text>
-        ) : null}
-      </View>
-    );
-  };
-
   if (!hasParams) {
     return (
       <EmptyState
@@ -947,23 +879,14 @@ export default function ResultScreen() {
   }
 
   return (
-    <FlatList
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      data={reviewItems}
-      keyExtractor={(item, idx) => item.key || String(idx)}
-      renderItem={renderItem}
-      ListHeaderComponent={renderHeader}
-      ListFooterComponent={renderFooter}
-      ListEmptyComponent={
-        <EmptyState
-          title="No questions to review"
-          subtitle="Nothing to display for this attempt."
-          emoji="📭"
-          compact
-        />
-      }
-    />
+      showsVerticalScrollIndicator={false}
+    >
+      {renderHeader()}
+      {renderFooter()}
+    </ScrollView>
   );
 }
 
