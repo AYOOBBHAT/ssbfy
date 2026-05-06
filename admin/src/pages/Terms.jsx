@@ -8,73 +8,91 @@ export default function Terms() {
         <section>
           <h2>1. Acceptance of Terms</h2>
           <p>
-            By creating an account or using SSBFY, you agree to these Terms & Conditions. If you do
-            not agree, please do not use the app.
+            By using SSBFY, you agree to these Terms. If you do not agree, please do not use the app.
           </p>
         </section>
 
         <section>
-          <h2>2. App Usage Rules</h2>
+          <h2>2. Use of the App</h2>
+          <p>You agree to:</p>
           <ul>
-            <li>Use the app for lawful educational purposes only.</li>
-            <li>Do not misuse, hack, reverse engineer, or disrupt the platform.</li>
-            <li>Do not share account credentials with others.</li>
+            <li>Use the app only for lawful educational purposes</li>
+            <li>Not misuse, hack, reverse engineer, or disrupt the platform</li>
+            <li>Not share your account credentials</li>
           </ul>
         </section>
 
         <section>
-          <h2>3. Premium Subscription</h2>
-          <p>Premium plans may include:</p>
+          <h2>3. User Accounts</h2>
+          <p>
+            You are responsible for maintaining the confidentiality of your account and all activities
+            under it.
+          </p>
+        </section>
+
+        <section>
+          <h2>4. Premium Subscription</h2>
+          <p>Premium access may include:</p>
           <ul>
-            <li>Access to premium PDF study materials</li>
-            <li>Expanded or unlimited mock test usage (based on current plan)</li>
-            <li>Other premium features released over time</li>
+            <li>Access to PDF study materials</li>
+            <li>Increased or unlimited mock test usage</li>
+            <li>Additional features introduced over time</li>
           </ul>
-        </section>
-
-        <section>
-          <h2>4. Payment Terms</h2>
           <p>
-            All subscription payments are processed through Razorpay. By making a payment, you agree
-            to Razorpay's applicable terms and policies.
+            Access duration depends on the selected subscription plan.
           </p>
         </section>
 
         <section>
-          <h2>5. Refund Policy</h2>
+          <h2>5. Payments</h2>
           <p>
-            Payments are generally non-refundable except where required by law or where SSBFY
-            explicitly approves a refund for a valid technical/billing issue.
+            Payments are processed through Razorpay or other authorized providers. SSBFY is not
+            responsible for payment failures caused by third-party systems.
           </p>
         </section>
 
         <section>
-          <h2>6. Content Ownership</h2>
+          <h2>6. Refund Policy</h2>
           <p>
-            All questions, notes, PDFs, branding, and educational content in SSBFY are owned by SSBFY
-            or licensed to SSBFY. You may not reproduce, distribute, resell, or publish this content
-            without prior written permission.
+            Payments are generally non-refundable. Refunds may be considered only in cases of verified
+            technical or billing issues at SSBFY’s discretion or where required by law.
           </p>
         </section>
 
         <section>
-          <h2>7. Account Responsibility</h2>
+          <h2>7. Content Ownership</h2>
           <p>
-            You are responsible for maintaining the confidentiality of your account and for all
-            activity under your account.
+            All content including questions, PDFs, notes, branding, and design is owned by or licensed
+            to SSBFY.
           </p>
+          <p>You may NOT:</p>
+          <ul>
+            <li>Copy, reproduce, or distribute content</li>
+            <li>Share premium materials publicly</li>
+            <li>Resell any part of the platform</li>
+          </ul>
         </section>
 
         <section>
           <h2>8. Suspension or Termination</h2>
+          <p>We may suspend or terminate accounts that:</p>
+          <ul>
+            <li>Violate these terms</li>
+            <li>Attempt to exploit or abuse the platform</li>
+            <li>Pose security risks</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>9. Limitation of Liability</h2>
           <p>
-            SSBFY may suspend or terminate accounts that violate these terms, abuse the platform, or
-            create security risks.
+            SSBFY is provided &quot;as is&quot; without warranties of any kind. We are not liable for
+            any indirect or consequential damages arising from app usage.
           </p>
         </section>
 
         <section>
-          <h2>9. Disclaimer</h2>
+          <h2>10. Disclaimer</h2>
           <p>
             SSBFY provides educational tools and practice content. We do not guarantee exam results,
             rank, job selection, or specific outcomes.
@@ -82,11 +100,16 @@ export default function Terms() {
         </section>
 
         <section>
-          <h2>10. Contact</h2>
+          <h2>11. Changes to Terms</h2>
           <p>
-            For terms or billing questions, contact us at{' '}
-            <a href="mailto:support@ssbfy.com">support@ssbfy.com</a>.
+            We may update these Terms at any time. Continued use of the app means you accept the
+            updated terms.
           </p>
+        </section>
+
+        <section>
+          <h2>12. Contact</h2>
+          <p>For questions, contact: support.ssbfy@gmail.com</p>
         </section>
       </article>
     </div>
