@@ -35,7 +35,8 @@
     },
     "owner": "ayoobbhat",
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withAdiRegistration"
     ]
   }
 }
