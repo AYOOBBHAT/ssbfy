@@ -17,6 +17,7 @@ import ManageSubscriptionPlans from './pages/ManageSubscriptionPlans.jsx';
 import ManagePayments from './pages/ManagePayments.jsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import Terms from './pages/Terms.jsx';
+import DeleteAccount from './pages/DeleteAccount.jsx';
 import './App.css';
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-and-conditions" element={<Terms />} />
+            <Route path="/delete-account" element={<DeleteAccount />} />
 
             <Route
               element={
@@ -59,6 +61,8 @@ export default function App() {
             <Link to="/privacy-policy">Privacy Policy</Link>
             <span>|</span>
             <Link to="/terms-and-conditions">Terms & Conditions</Link>
+            <span>|</span>
+            <Link to="/delete-account">Delete Account</Link>
           </footer>
         </div>
       </BrowserRouter>
