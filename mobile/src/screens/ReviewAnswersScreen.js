@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
 
 const TEXT = colors.text;
 const MUTED = colors.muted;
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
   },
   qHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   qIndex: { fontSize: 13, fontWeight: '800', color: MUTED },
-  qText: { fontSize: 14, fontWeight: '600', color: TEXT, lineHeight: 20, marginBottom: 10 },
+  qText: { ...typography.questionText, fontSize: 16, lineHeight: 24, marginBottom: 10 },
 
   multiBadge: {
     backgroundColor: colors.primarySoft,

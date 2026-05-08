@@ -14,6 +14,7 @@ import { completeDailyPractice } from '../services/dailyPracticeService';
 import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
 import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
 
 function formatMmSs(totalSeconds) {
   const s = Math.max(0, Number(totalSeconds) || 0);
@@ -679,7 +680,7 @@ export default function TestScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  container: { flex: 1, padding: 16, backgroundColor: colors.bg },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   timerBlock: { marginBottom: 4 },
   timer: { fontSize: 16, fontWeight: '600', marginBottom: 4, color: colors.text },
@@ -689,7 +690,7 @@ const styles = StyleSheet.create({
   retryHeader: { fontSize: 16, fontWeight: '700', marginBottom: 8, color: colors.primary },
   header: { fontSize: 16, marginBottom: 12, fontWeight: '600', color: colors.text },
   scroll: { flex: 1 },
-  question: { fontSize: 16, marginBottom: 12 },
+  question: { ...typography.questionText, marginBottom: 12 },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
