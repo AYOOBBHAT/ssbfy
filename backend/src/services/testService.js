@@ -1,4 +1,5 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
+import { TEST_TYPE } from '../constants/testType.js';
 import { AppError } from '../utils/AppError.js';
 import { testRepository } from '../repositories/testRepository.js';
 import { questionRepository } from '../repositories/questionRepository.js';
@@ -81,6 +82,43 @@ async function classifyQuestions(ids) {
 }
 
 /**
+ * Derive a meaningful Test.type from the selected questions (same hierarchy rules
+ * as classifyQuestions — callers must only pass already-valid ids).
+ *
+ * Priority:
+ *   1. Single topic → topic
+ *   2. Single subject (multiple topics) → subject
+ *   3. Multiple subjects but single parent post → post
+ *   4. Else → mixed
+ */
+async function inferTestType(questionIds) {
+  const ids = [...new Set((questionIds || []).map(String))];
+  if (ids.length === 0) {
+    return TEST_TYPE.MIXED;
+  }
+  const qs = await questionRepository.findByIdsRaw(ids);
+  if (qs.length !== ids.length) {
+    return TEST_TYPE.MIXED;
+  }
+  const topicIds = new Set(qs.map((q) => String(q.topicId)));
+  if (topicIds.size === 1) {
+    return TEST_TYPE.TOPIC;
+  }
+  const subjectIds = new Set(qs.map((q) => String(q.subjectId)));
+  if (subjectIds.size === 1) {
+    return TEST_TYPE.SUBJECT;
+  }
+  const subjects = await subjectRepository.findByIdsWithPost([...subjectIds]);
+  const postKeys = new Set(
+    subjects.map((s) => (s.postId ? String(s.postId) : '')).filter(Boolean)
+  );
+  if (postKeys.size === 1) {
+    return TEST_TYPE.POST;
+  }
+  return TEST_TYPE.MIXED;
+}
+
+/**
  * Given a test doc (lean), return a shallow clone with `questionIds` narrowed
  * to the currently-servable set. Preserves original ordering; silently drops
  * ids that fail the hierarchy check.
@@ -129,7 +167,7 @@ export const testService = {
   },
 
   async create(data) {
-    const { title, type, questionIds, duration, negativeMarking } = data;
+    const { title, type: requestedType, questionIds, duration, negativeMarking } = data;
 
     const uniqueIds = [...new Set(questionIds.map((id) => String(id)))];
     if (uniqueIds.length !== questionIds.length) {
@@ -160,6 +198,14 @@ export const testService = {
         HTTP_STATUS.BAD_REQUEST
       );
     }
+
+    const inferred = await inferTestType(uniqueIds);
+    const type =
+      requestedType !== undefined &&
+      requestedType !== null &&
+      String(requestedType).trim() !== ''
+        ? String(requestedType).trim()
+        : inferred;
 
     return testRepository.create({
       title: title.trim(),

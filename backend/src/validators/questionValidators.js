@@ -33,6 +33,8 @@ export const questionIdParam = [
 /** Query params for GET /api/questions/admin */
 export const adminListQuestionsQueryValidators = [
   query('search').optional().isString().trim(),
+  query('topicSearch').optional().isString().trim(),
+  query('projection').optional().isIn(['picker']).withMessage('projection must be "picker" when set'),
   query('postId')
     .optional({ checkFalsy: true })
     .isMongoId()
@@ -102,6 +104,29 @@ export const listQuestionsQueryValidators = [
     .optional()
     .isIn(QUESTION_SORT_VALUES)
     .withMessage(`sort must be one of: ${QUESTION_SORT_VALUES.join(', ')}`),
+  query('subjectId').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid subjectId'),
+  query('topicId').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid topicId'),
+  query('postId').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid postId'),
+  query('difficulty')
+    .optional({ checkFalsy: true })
+    .isIn(DIFFICULTY_VALUES)
+    .withMessage(`difficulty must be one of: ${DIFFICULTY_VALUES.join(', ')}`),
+  query('year')
+    .optional({ checkFalsy: true })
+    .isInt({ min: 1900, max: 2100 })
+    .toInt(),
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage('limit must be from 1 to 100')
+    .toInt(),
+  query('skip')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('skip must be non-negative')
+    .toInt(),
+  query('search').optional().isString().trim(),
+  query('topicSearch').optional().isString().trim(),
 ];
 
 export const createQuestionValidators = [
@@ -146,7 +171,17 @@ export const createQuestionValidators = [
   body('explanation').optional().isString(),
   body('subjectId').isMongoId().withMessage('Valid subjectId is required'),
   body('topicId').isMongoId().withMessage('Valid topicId is required'),
-  body('postIds').optional().isArray(),
+  body('postIds')
+    .optional()
+    .isArray()
+    .custom((arr) => {
+      if (!Array.isArray(arr) || arr.length === 0) return true;
+      const strs = arr.map((x) => String(x));
+      if (new Set(strs).size !== strs.length) {
+        throw new Error('postIds must not contain duplicate entries');
+      }
+      return true;
+    }),
   body('postIds.*').optional().isMongoId(),
   body('year').optional({ nullable: true }).isInt({ min: 1900, max: 2100 }),
   body('difficulty')
@@ -269,7 +304,17 @@ export const updateQuestionValidators = [
   body('explanation').optional().isString(),
   body('subjectId').optional().isMongoId(),
   body('topicId').optional().isMongoId(),
-  body('postIds').optional().isArray(),
+  body('postIds')
+    .optional()
+    .isArray()
+    .custom((arr) => {
+      if (!Array.isArray(arr) || arr.length === 0) return true;
+      const strs = arr.map((x) => String(x));
+      if (new Set(strs).size !== strs.length) {
+        throw new Error('postIds must not contain duplicate entries');
+      }
+      return true;
+    }),
   body('postIds.*').optional().isMongoId(),
   body('postId')
     .optional({ checkFalsy: true })

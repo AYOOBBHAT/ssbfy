@@ -105,6 +105,14 @@ export async function getSubjects(params = {}) {
   return unwrap(res);
 }
 
+/** Fetch one subject (includes postId). Public GET. */
+export async function getSubject(id) {
+  if (!id) throw new Error('getSubject requires an id.');
+  const res = await api.get(`/subjects/${id}`);
+  const data = unwrap(res);
+  return data?.subject ?? data;
+}
+
 /**
  * Create a new subject under a post (admin only).
  * `postId` is required — the server enforces Post → Subject hierarchy.

@@ -149,13 +149,16 @@ export const questionRepository = {
    * Admin list: paged, sorted newest first, with subject/topic/post labels.
    */
   async findForAdminList(filter = {}, options = {}) {
-    const { limit = 20, skip = 0 } = options;
+    const { limit = 20, skip = 0, projection } = options;
     const safeLimit = Math.max(1, Math.min(Number(limit) || 20, 100));
     const safeSkip = Math.max(Number(skip) || 0, 0);
-    return Question.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(safeSkip)
-      .limit(safeLimit)
+    let chain = Question.find(filter).sort({ createdAt: -1 }).skip(safeSkip).limit(safeLimit);
+    if (projection === 'picker') {
+      chain = chain.select(
+        'questionText options questionType questionImage subjectId topicId postIds difficulty year isActive correctAnswers correctAnswerIndex explanation createdAt updatedAt'
+      );
+    }
+    return chain
       .populate('subjectId', 'name isActive postId')
       .populate('topicId', 'name isActive subjectId')
       .populate('postIds', 'name slug isActive')

@@ -4,6 +4,8 @@ import {
   createQuestion,
   findSimilarQuestions,
   getQuestionForAdmin,
+  getPosts,
+  getSubject,
   getSubjects,
   getTopics,
   getApiErrorMessage,
@@ -70,10 +72,13 @@ export default function AddQuestion() {
   const isEdit = Boolean(editId);
 
   const [form, setForm] = useState(initialForm);
+  const [posts, setPosts] = useState([]);
+  const [selectedPostId, setSelectedPostId] = useState('');
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
 
-  const [loadingSubjects, setLoadingSubjects] = useState(true);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [metaError, setMetaError] = useState('');
   const [loadingEdit, setLoadingEdit] = useState(false);
@@ -95,14 +100,39 @@ export default function AddQuestion() {
     let cancelled = false;
     (async () => {
       try {
-        setLoadingSubjects(true);
+        setLoadingPosts(true);
         setMetaError('');
-        const subjectsRes = await getSubjects({ includeInactive: true });
+        const res = await getPosts();
+        if (cancelled) return;
+        const list = Array.isArray(res) ? res : res?.posts || [];
+        setPosts(list);
+      } catch (e) {
+        if (!cancelled) setMetaError(getApiErrorMessage(e));
+      } finally {
+        if (!cancelled) setLoadingPosts(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedPostId) {
+      setSubjects([]);
+      return undefined;
+    }
+    (async () => {
+      try {
+        setLoadingSubjects(true);
+        const subjectsRes = await getSubjects({
+          postId: selectedPostId,
+          includeInactive: true,
+        });
         if (cancelled) return;
         setSubjects(
-          Array.isArray(subjectsRes)
-            ? subjectsRes
-            : subjectsRes?.subjects || []
+          Array.isArray(subjectsRes) ? subjectsRes : subjectsRes?.subjects || []
         );
       } catch (e) {
         if (!cancelled) setMetaError(getApiErrorMessage(e));
@@ -113,7 +143,7 @@ export default function AddQuestion() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedPostId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,14 +186,34 @@ export default function AddQuestion() {
         const answers = Array.isArray(q.correctAnswers)
           ? q.correctAnswers.map((n) => Number(n))
           : [0];
+        const sid = String(
+          typeof q.subjectId === 'object' && q.subjectId?._id != null
+            ? q.subjectId._id
+            : q.subjectId || ''
+        );
+        if (sid) {
+          try {
+            const sub = await getSubject(sid);
+            if (sub?.postId) setSelectedPostId(String(sub.postId));
+          } catch {
+            /* ignore — admin can pick post manually */
+          }
+        }
+
+        const topicRaw = q.topicId;
+        const topicStr =
+          typeof topicRaw === 'object' && topicRaw?._id != null
+            ? String(topicRaw._id)
+            : String(topicRaw || '');
+
         setForm({
           questionType: q.questionType || 'single_correct',
           questionText: q.questionText || '',
           options: normalizeOptionsFromServer(q.options),
           correctAnswers: answers,
           questionImage: q.questionImage || '',
-          subjectId: String(q.subjectId || ''),
-          topicId: String(q.topicId || ''),
+          subjectId: sid,
+          topicId: topicStr,
           difficulty: q.difficulty || 'medium',
           explanation: q.explanation || '',
         });
@@ -315,6 +365,8 @@ export default function AddQuestion() {
     } else if (form.questionImage.trim() && !looksLikeHttpUrl(form.questionImage)) {
       return 'Image URL must be a valid http(s) URL.';
     }
+    if (!selectedPostId) return 'Please select a post (exam).';
+    if (!selectedPostId) return 'Please select a post (exam).';
     if (!form.subjectId) return 'Please select a subject.';
     if (!form.topicId) return 'Please select a topic.';
     return null;
@@ -430,18 +482,7 @@ export default function AddQuestion() {
         </div>
       ) : null}
 
-      {loadingSubjects ? (
-        <div className="card">
-          <p className="muted">Loading subjects…</p>
-        </div>
-      ) : metaError ? (
-        <div className="alert alert-error">{metaError}</div>
-      ) : subjects.length === 0 ? (
-        <div className="alert alert-error">
-          No subjects found. Create one in{' '}
-          <strong>Manage Subjects &amp; Topics</strong> first.
-        </div>
-      ) : null}
+      {metaError ? <div className="alert alert-error">{metaError}</div> : null}
 
       <form
         className="card form"
@@ -563,7 +604,37 @@ export default function AddQuestion() {
           </p>
         </div>
 
+        <p className="helper" style={{ marginBottom: 16 }}>
+          Hierarchy: <strong>Post → Subject → Topic</strong>. Pick the exam first; subjects are scoped to
+          that post.
+        </p>
+
         <div className="form-grid">
+          <div className="form-row">
+            <label className="label" htmlFor="postPick">
+              Post (exam) *
+            </label>
+            <select
+              id="postPick"
+              className="input"
+              value={selectedPostId}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedPostId(v);
+                updateField('subjectId', '');
+                updateField('topicId', '');
+              }}
+              disabled={submitting || loadingPosts}
+            >
+              <option value="">— Select post —</option>
+              {posts.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.name || p.slug || p._id}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="form-row">
             <label className="label" htmlFor="subjectId">
               Subject *
@@ -576,15 +647,24 @@ export default function AddQuestion() {
                 updateField('subjectId', e.target.value);
                 updateField('topicId', '');
               }}
-              disabled={submitting || loadingSubjects}
+              disabled={submitting || !selectedPostId || loadingSubjects}
             >
-              <option value="">— Select subject —</option>
+              <option value="">
+                {!selectedPostId
+                  ? '— Select a post first —'
+                  : loadingSubjects
+                    ? 'Loading subjects…'
+                    : '— Select subject —'}
+              </option>
               {subjects.map((s) => (
                 <option key={s._id} value={s._id}>
                   {s.name || s.title || s._id}
                 </option>
               ))}
             </select>
+            {selectedPostId && !loadingSubjects && subjects.length === 0 ? (
+              <p className="helper">No subjects under this post yet.</p>
+            ) : null}
           </div>
 
           <div className="form-row">

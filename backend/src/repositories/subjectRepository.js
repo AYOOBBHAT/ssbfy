@@ -1,4 +1,11 @@
+import mongoose from 'mongoose';
 import { Subject } from '../models/Subject.js';
+
+function toOidSet(ids) {
+  if (!ids?.length) return [];
+  const unique = [...new Set(ids.map(String))];
+  return unique.filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(id));
+}
 
 export const subjectRepository = {
   async findAll(filter = {}) {
@@ -19,6 +26,17 @@ export const subjectRepository = {
     if (!ids?.length) return [];
     const unique = [...new Set(ids.map(String))];
     return Subject.find({ _id: { $in: unique } }, { _id: 1, isActive: 1 })
+      .lean()
+      .exec();
+  },
+
+  /**
+   * For test-type inference: needs parent post per subject.
+   */
+  async findByIdsWithPost(ids) {
+    const oids = toOidSet(ids);
+    if (!oids.length) return [];
+    return Subject.find({ _id: { $in: oids } }, { _id: 1, isActive: 1, postId: 1 })
       .lean()
       .exec();
   },

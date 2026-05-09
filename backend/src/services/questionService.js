@@ -332,6 +332,69 @@ function parseSort(query) {
   return raw;
 }
 
+/**
+ * Reject impossible subject/topic combinations before hitting Mongo.
+ *
+ * `postId` on list endpoints is an optional **tag filter** (`postIds` contains),
+ * not the primary hierarchy — we only verify the id exists. Topic/subject
+ * alignment is still enforced when both are supplied.
+ */
+async function validateQuestionListFilters(query) {
+  const rawSubject = query.subjectId;
+  const rawTopic = query.topicId;
+  const rawPost = query.postId;
+  const subjectId =
+    rawSubject != null && String(rawSubject).trim() !== ''
+      ? String(rawSubject).trim()
+      : '';
+  const topicId =
+    rawTopic != null && String(rawTopic).trim() !== '' ? String(rawTopic).trim() : '';
+  const postId =
+    rawPost != null && String(rawPost).trim() !== '' ? String(rawPost).trim() : '';
+
+  if (topicId) {
+    if (!mongoose.isValidObjectId(topicId)) {
+      throw new AppError('Invalid topicId', HTTP_STATUS.BAD_REQUEST);
+    }
+    const topic = await topicRepository.findById(topicId);
+    if (!topic) {
+      throw new AppError('Topic not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (subjectId) {
+      if (!mongoose.isValidObjectId(subjectId)) {
+        throw new AppError('Invalid subjectId', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (String(topic.subjectId) !== String(subjectId)) {
+        throw new AppError(
+          'topicId does not belong to the given subjectId',
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+    }
+  } else if (subjectId && !mongoose.isValidObjectId(subjectId)) {
+    throw new AppError('Invalid subjectId', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  if (postId) {
+    if (!mongoose.isValidObjectId(postId)) {
+      throw new AppError('Invalid postId', HTTP_STATUS.BAD_REQUEST);
+    }
+    const ok = await postRepository.existsAllIds([postId]);
+    if (!ok) {
+      throw new AppError('Invalid postId', HTTP_STATUS.BAD_REQUEST);
+    }
+  }
+
+  const topicSearch =
+    typeof query.topicSearch === 'string' ? query.topicSearch.trim() : '';
+  if (topicSearch && !subjectId && !topicId) {
+    throw new AppError(
+      'subjectId is required when filtering by topic name (topicSearch)',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+}
+
 export const questionService = {
   /**
    * Fetch active questions by id list; order matches `idTokens`.
@@ -353,6 +416,8 @@ export const questionService = {
   },
 
   async list(query) {
+    await validateQuestionListFilters(query);
+
     const filter = { isActive: true };
 
     if (query.subjectId) {
@@ -378,6 +443,25 @@ export const questionService = {
       filter.year = y;
     }
 
+    const topicSearch =
+      typeof query.topicSearch === 'string' ? query.topicSearch.trim() : '';
+    if (topicSearch && query.subjectId && !query.topicId) {
+      const tids = await topicRepository.findIdsBySubjectAndTopicSearch(
+        query.subjectId,
+        topicSearch
+      );
+      if (tids.length === 0) {
+        const { limit, skip } = parsePagination(query);
+        return { questions: [], total: 0, limit, skip };
+      }
+      filter.topicId = { $in: tids };
+    }
+
+    const search = typeof query.search === 'string' ? query.search.trim() : '';
+    if (search) {
+      filter.questionText = { $regex: escapeRegex(search), $options: 'i' };
+    }
+
     const { limit, skip } = parsePagination(query);
     const sort = parseSort(query);
 
@@ -394,6 +478,8 @@ export const questionService = {
    * populated subject/topic/posts, pagination.
    */
   async adminList(query) {
+    await validateQuestionListFilters(query);
+
     const filter = {};
 
     const includeInactive = String(query.includeInactive || '').toLowerCase() === 'true';
@@ -424,6 +510,31 @@ export const questionService = {
       }
       filter.postIds = new mongoose.Types.ObjectId(String(query.postId));
     }
+
+    const topicSearch =
+      typeof query.topicSearch === 'string' ? query.topicSearch.trim() : '';
+    if (topicSearch && query.subjectId && !query.topicId) {
+      const tids = await topicRepository.findIdsBySubjectAndTopicSearch(
+        query.subjectId,
+        topicSearch
+      );
+      if (tids.length === 0) {
+        const { limit, skip, page, pageSize } = parseAdminPagination(query);
+        const totalPages = 0;
+        return {
+          questions: [],
+          pagination: {
+            total: 0,
+            page,
+            pageSize,
+            totalPages,
+            skip,
+            limit,
+          },
+        };
+      }
+      filter.topicId = { $in: tids };
+    }
     if (query.difficulty !== undefined && query.difficulty !== '') {
       if (!DIFFICULTY_VALUES.includes(query.difficulty)) {
         throw new AppError('Invalid difficulty filter', HTTP_STATUS.BAD_REQUEST);
@@ -451,9 +562,12 @@ export const questionService = {
 
     const { limit, skip, page, pageSize } = parseAdminPagination(query);
 
+    const projection =
+      String(query.projection || '').toLowerCase() === 'picker' ? 'picker' : undefined;
+
     const [total, raw] = await Promise.all([
       questionRepository.countDocuments(filter),
-      questionRepository.findForAdminList(filter, { limit, skip }),
+      questionRepository.findForAdminList(filter, { limit, skip, projection }),
     ]);
 
     const questions = (raw || []).map((row) => {

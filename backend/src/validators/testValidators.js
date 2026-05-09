@@ -4,6 +4,7 @@ import { TEST_TYPE_VALUES } from '../constants/testType.js';
 export const createTestValidators = [
   body('title').trim().notEmpty().withMessage('title is required'),
   body('type')
+    .optional({ checkFalsy: true })
     .isIn(TEST_TYPE_VALUES)
     .withMessage(`type must be one of: ${TEST_TYPE_VALUES.join(', ')}`),
   body('questionIds')

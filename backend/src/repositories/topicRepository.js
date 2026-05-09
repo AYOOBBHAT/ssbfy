@@ -1,4 +1,9 @@
+import mongoose from 'mongoose';
 import { Topic } from '../models/Topic.js';
+
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 export const topicRepository = {
   async findAll(filter = {}) {
@@ -28,6 +33,28 @@ export const topicRepository = {
     return Topic.findOne({ subjectId, name: nameRegex }).lean().exec();
   },
 
+  /**
+   * Topic name substring search within one subject (admin question picker).
+   */
+  async findIdsBySubjectAndTopicSearch(subjectId, topicSearch) {
+    const q = String(topicSearch || '').trim();
+    if (!q || !mongoose.isValidObjectId(String(subjectId))) {
+      return [];
+    }
+    const sid = new mongoose.Types.ObjectId(String(subjectId));
+    const rows = await Topic.find(
+      {
+        subjectId: sid,
+        name: { $regex: escapeRegex(q), $options: 'i' },
+      },
+      { _id: 1 }
+    )
+      .limit(500)
+      .lean()
+      .exec();
+    return rows.map((r) => r._id);
+  },
+
   async create(data) {
     const doc = await Topic.create({
       name: data.name,
@@ -46,7 +73,3 @@ export const topicRepository = {
       .exec();
   },
 };
-
-function escapeRegex(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}

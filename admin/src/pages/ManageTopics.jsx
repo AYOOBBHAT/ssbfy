@@ -409,6 +409,27 @@ export default function ManageTopics() {
         post to create subjects under it, then add topics.
       </p>
 
+      {loadingPosts ? (
+        <p className="muted" style={{ marginBottom: 12 }}>
+          Loading posts…
+        </p>
+      ) : selectedPost ? (
+        <p className="muted" style={{ marginBottom: 12 }}>
+          Active path:{' '}
+          <strong>{selectedPost.name || 'Post'}</strong>
+          {selectedSubject ? (
+            <>
+              {' '}
+              → <strong>{selectedSubject.name}</strong>
+            </>
+          ) : subjects.length > 0 ? (
+            <> — select a subject to list or create topics.</>
+          ) : (
+            <> — add a subject under this post first.</>
+          )}
+        </p>
+      ) : null}
+
       {/* ---------------- Create Post ---------------- */}
       <section className="card form">
         <h2 className="section-heading">Create Post</h2>

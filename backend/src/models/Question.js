@@ -85,6 +85,7 @@ questionSchema.index({ topicId: 1 });
 questionSchema.index({ postIds: 1 });
 questionSchema.index({ year: 1 });
 questionSchema.index({ isActive: 1, subjectId: 1, topicId: 1 });
+questionSchema.index({ isActive: 1, subjectId: 1, topicId: 1, difficulty: 1 });
 questionSchema.index({ isActive: 1, postIds: 1 });
 questionSchema.index({ isActive: 1, difficulty: 1, year: 1 });
 

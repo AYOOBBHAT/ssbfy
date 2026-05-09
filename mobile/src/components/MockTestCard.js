@@ -2,7 +2,12 @@ import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '../theme/colors';
 
-const TEST_TYPE = { SUBJECT: 'subject', POST: 'post' };
+const TEST_TYPE = {
+  SUBJECT: 'subject',
+  POST: 'post',
+  TOPIC: 'topic',
+  MIXED: 'mixed',
+};
 
 function humanizeTitle(rawTitle, index) {
   const raw = (rawTitle || 'Mock test').trim();
@@ -22,6 +27,8 @@ function humanizeTitle(rawTitle, index) {
 function typeBadgeLabel(type) {
   if (type === TEST_TYPE.POST) return 'Full syllabus';
   if (type === TEST_TYPE.SUBJECT) return 'Subject focus';
+  if (type === TEST_TYPE.TOPIC) return 'Topic focus';
+  if (type === TEST_TYPE.MIXED) return 'Mixed';
   return 'Mock';
 }
 

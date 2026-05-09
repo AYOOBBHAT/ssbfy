@@ -6,7 +6,12 @@ const testSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     type: {
       type: String,
-      enum: [TEST_TYPE.SUBJECT, TEST_TYPE.POST],
+      enum: [
+        TEST_TYPE.SUBJECT,
+        TEST_TYPE.POST,
+        TEST_TYPE.TOPIC,
+        TEST_TYPE.MIXED,
+      ],
       required: true,
     },
     questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Question' }],

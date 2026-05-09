@@ -59,7 +59,17 @@ export const topicService = {
       );
     }
 
-    return topicRepository.create({ name: trimmedName, subjectId, order });
+    try {
+      return await topicRepository.create({ name: trimmedName, subjectId, order });
+    } catch (err) {
+      if (err && err.code === 11000) {
+        throw new AppError(
+          'A topic with this name already exists for this subject.',
+          HTTP_STATUS.CONFLICT
+        );
+      }
+      throw err;
+    }
   },
 
   /**
