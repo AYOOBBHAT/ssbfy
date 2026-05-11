@@ -3,7 +3,11 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { pdfNoteRepository } from '../repositories/pdfNoteRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
+import { userRepository } from '../repositories/userRepository.js';
+import { ROLES } from '../constants/roles.js';
+import { isPremiumUser } from '../utils/freeTierAccess.js';
 import { logger } from '../utils/logger.js';
+import { pdfSigningBatchEnd, pdfSigningBatchStart } from '../utils/pdfSigningMetrics.js';
 import { getSignedPdfUrl } from './pdfSupabaseStorage.js';
 
 function uniqueObjectIds(input) {
@@ -173,28 +177,83 @@ function buildListFilterForPost(postId) {
 
 export const pdfNoteService = {
   /**
+   * One fresh signed URL for a single PDF (premium/admin). Uses the same
+   * signing + cache stack as list; avoids refetching the full catalog when
+   * a client only needs to refresh one expired link.
+   */
+  async getSignedUrlForViewer({ actingUser, pdfId }) {
+    const doc = await pdfNoteRepository.findById(pdfId);
+    if (!doc || doc.isActive === false) {
+      throw new AppError('PDF note not found', HTTP_STATUS.NOT_FOUND);
+    }
+    const user = await userRepository.findById(actingUser.id);
+    if (!user) {
+      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+    }
+    const isAdmin = actingUser.role === ROLES.ADMIN;
+    if (!isPremiumUser(user) && !isAdmin) {
+      throw new AppError('Premium required', HTTP_STATUS.FORBIDDEN);
+    }
+    const normalized = normalizePdfNoteDoc(doc);
+    const path = typeof normalized.storedName === 'string' ? normalized.storedName.trim() : '';
+    if (!path) {
+      throw new AppError(
+        'PDF note is missing storage metadata',
+        HTTP_STATUS.INTERNAL_SERVER_ERROR
+      );
+    }
+    const signedUrl = await getSignedPdfUrl(path);
+    return { signedUrl, pdfId: String(normalized._id) };
+  },
+
+  /**
    * List PDF notes for authorized clients (premium or admin).
    * Each row includes a short-lived `signedUrl`; never exposes `fileUrl` or `storedName`.
    */
   async listForClient({ postId, includeInactive = false } = {}) {
-    const filter = {};
-    if (postId) {
-      Object.assign(filter, buildListFilterForPost(postId));
+    pdfSigningBatchStart();
+    const wall = Date.now();
+    try {
+      const filter = {};
+      if (postId) {
+        Object.assign(filter, buildListFilterForPost(postId));
+      }
+      if (!includeInactive) filter.isActive = true;
+      const rows = await pdfNoteRepository.findAll(filter, { clientListProjection: true });
+      const normalized = mapList(rows);
+      const firstPostKeys = normalized
+        .map((d) => {
+          const first = d.postIds?.[0] || d.postId;
+          return first ? String(first) : null;
+        })
+        .filter(Boolean);
+      const postTitleMap = await loadPostTitleMap(firstPostKeys);
+      const items = await Promise.all(
+        normalized.map((doc) => pdfDocToClientDto(doc, postTitleMap))
+      );
+      return items.filter(Boolean);
+    } finally {
+      const stats = pdfSigningBatchEnd();
+      const durationMs = Date.now() - wall;
+      if (
+        stats &&
+        (stats.signCalls > 1 ||
+          stats.cacheHits > 0 ||
+          stats.waitDedupes > 0 ||
+          durationMs > 300)
+      ) {
+        logger.debug(
+          {
+            msg: '[pdf-sign] listForClient',
+            durationMs,
+            signCalls: stats.signCalls,
+            cacheHits: stats.cacheHits,
+            waitDedupes: stats.waitDedupes,
+          },
+          'pdf list signing summary'
+        );
+      }
     }
-    if (!includeInactive) filter.isActive = true;
-    const rows = await pdfNoteRepository.findAll(filter);
-    const normalized = mapList(rows);
-    const firstPostKeys = normalized
-      .map((d) => {
-        const first = d.postIds?.[0] || d.postId;
-        return first ? String(first) : null;
-      })
-      .filter(Boolean);
-    const postTitleMap = await loadPostTitleMap(firstPostKeys);
-    const items = await Promise.all(
-      normalized.map((doc) => pdfDocToClientDto(doc, postTitleMap))
-    );
-    return items.filter(Boolean);
   },
 
   /**

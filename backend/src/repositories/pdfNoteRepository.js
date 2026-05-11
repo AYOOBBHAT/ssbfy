@@ -1,8 +1,16 @@
 import { PdfNote } from '../models/PdfNote.js';
 
+/** Fields needed to build client list rows + signed URLs (no uploadedBy / fileUrl bulk). */
+const CLIENT_LIST_FIELDS =
+  'title fileName storedName postIds postId isActive createdAt updatedAt fileSize mimeType';
+
 export const pdfNoteRepository = {
-  async findAll(filter = {}) {
-    return PdfNote.find(filter).sort({ createdAt: -1 }).lean().exec();
+  async findAll(filter = {}, options = {}) {
+    let q = PdfNote.find(filter).sort({ createdAt: -1 });
+    if (options.clientListProjection) {
+      q = q.select(CLIENT_LIST_FIELDS);
+    }
+    return q.lean().exec();
   },
 
   async findById(id) {

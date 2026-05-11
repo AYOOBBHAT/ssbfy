@@ -49,6 +49,11 @@ export const uploadPdfNoteValidators = [
     }),
 ];
 
+/** GET /api/notes/pdfs/:id/signed-url — single-object resign for clients. */
+export const pdfSignedUrlValidators = [
+  param('id').isMongoId().withMessage('id must be a valid Mongo id'),
+];
+
 export const listPdfNotesValidators = [
   query('postId').optional().isMongoId().withMessage('postId must be a valid id'),
   // Admins pass `includeInactive=true` from the management UI to see

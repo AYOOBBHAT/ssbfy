@@ -34,6 +34,8 @@ export const httpLogger = pinoHttp({
   customLogLevel(req, res, err) {
     if (res.statusCode >= 500 || err) return 'error';
     if (res.statusCode >= 400) return 'warn';
+    const rt = Number(res.responseTime);
+    if (Number.isFinite(rt) && rt >= 1500) return 'warn';
     return 'info';
   },
   customSuccessMessage(req, res) {
@@ -44,8 +46,19 @@ export const httpLogger = pinoHttp({
   },
   customProps(req, res) {
     const uid = req.user?.id ?? req.user?._id;
+    const route = req.originalUrl?.split('?')[0] || req.url;
+    const durationMs = Number(res.responseTime);
+    const ms = Number.isFinite(durationMs) ? Math.round(durationMs) : null;
+    const slowRequest = ms != null && ms > 500;
+    const verySlowRequest = ms != null && ms > 1500;
     return {
       userIdSuffix: uid ? String(uid).slice(-8) : undefined,
+      requestId: req.requestId,
+      route,
+      durationMs: ms,
+      statusCode: res.statusCode,
+      slowRequest: slowRequest || undefined,
+      verySlowRequest: verySlowRequest || undefined,
     };
   },
 });

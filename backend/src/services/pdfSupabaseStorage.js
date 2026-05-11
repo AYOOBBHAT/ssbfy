@@ -6,6 +6,11 @@ import { env } from '../config/env.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../utils/logger.js';
+import {
+  pdfSigningRecordCacheHit,
+  pdfSigningRecordSignCall,
+  pdfSigningRecordWaitDedupe,
+} from '../utils/pdfSigningMetrics.js';
 
 /** Must match the Storage bucket name in Supabase Dashboard (default: pdf-notes). */
 const DEFAULT_PDF_BUCKET = 'pdf-notes';
@@ -44,23 +49,31 @@ function assertReady() {
   }
 }
 
-/**
- * Short-lived signed URL for a bucket-relative object key (private bucket).
- * @param {string} pathWithinBucket - Key inside the configured bucket, e.g. exam-pdfs/foo.pdf
- */
-export async function getSignedPdfUrl(pathWithinBucket) {
-  assertReady();
+/** In-process reuse of identical Supabase sign calls (same object + TTL). */
+const MAX_SIGNED_URL_CACHE_ENTRIES = 500;
+const signedUrlCache = new Map();
+const signedUrlPending = new Map();
+
+function signedUrlCacheKey(bucket, inBucket, ttlSeconds) {
+  return `${bucket}\x00${inBucket}\x00${ttlSeconds}`;
+}
+
+function pruneSignedUrlCacheIfNeeded() {
+  while (signedUrlCache.size > MAX_SIGNED_URL_CACHE_ENTRIES) {
+    const k = signedUrlCache.keys().next().value;
+    if (k === undefined) break;
+    signedUrlCache.delete(k);
+  }
+}
+
+async function createSignedUrlFromSupabase(inBucket, bucket, ttlSeconds) {
   const supabase = getSupabaseServiceClient();
   if (!supabase) {
     throw new AppError('Supabase client failed to initialize', HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
-  const bucket = getPdfBucket();
-  const inBucket = normalizePathWithinBucket(pathWithinBucket, bucket);
-  if (!inBucket) {
-    throw new AppError('Missing path for signed URL', HTTP_STATUS.BAD_REQUEST);
-  }
-  const ttl = env.pdfSignedUrlTtlSeconds;
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(inBucket, ttl);
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(inBucket, ttlSeconds);
   if (error) {
     throw new AppError(
       error.message || 'Failed to create signed PDF URL',
@@ -72,6 +85,60 @@ export async function getSignedPdfUrl(pathWithinBucket) {
     throw new AppError('Storage did not return a signed HTTPS URL', HTTP_STATUS.BAD_GATEWAY);
   }
   return signedUrl;
+}
+
+/**
+ * Short-lived signed URL for a bucket-relative object key (private bucket).
+ * Uses an in-memory cache + in-flight deduplication to avoid N identical
+ * Supabase `createSignedUrl` calls per list request.
+ *
+ * @param {string} pathWithinBucket - Key inside the configured bucket, e.g. exam-pdfs/foo.pdf
+ */
+export async function getSignedPdfUrl(pathWithinBucket) {
+  assertReady();
+  const bucket = getPdfBucket();
+  const inBucket = normalizePathWithinBucket(pathWithinBucket, bucket);
+  if (!inBucket) {
+    throw new AppError('Missing path for signed URL', HTTP_STATUS.BAD_REQUEST);
+  }
+  const ttl = env.pdfSignedUrlTtlSeconds;
+  const key = signedUrlCacheKey(bucket, inBucket, ttl);
+  const now = Date.now();
+
+  const cached = signedUrlCache.get(key);
+  if (cached && now < cached.reuseUntilMs) {
+    pdfSigningRecordCacheHit();
+    return cached.url;
+  }
+  if (cached) {
+    signedUrlCache.delete(key);
+  }
+
+  let pending = signedUrlPending.get(key);
+  if (pending) {
+    pdfSigningRecordWaitDedupe();
+    return pending;
+  }
+
+  pending = (async () => {
+    pdfSigningRecordSignCall();
+    const issuedAt = Date.now();
+    const url = await createSignedUrlFromSupabase(inBucket, bucket, ttl);
+    const fraction = env.pdfSignedUrlCacheReuseFraction;
+    const maxWallMs = 5 * 60 * 1000;
+    const reuseMs = Math.min(maxWallMs, Math.floor(ttl * 1000 * fraction));
+    const reuseUntilMs = issuedAt + reuseMs;
+    pruneSignedUrlCacheIfNeeded();
+    signedUrlCache.set(key, { url, reuseUntilMs });
+    return url;
+  })();
+
+  signedUrlPending.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    signedUrlPending.delete(key);
+  }
 }
 
 /**

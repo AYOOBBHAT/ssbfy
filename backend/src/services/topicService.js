@@ -4,9 +4,13 @@ import { topicRepository } from '../repositories/topicRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
 import { logger } from '../utils/logger.js';
+import { cachedTopicsList } from '../utils/ttlCache.js';
 
 export const topicService = {
   async list(filter = {}) {
+    if (filter.isActive === true) {
+      return cachedTopicsList(filter, () => topicRepository.findAll(filter));
+    }
     return topicRepository.findAll(filter);
   },
 

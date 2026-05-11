@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import helmet from 'helmet';
 import './models/index.js';
 import apiRoutes from './routes/index.js';
@@ -37,6 +38,16 @@ app.set('trust proxy', 1);
 app.use(requestContext);
 
 app.use(helmet());
+
+app.use(
+  compression({
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    },
+  })
+);
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));

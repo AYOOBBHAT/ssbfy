@@ -3,9 +3,13 @@ import { AppError } from '../utils/AppError.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
 import { logger } from '../utils/logger.js';
+import { cachedSubjectsList } from '../utils/ttlCache.js';
 
 export const subjectService = {
   async list(filter = {}) {
+    if (filter.isActive === true) {
+      return cachedSubjectsList(filter, () => subjectRepository.findAll(filter));
+    }
     return subjectRepository.findAll(filter);
   },
 

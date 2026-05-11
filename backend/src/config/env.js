@@ -49,6 +49,14 @@ export const env = {
     120,
     Math.max(30, Number(process.env.PDF_SIGNED_URL_TTL_SECONDS) || 90)
   ),
+  /**
+   * Reuse in-process cached signed URLs until this fraction of the Supabase
+   * TTL elapses (never past real expiry). Default 0.88 — refresh before edge.
+   */
+  pdfSignedUrlCacheReuseFraction: Math.min(
+    0.98,
+    Math.max(0.5, Number(process.env.PDF_SIGNED_URL_CACHE_REUSE_FRACTION) || 0.88)
+  ),
 
   /**
    * Max free mock-test starts per device for non-premium users.

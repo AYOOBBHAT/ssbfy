@@ -14,6 +14,7 @@ import {
   uploadPdfNoteValidators,
   listPdfNotesValidators,
   updatePdfNoteValidators,
+  pdfSignedUrlValidators,
 } from '../validators/pdfNoteValidators.js';
 
 const router = Router();
@@ -22,6 +23,15 @@ const router = Router();
 //
 // Declared BEFORE the text-note routes because `GET /pdfs` must not be
 // captured by any `/:id` pattern on text notes below.
+
+// One-off fresh signed URL (same auth as list) — must be registered before `GET /pdfs`.
+router.get(
+  '/pdfs/:id/signed-url',
+  authenticate,
+  pdfSignedUrlValidators,
+  validateRequest,
+  pdfNoteController.signedUrl
+);
 
 // Premium or admin only; anonymous callers get 401. Admins may pass
 // `includeInactive=true` for the management UI.

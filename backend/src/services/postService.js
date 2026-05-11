@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { postRepository } from '../repositories/postRepository.js';
+import { cachedActivePostsList } from '../utils/ttlCache.js';
 
 /**
  * Convert an arbitrary display name into a canonical URL slug:
@@ -19,7 +20,7 @@ function slugify(input) {
 
 export const postService = {
   async list() {
-    return postRepository.findAll({ isActive: true });
+    return cachedActivePostsList(() => postRepository.findAll({ isActive: true }));
   },
 
   async getById(id) {

@@ -155,12 +155,12 @@ export const questionRepository = {
     let chain = Question.find(filter).sort({ createdAt: -1 }).skip(safeSkip).limit(safeLimit);
     if (projection === 'picker') {
       chain = chain.select(
-        'questionText options questionType questionImage subjectId topicId postIds difficulty year isActive correctAnswers correctAnswerIndex explanation createdAt updatedAt'
+        'questionText options questionType questionImage subjectId topicId postIds difficulty year isActive createdAt updatedAt'
       );
     }
     return chain
       .populate('subjectId', 'name isActive postId')
-      .populate('topicId', 'name isActive subjectId')
+      .populate('topicId', 'name isActive')
       .populate('postIds', 'name slug isActive')
       .lean()
       .exec();

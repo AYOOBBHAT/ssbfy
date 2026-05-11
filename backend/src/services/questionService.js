@@ -184,6 +184,33 @@ function projectQuestion(q) {
 }
 
 /**
+ * Admin test-builder / picker rows: no answers, no explanation — smaller payloads.
+ */
+function projectAdminPickerRow(row, subj, top, posts) {
+  const postIds = Array.isArray(row.postIds)
+    ? row.postIds.map((p) => (p && typeof p === 'object' && p._id != null ? p._id : p))
+    : row.postIds;
+  return {
+    _id: row._id,
+    questionText: row.questionText,
+    options: Array.isArray(row.options) ? [...row.options] : [],
+    questionType: row.questionType || QUESTION_TYPES.SINGLE_CORRECT,
+    questionImage: row.questionImage || '',
+    subjectId: subj?._id ?? row.subjectId,
+    topicId: top?._id ?? row.topicId,
+    postIds,
+    difficulty: row.difficulty,
+    year: row.year ?? null,
+    isActive: row.isActive !== false,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    subject: subj ? { _id: subj._id, name: subj.name } : null,
+    topic: top ? { _id: top._id, name: top.name } : null,
+    posts,
+  };
+}
+
+/**
  * Strip answers and explanation for student-facing / untrusted API responses.
  * Full scoring and admin flows must use {@link projectQuestion} / repo reads instead.
  */
@@ -567,6 +594,7 @@ export const questionService = {
 
     const projection =
       String(query.projection || '').toLowerCase() === 'picker' ? 'picker' : undefined;
+    const usePicker = projection === 'picker';
 
     const [total, raw] = await Promise.all([
       questionRepository.countDocuments(filter),
@@ -584,7 +612,6 @@ export const questionService = {
           ? row.postIds.map((p) => (p && typeof p === 'object' ? p._id : p))
           : row.postIds,
       };
-      const proj = projectQuestion(rowForProject);
       const posts = Array.isArray(row.postIds)
         ? row.postIds
             .map((p) =>
@@ -594,6 +621,10 @@ export const questionService = {
             )
             .filter(Boolean)
         : [];
+      if (usePicker) {
+        return projectAdminPickerRow(rowForProject, subj, top, posts);
+      }
+      const proj = projectQuestion(rowForProject);
       return {
         ...proj,
         subject: subj ? { _id: subj._id, name: subj.name } : null,

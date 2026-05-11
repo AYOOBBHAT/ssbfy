@@ -21,6 +21,15 @@ function shouldIncludeInactive(req) {
 }
 
 export const pdfNoteController = {
+  /** GET /api/notes/pdfs/:id/signed-url — premium/admin; one Supabase sign (cached). */
+  signedUrl: asyncHandler(async (req, res) => {
+    const out = await pdfNoteService.getSignedUrlForViewer({
+      actingUser: req.user,
+      pdfId: req.params.id,
+    });
+    return sendSuccess(res, out, 'Signed URL');
+  }),
+
   /** GET /api/notes/pdfs?postId=&includeInactive= — requires auth; premium or admin. */
   list: asyncHandler(async (req, res) => {
     const user = await userRepository.findById(req.user.id);
@@ -32,11 +41,14 @@ export const pdfNoteController = {
       throw new AppError('Premium required', HTTP_STATUS.FORBIDDEN);
     }
 
-    logger.info('[PdfNote] list', {
-      userId: String(req.user.id),
-      isAdmin,
-      premium: isPremiumUser(user),
-    });
+    logger.debug(
+      {
+        userId: String(req.user.id),
+        isAdmin,
+        premium: isPremiumUser(user),
+      },
+      '[PdfNote] list'
+    );
 
     const { postId } = req.query;
     const pdfs = await pdfNoteService.listForClient({
