@@ -11,6 +11,7 @@ import {
 import * as authService from '../services/authService';
 import api, { setAuthToken, clearAuthToken } from '../services/api';
 import { clearTopicsCache } from '../services/topicService';
+import { setMonitoringUser } from '../monitoring/sentry';
 
 const STORAGE_KEY = '@ssbfy/auth_session';
 
@@ -36,6 +37,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     setAuthToken(token);
   }, [token]);
+
+  useEffect(() => {
+    setMonitoringUser(user);
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;

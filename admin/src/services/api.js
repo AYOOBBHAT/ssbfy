@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { captureAdminApiFailure } from '../monitoring/sentry';
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'https://ssbfy-production.up.railway.app/api';
@@ -14,7 +15,14 @@ export function setAuthToken(token) {
   authToken = token || null;
 }
 
+function adminDebug(...args) {
+  if (import.meta.env.DEV) {
+    console.warn('[admin-api]', ...args);
+  }
+}
+
 api.interceptors.request.use((config) => {
+  config.metadata = { start: Date.now() };
   if (authToken) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${authToken}`;
@@ -26,19 +34,59 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
+    const cfg = error.config || {};
+    const path = String(cfg.url || '');
+    const latencyMs = Date.now() - (cfg.metadata?.start ?? Date.now());
     const payload = error?.response?.data;
-    console.log('[API ERROR]:', status || '', payload || error.message);
-    if (status === 401) {
-      console.log('[AUTH] Token expired or invalid');
+
+    if (import.meta.env.DEV) {
+      adminDebug(status ?? 'network', path, latencyMs + 'ms', payload?.message ?? error.message);
     }
+
+    if (status === 401) {
+      adminDebug('Session expired or invalid token');
+    } else if (status === 403) {
+      adminDebug('Forbidden', path);
+    } else if (status === 429) {
+      captureAdminApiFailure(status, path, 'rate_limited');
+    } else if (status >= 500) {
+      captureAdminApiFailure(status, path, payload?.message ?? error.message);
+    } else if (!status && (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK')) {
+      captureAdminApiFailure(0, path, error.code ?? 'offline');
+    }
+
     return Promise.reject(error);
   }
 );
 
 export function getApiErrorMessage(error) {
+  const st = error?.response?.status;
+  const body = error?.response?.data;
+  if (typeof body?.message === 'string' && body.message.trim()) {
+    return body.message;
+  }
+  if (!error?.response) {
+    if (error?.code === 'ECONNABORTED') {
+      return 'Request timed out. Check your connection.';
+    }
+    if (error?.code === 'ERR_NETWORK') {
+      return 'Unable to reach the server.';
+    }
+  }
+  if (st === 401) {
+    return 'Session expired. Please sign in again.';
+  }
+  if (st === 403) {
+    return 'You do not have permission for this action.';
+  }
+  if (st === 429) {
+    return 'Too many requests. Please wait and try again.';
+  }
+  if (st >= 500) {
+    return 'Server error. Please try again shortly.';
+  }
   return (
-    error?.response?.data?.message ||
-    error?.response?.data?.error ||
+    body?.error ||
     error?.message ||
     'Something went wrong'
   );

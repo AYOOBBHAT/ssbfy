@@ -1,11 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import './models/index.js';
 import apiRoutes from './routes/index.js';
 import { env, normalizeCorsOrigin } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
+import { requestContext } from './middlewares/requestContext.js';
+import { httpLogger } from './middlewares/httpLogger.js';
+import { healthHandler } from './routes/healthRoutes.js';
 
 const CORS_DENIED_MESSAGE = 'Not allowed by CORS';
 
@@ -32,6 +34,8 @@ const app = express();
 
 app.set('trust proxy', 1);
 
+app.use(requestContext);
+
 app.use(helmet());
 
 app.use(cors(corsOptions));
@@ -49,11 +53,10 @@ app.use(
     },
   })
 );
-app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+app.use(httpLogger);
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ success: true, message: 'OK', uptime: process.uptime() });
-});
+/** Same payload as `GET /api/health` — many monitors ping `/health` at root. */
+app.get('/health', healthHandler);
 
 app.get('/api', (req, res) => {
   res.json({

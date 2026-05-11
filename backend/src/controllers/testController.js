@@ -90,6 +90,16 @@ export const testController = {
     );
   }),
 
+  /** Autosave in-progress selections for crash recovery (does not finalize). */
+  saveProgress: asyncHandler(async (req, res) => {
+    const { attempt } = await testAttemptService.saveProgress(
+      req.user.id,
+      req.params.id,
+      req.body.answers
+    );
+    return sendSuccess(res, { attempt }, 'Progress saved');
+  }),
+
   attemptsHistory: asyncHandler(async (req, res) => {
     const attempts = await testAttemptService.listHistory(req.user.id, req.params.id);
     return sendSuccess(res, { attempts }, 'Test attempts');

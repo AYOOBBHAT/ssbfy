@@ -24,6 +24,17 @@ export async function submitTest(testId, answers) {
   return data?.data ?? {};
 }
 
+/**
+ * Autosave in-progress answers (partial array allowed). Sends deviceId for free-tier access checks.
+ * @param {string} testId
+ * @param {Array<{ questionId: string, selectedOptionIndexes?: number[], selectedOptionIndex?: number|null }>} answers
+ */
+export async function saveTestProgress(testId, answers) {
+  const deviceId = await getDeviceId();
+  const { data } = await api.patch(`/tests/${testId}/progress`, { answers, deviceId });
+  return data?.data ?? {};
+}
+
 /** @returns {Promise<{ attempts: object[] }>} */
 export async function getTestAttempts(testId) {
   const { data } = await api.get(`/tests/${testId}/attempts`);

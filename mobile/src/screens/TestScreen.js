@@ -6,15 +6,32 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  AppState,
+  BackHandler,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import api, { getApiErrorMessage } from '../services/api';
-import { submitTest } from '../services/testService';
+import api, {
+  getApiErrorMessage,
+  isAttemptAlreadySubmittedError,
+  getSubmitConflictRecoveryResult,
+} from '../services/api';
+import { submitTest, saveTestProgress } from '../services/testService';
 import { completeDailyPractice } from '../services/dailyPracticeService';
 import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import {
+  loadDraft,
+  saveDraft,
+  clearDraft,
+  DRAFT_VERSION,
+} from '../utils/testAttemptDraft';
+import { setOpenAttempt, clearOpenAttempt } from '../utils/openTestAttempts';
+import { captureFlowException } from '../monitoring/sentry';
+
+const DRAFT_DEBOUNCE_MS = 450;
+const SERVER_SYNC_INTERVAL_MS = 25000;
 
 function formatMmSs(totalSeconds) {
   const s = Math.max(0, Number(totalSeconds) || 0);
@@ -69,6 +86,38 @@ function getQuestionCorrectSet(q) {
 
 function isMultiCorrectQuestion(q) {
   return q?.questionType === 'multiple_correct';
+}
+
+function answersFromAttempt(att) {
+  const m = {};
+  if (!att || !Array.isArray(att.answers)) return m;
+  for (const a of att.answers) {
+    const raw =
+      a.selectedOptionIndexes !== undefined ? a.selectedOptionIndexes : a.selectedOptionIndex;
+    const arr = toIndexArray(raw);
+    if (arr.length > 0) {
+      m[String(a.questionId)] = arr;
+    }
+  }
+  return m;
+}
+
+/** Full question-id map including empty arrays (unanswered) for Result stats after 409 recovery. */
+function userAnswersRecordFromAttempt(att, questionIdsList) {
+  const byQ = new Map(
+    (Array.isArray(att?.answers) ? att.answers : []).map((a) => [String(a.questionId), a])
+  );
+  const m = {};
+  for (const qid of questionIdsList) {
+    const key = String(qid);
+    const a = byQ.get(key);
+    const raw =
+      a && a.selectedOptionIndexes !== undefined
+        ? a.selectedOptionIndexes
+        : a?.selectedOptionIndex;
+    m[key] = toIndexArray(raw);
+  }
+  return m;
 }
 
 export default function TestScreen() {
@@ -131,6 +180,10 @@ export default function TestScreen() {
     }
     return m;
   });
+  const [skippedQuestionIds, setSkippedQuestionIds] = useState([]);
+  const [markedForReviewIds, setMarkedForReviewIds] = useState([]);
+  const [resumeResolved, setResumeResolved] = useState(() => !!isLocal);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [timeLeft, setTimeLeft] = useState(initialSeconds);
@@ -138,7 +191,11 @@ export default function TestScreen() {
   const intervalRef = useRef(null);
   const endTimeMsRef = useRef(0);
   const submitLockRef = useRef(false);
+  const submissionCompletedRef = useRef(false);
   const autoFiredRef = useRef(false);
+  const draftSaveTimerRef = useRef(null);
+  const serverSyncTimerRef = useRef(null);
+  const progressSeqRef = useRef(0);
 
   const stopTimer = useCallback(() => {
     if (intervalRef.current != null) {
@@ -206,6 +263,239 @@ export default function TestScreen() {
     };
   }, [idsKey, isLocal, isRetry, isPractice, isDaily, preloadedQuestions]);
 
+  useEffect(() => {
+    if (isLocal) return;
+    if (!loading && (error || questions.length === 0)) {
+      setResumeResolved(true);
+    }
+  }, [isLocal, loading, error, questions.length]);
+
+  useEffect(() => {
+    if (isLocal || !testId || !attempt?._id) return;
+    void setOpenAttempt(testId, attempt);
+  }, [isLocal, testId, attempt]);
+
+  useEffect(() => {
+    if (isLocal || !testId || !attempt?._id) return;
+    if (loading || error || questions.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const draft = await loadDraft(testId);
+      if (cancelled) return;
+
+      if (
+        !draft ||
+        draft.submitted ||
+        draft.version !== DRAFT_VERSION ||
+        String(draft.attemptId) !== String(attempt._id) ||
+        draft.questionIdsKey !== idsKey
+      ) {
+        setResumeResolved(true);
+        return;
+      }
+
+      Alert.alert(
+        'Resume previous attempt?',
+        'We saved your progress on this device.',
+        [
+          {
+            text: 'Discard & restart',
+            style: 'destructive',
+            onPress: () => {
+              void clearDraft(testId);
+              setAnswers(answersFromAttempt(attempt));
+              setIndex(0);
+              setSkippedQuestionIds([]);
+              setMarkedForReviewIds([]);
+              setResumeResolved(true);
+            },
+          },
+          {
+            text: 'Resume',
+            onPress: () => {
+              const merged = { ...answersFromAttempt(attempt) };
+              const fromDraft = draft.answers && typeof draft.answers === 'object' ? draft.answers : {};
+              for (const [k, v] of Object.entries(fromDraft)) {
+                if (Array.isArray(v)) merged[k] = v;
+              }
+              setAnswers(merged);
+              const maxIdx = Math.max(0, questions.length - 1);
+              const ci =
+                typeof draft.currentIndex === 'number'
+                  ? Math.min(Math.max(0, draft.currentIndex), maxIdx)
+                  : 0;
+              setIndex(ci);
+              setSkippedQuestionIds(
+                Array.isArray(draft.skippedQuestionIds)
+                  ? draft.skippedQuestionIds.map(String)
+                  : []
+              );
+              setMarkedForReviewIds(
+                Array.isArray(draft.markedForReviewIds)
+                  ? draft.markedForReviewIds.map(String)
+                  : []
+              );
+              setResumeResolved(true);
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLocal, testId, attempt?._id, loading, error, questions.length, idsKey]);
+
+  const flushDraftSoon = useCallback(() => {
+    if (isLocal || !testId || !attempt?._id || submissionCompletedRef.current) return;
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = setTimeout(async () => {
+      draftSaveTimerRef.current = null;
+      try {
+        await saveDraft(testId, {
+          version: DRAFT_VERSION,
+          testId: String(testId),
+          attemptId: String(attempt._id),
+          questionIdsKey: idsKey,
+          answers,
+          currentIndex: index,
+          skippedQuestionIds,
+          markedForReviewIds,
+          serverStartTimeIso: attempt?.startTime
+            ? new Date(attempt.startTime).toISOString()
+            : null,
+          durationMinutes: Number(durationMinutes) || 0,
+          submitted: false,
+        });
+      } catch (e) {
+        logger.info('[TEST] draft save failed', e?.message);
+      }
+    }, DRAFT_DEBOUNCE_MS);
+  }, [
+    isLocal,
+    testId,
+    attempt,
+    idsKey,
+    answers,
+    index,
+    skippedQuestionIds,
+    markedForReviewIds,
+    durationMinutes,
+  ]);
+
+  const syncProgressToServer = useCallback(async () => {
+    if (isLocal || !testId || submissionCompletedRef.current || submitLockRef.current) return;
+    const seq = ++progressSeqRef.current;
+    try {
+      const payload = questionIds.map((qid) => {
+        const arr = Array.isArray(answers[String(qid)]) ? answers[String(qid)] : [];
+        return {
+          questionId: String(qid),
+          selectedOptionIndexes: arr,
+          selectedOptionIndex: arr.length > 0 ? arr[0] : null,
+        };
+      });
+      await saveTestProgress(testId, payload);
+    } catch (e) {
+      if (seq === progressSeqRef.current) {
+        logger.info('[TEST] server progress sync failed:', getApiErrorMessage(e));
+      }
+    }
+  }, [isLocal, testId, questionIds, answers]);
+
+  useEffect(() => {
+    if (isLocal || !resumeResolved) return;
+    flushDraftSoon();
+    return () => {
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current);
+        draftSaveTimerRef.current = null;
+      }
+    };
+  }, [isLocal, resumeResolved, flushDraftSoon]);
+
+  useEffect(() => {
+    if (isLocal || !resumeResolved) return;
+    if (serverSyncTimerRef.current) clearInterval(serverSyncTimerRef.current);
+    serverSyncTimerRef.current = setInterval(() => {
+      void syncProgressToServer();
+    }, SERVER_SYNC_INTERVAL_MS);
+    return () => {
+      if (serverSyncTimerRef.current) {
+        clearInterval(serverSyncTimerRef.current);
+        serverSyncTimerRef.current = null;
+      }
+    };
+  }, [isLocal, resumeResolved, syncProgressToServer]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background' || next === 'inactive') {
+        if (!isLocal && testId && attempt?._id && !submissionCompletedRef.current) {
+          void (async () => {
+            try {
+              await saveDraft(testId, {
+                version: DRAFT_VERSION,
+                testId: String(testId),
+                attemptId: String(attempt._id),
+                questionIdsKey: idsKey,
+                answers,
+                currentIndex: index,
+                skippedQuestionIds,
+                markedForReviewIds,
+                serverStartTimeIso: attempt?.startTime
+                  ? new Date(attempt.startTime).toISOString()
+                  : null,
+                durationMinutes: Number(durationMinutes) || 0,
+                submitted: false,
+              });
+            } catch (_) {
+              /* ignore */
+            }
+            await syncProgressToServer();
+          })();
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [
+    isLocal,
+    testId,
+    attempt,
+    idsKey,
+    answers,
+    index,
+    skippedQuestionIds,
+    markedForReviewIds,
+    durationMinutes,
+    syncProgressToServer,
+  ]);
+
+  useEffect(() => {
+    if (isLocal) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (submitting || submissionCompletedRef.current) return true;
+      Alert.alert('Leave test?', 'Your progress is saved — you can resume later from Mock tests.', [
+        { text: 'Stay', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: () => {
+            void flushDraftSoon();
+            void syncProgressToServer();
+            navigation.navigate('Main', { screen: 'Tests', params: { screen: 'TestsMain' } });
+          },
+        },
+      ]);
+      return true;
+    });
+    return () => sub.remove();
+  }, [isLocal, submitting, navigation, flushDraftSoon, syncProgressToServer]);
+
   const total = questions.length;
   const question = questions[index];
   const currentId = question ? String(question._id) : null;
@@ -221,6 +511,7 @@ export default function TestScreen() {
    */
   const selectOption = (optionIndex) => {
     if (!currentId) return;
+    setSkippedQuestionIds((prev) => prev.filter((id) => id !== currentId));
     setAnswers((prev) => {
       const current = Array.isArray(prev[currentId]) ? prev[currentId] : [];
       let next;
@@ -250,6 +541,21 @@ export default function TestScreen() {
     if (index > 0) setIndex((i) => i - 1);
   };
 
+  const skipCurrentQuestion = useCallback(() => {
+    if (!currentId || submitting) return;
+    setSkippedQuestionIds((prev) =>
+      prev.includes(currentId) ? prev : [...prev, currentId]
+    );
+    if (index < total - 1) setIndex((i) => i + 1);
+  }, [currentId, index, total, submitting]);
+
+  const toggleMarkForReview = useCallback(() => {
+    if (!currentId || submitting) return;
+    setMarkedForReviewIds((prev) =>
+      prev.includes(currentId) ? prev.filter((id) => id !== currentId) : [...prev, currentId]
+    );
+  }, [currentId, submitting]);
+
   const attemptedCount = useMemo(
     () =>
       questionIds.filter((qid) => {
@@ -260,25 +566,62 @@ export default function TestScreen() {
   );
 
   const navigateToResult = useCallback(
-    (data) => {
+    (data, navOptions = {}) => {
       const payload = data || {};
-      // Replace TestScreen so back from Result cannot return to a submitted attempt.
-      navigation.replace('Result', {
-        testId,
-        score: payload.score ?? 0,
-        accuracy: payload.accuracy ?? 0,
-        timeTaken: payload.timeTaken ?? 0,
-        weakTopics: Array.isArray(payload.weakTopics) ? payload.weakTopics : [],
-        totalQuestions: questionIds.length,
-        attemptedQuestions: attemptedCount,
-        questions: questions.filter((q) => q !== undefined),
-        userAnswers: answers,
-        correctAnswers: Array.isArray(payload.correctAnswers)
-          ? payload.correctAnswers
-          : [],
+      const ua =
+        navOptions.userAnswers != null ? navOptions.userAnswers : answers;
+      const sk =
+        navOptions.skippedQuestionIds != null ? navOptions.skippedQuestionIds : skippedQuestionIds;
+      const mr =
+        navOptions.markedForReviewIds != null ? navOptions.markedForReviewIds : markedForReviewIds;
+
+      const attemptedQs = questionIds.filter((qid) => {
+        const v = ua[String(qid)];
+        return Array.isArray(v) && v.length > 0;
+      }).length;
+      const unansweredQs = questionIds.length - attemptedQs;
+      const skippedQs = sk.filter((qid) => {
+        const v = ua[String(qid)];
+        return !(Array.isArray(v) && v.length > 0);
+      }).length;
+
+      navigation.reset({
+        index: 1,
+        routes: [
+          { name: 'Main' },
+          {
+            name: 'Result',
+            params: {
+              testId,
+              score: payload.score ?? 0,
+              accuracy: payload.accuracy ?? 0,
+              timeTaken: payload.timeTaken ?? 0,
+              weakTopics: Array.isArray(payload.weakTopics) ? payload.weakTopics : [],
+              totalQuestions: questionIds.length,
+              attemptedQuestions: attemptedQs,
+              unansweredQuestions: unansweredQs,
+              skippedQuestions: skippedQs,
+              markedForReviewCount: mr.length,
+              questions: questions.filter((q) => q !== undefined),
+              userAnswers: ua,
+              correctAnswers: Array.isArray(payload.correctAnswers)
+                ? payload.correctAnswers
+                : [],
+              recoveredSubmit: !!navOptions.recoveredSubmit,
+            },
+          },
+        ],
       });
     },
-    [navigation, testId, questionIds.length, attemptedCount, questions, answers]
+    [
+      navigation,
+      testId,
+      questionIds,
+      questions,
+      answers,
+      skippedQuestionIds,
+      markedForReviewIds,
+    ]
   );
 
   const executeSubmit = useCallback(
@@ -325,12 +668,54 @@ export default function TestScreen() {
         payload = questionIds.map(buildAnswerEntry);
 
         const data = await submitTest(testId, payload);
+        submissionCompletedRef.current = true;
+        try {
+          await clearDraft(testId);
+          await clearOpenAttempt(testId);
+        } catch (_) {
+          /* ignore storage errors */
+        }
         navigateToResult(data);
       } catch (e) {
-        setSubmitError(getApiErrorMessage(e));
+        if (isAttemptAlreadySubmittedError(e)) {
+          const recovery = getSubmitConflictRecoveryResult(e);
+          submissionCompletedRef.current = true;
+          try {
+            await clearDraft(testId);
+            await clearOpenAttempt(testId);
+          } catch (_) {
+            /* ignore storage errors */
+          }
+          if (recovery && recovery.attempt) {
+            const ua = userAnswersRecordFromAttempt(recovery.attempt, questionIds);
+            logger.debug('[submit] 409 recovered — opening Result');
+            navigateToResult(recovery, {
+              userAnswers: ua,
+              skippedQuestionIds: [],
+              markedForReviewIds: [],
+              recoveredSubmit: true,
+            });
+          } else {
+            submissionCompletedRef.current = false;
+            setSubmitError(
+              'This test was already submitted. Open your results from the test list.'
+            );
+          }
+        } else {
+          if (!__DEV__) {
+            captureFlowException(
+              'test_submit',
+              e instanceof Error ? e : new Error(String(e)),
+              { testId: String(testId ?? '') }
+            );
+          }
+          setSubmitError(getApiErrorMessage(e));
+        }
       } finally {
         setSubmitting(false);
-        submitLockRef.current = false;
+        if (!submissionCompletedRef.current) {
+          submitLockRef.current = false;
+        }
       }
     },
     [testId, questionIds, questions, answers, navigateToResult, stopTimer]
@@ -451,9 +836,16 @@ export default function TestScreen() {
 
   useEffect(() => {
     if (loading || error || total === 0) return;
+    if (!isLocal && !resumeResolved) return;
     if (initialSeconds <= 0) return;
 
-    endTimeMsRef.current = Date.now() + initialSeconds * 1000;
+    if (!isLocal && attempt?.startTime) {
+      const startMs = new Date(attempt.startTime).getTime();
+      const anchor = Number.isFinite(startMs) ? startMs : Date.now();
+      endTimeMsRef.current = anchor + initialSeconds * 1000;
+    } else {
+      endTimeMsRef.current = Date.now() + initialSeconds * 1000;
+    }
 
     const tick = () => {
       const remaining = Math.max(
@@ -476,17 +868,27 @@ export default function TestScreen() {
         intervalRef.current = null;
       }
     };
-  }, [loading, error, total, initialSeconds]);
+  }, [loading, error, total, initialSeconds, isLocal, attempt?.startTime, resumeResolved]);
 
   useEffect(() => {
     if (loading || error || total === 0) return;
+    if (!isLocal && !resumeResolved) return;
     if (initialSeconds <= 0) return;
     if (timeLeft > 0) return;
     if (autoFiredRef.current) return;
     if (submitLockRef.current) return;
     autoFiredRef.current = true;
     void executeSubmit({ autoSubmit: true });
-  }, [loading, error, total, initialSeconds, timeLeft, executeSubmit]);
+  }, [
+    loading,
+    error,
+    total,
+    initialSeconds,
+    timeLeft,
+    executeSubmit,
+    isLocal,
+    resumeResolved,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -501,7 +903,19 @@ export default function TestScreen() {
     (k) => Array.isArray(answers[k]) && answers[k].length > 0
   ).length;
   const totalQuestionsCount = questionIds.length;
-  const attemptSummaryLabel = `Attempted: ${attempted} / ${totalQuestionsCount}`;
+  const skippedVisible = skippedQuestionIds.length;
+  const markedVisible = markedForReviewIds.length;
+  const attemptSummaryLabel = `Attempted ${attempted} / ${totalQuestionsCount}${
+    !isLocal ? ` · Skipped ${skippedVisible} · Marked ${markedVisible}` : ''
+  }`;
+
+  if (!isLocal && !resumeResolved && questions.length > 0) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.muted}>Restoring attempt…</Text>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -662,6 +1076,24 @@ export default function TestScreen() {
           style={styles.navBtn}
         />
       </View>
+      {!isLocal && currentId ? (
+        <View style={styles.secondaryActions}>
+          <AppButton
+            title={markedForReviewIds.includes(currentId) ? '★ Review' : '☆ Mark review'}
+            variant="secondary"
+            onPress={toggleMarkForReview}
+            disabled={submitting}
+            style={styles.secondaryBtn}
+          />
+          <AppButton
+            title="Skip"
+            variant="secondary"
+            onPress={skipCurrentQuestion}
+            disabled={submitting}
+            style={styles.secondaryBtn}
+          />
+        </View>
+      ) : null}
       {isLocal ? (
         <AppButton
           title={isDaily && submitting ? 'Finishing…' : localFinishLabel}
@@ -672,7 +1104,7 @@ export default function TestScreen() {
         <AppButton
           title={submitting ? 'Submitting...' : 'Submit Test'}
           onPress={handleSubmitPress}
-          disabled={submitting}
+          disabled={submitting || submissionCompletedRef.current}
         />
       )}
     </View>
@@ -755,6 +1187,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   navBtn: { flex: 1 },
+  secondaryActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+  },
+  secondaryBtn: { flex: 1 },
   muted: { color: colors.muted, marginTop: 8 },
   err: { color: colors.danger, textAlign: 'center' },
 });

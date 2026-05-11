@@ -5,6 +5,7 @@ import { adminChain } from '../middlewares/adminGuard.js';
 import { checkTestAccess } from '../middlewares/checkTestAccess.js';
 import { validateRequest } from '../middlewares/validate.js';
 import {
+  saveProgressValidators,
   startTestValidators,
   submitTestValidators,
   testIdParam,
@@ -30,6 +31,16 @@ router.post(
   submitTestValidators,
   validateRequest,
   testController.submit
+);
+
+router.patch(
+  '/:id/progress',
+  authenticate,
+  ...testIdParam,
+  saveProgressValidators,
+  validateRequest,
+  checkTestAccess,
+  testController.saveProgress
 );
 
 router.get(

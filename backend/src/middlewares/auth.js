@@ -61,7 +61,14 @@ export function authOptional(req, res, next) {
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      logger.info('[ACCESS] Forbidden — required:', roles, 'got:', req.user?.role || 'anonymous');
+      logger.info(
+        {
+          requiredRoles: roles,
+          actualRole: req.user?.role || 'anonymous',
+          path: req.originalUrl?.split('?')[0],
+        },
+        '[ACCESS] Forbidden role'
+      );
       return next(new AppError('Forbidden', HTTP_STATUS.FORBIDDEN));
     }
     next();

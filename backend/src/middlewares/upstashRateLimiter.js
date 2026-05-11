@@ -1,6 +1,6 @@
 import { redis } from '../lib/redis.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
-import { logger } from '../utils/logger.js';
+import { logger, logSecurityEvent } from '../utils/logger.js';
 
 const RATE_LIMIT_BODY = {
   success: false,
@@ -97,6 +97,11 @@ export function createUpstashLimiter({
     }
 
     if (count > maxRequests) {
+      logSecurityEvent('rate_limit_exceeded', {
+        bucket: routeName,
+        requestId: req.requestId,
+        ipSuffix: ip.length > 8 ? ip.slice(-8) : 'unknown',
+      });
       res.set('Retry-After', String(windowSeconds));
       return res.status(HTTP_STATUS.TOO_MANY_REQUESTS).json(RATE_LIMIT_BODY);
     }

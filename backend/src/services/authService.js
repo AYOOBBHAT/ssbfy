@@ -5,6 +5,7 @@ import { ROLES } from '../constants/roles.js';
 import { AppError } from '../utils/AppError.js';
 import { signToken } from '../utils/jwt.js';
 import { userRepository } from '../repositories/userRepository.js';
+import { logSecurityEvent } from '../utils/logger.js';
 
 function toPublicUser(doc) {
   if (!doc) return null;
@@ -43,11 +44,13 @@ export const authService = {
   async login({ email, password }) {
     const user = await userRepository.findByEmail(email, { includePassword: true });
     if (!user) {
+      logSecurityEvent('login_failed', { reason: 'credentials' });
       throw new AppError('Invalid email or password', HTTP_STATUS.UNAUTHORIZED);
     }
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) {
+      logSecurityEvent('login_failed', { reason: 'credentials' });
       throw new AppError('Invalid email or password', HTTP_STATUS.UNAUTHORIZED);
     }
 

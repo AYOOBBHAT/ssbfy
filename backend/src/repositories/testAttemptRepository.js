@@ -236,4 +236,46 @@ export const testAttemptRepository = {
       .lean()
       .exec();
   },
+
+  /**
+   * Merge partial answers into an open attempt. Each normalized answer must
+   * reference a questionId on the attempt snapshot. Missing questions stay as
+   * empty selections until submit.
+   */
+  async mergeAnswersIntoOpenAttempt(userId, testId, normalizedAnswers) {
+    const attempt = await this.findInProgressByUserAndTest(userId, testId);
+    if (!attempt || attempt.endTime != null) return null;
+
+    const allowed = new Set(attempt.questionIds.map((id) => id.toString()));
+    const byQ = new Map();
+    for (const a of attempt.answers || []) {
+      byQ.set(a.questionId.toString(), a);
+    }
+    for (const a of normalizedAnswers) {
+      const sid = a.questionId.toString();
+      if (!allowed.has(sid)) {
+        continue;
+      }
+      byQ.set(sid, a);
+    }
+
+    const merged = attempt.questionIds.map((qid) => {
+      const key = qid.toString();
+      return (
+        byQ.get(key) ?? {
+          questionId: qid,
+          selectedOptionIndexes: [],
+          selectedOptionIndex: null,
+        }
+      );
+    });
+
+    return TestAttempt.findOneAndUpdate(
+      { _id: attempt._id, userId, testId, endTime: null },
+      { $set: { answers: merged } },
+      { new: true, runValidators: true }
+    )
+      .lean()
+      .exec();
+  },
 };

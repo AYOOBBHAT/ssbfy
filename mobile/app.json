@@ -36,7 +36,8 @@
     "owner": "ayoobbhat",
     "plugins": [
       "expo-web-browser",
-      "./plugins/withAdiRegistration"
+      "./plugins/withAdiRegistration",
+      "@sentry/react-native"
     ]
   }
 }

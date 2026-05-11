@@ -112,12 +112,16 @@ export default function ResultScreen() {
     weakTopics = [],
     totalQuestions = 0,
     attemptedQuestions = 0,
+    unansweredQuestions: unansweredQuestionsParam,
+    skippedQuestions: skippedQuestionsParam,
+    markedForReviewCount: markedForReviewParam,
     questions = [],
     userAnswers = {},
     correctAnswers = [],
     retry = false,
     retryAnswers = {},
     retryQuestions = [],
+    recoveredSubmit = false,
   } = params || {};
   const isRetry = !!retry;
   const isMock = !!testId && !isRetry;
@@ -233,12 +237,56 @@ export default function ResultScreen() {
     [wrongQuestions]
   );
 
+  const mockAttemptStats = useMemo(() => {
+    if (isRetry) return null;
+    const qs = Array.isArray(questions) ? questions : [];
+    let correct = 0;
+    let incorrect = 0;
+    for (const q of qs) {
+      const qid = String(q?._id ?? '');
+      const userArr = toIndexArray(userAnswers?.[qid]);
+      const correctArr = getCorrectSetFor(qid, q);
+      if (userArr.length === 0) continue;
+      if (correctArr.length > 0 && indexSetsEqual(userArr, correctArr)) correct += 1;
+      else incorrect += 1;
+    }
+    return { correct, incorrect };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRetry, questions, userAnswers, correctAnswers]);
+
+  const displayStats = useMemo(() => {
+    const qlen = Array.isArray(questions) ? questions.length : 0;
+    const totalQ = Math.max(Number(totalQuestions) || 0, qlen);
+    const answeredQ = Number(attemptedQuestions) || 0;
+    const unansweredQ =
+      unansweredQuestionsParam != null && unansweredQuestionsParam !== ''
+        ? Number(unansweredQuestionsParam)
+        : Math.max(0, totalQ - answeredQ);
+    const skippedQ =
+      skippedQuestionsParam != null && skippedQuestionsParam !== ''
+        ? Number(skippedQuestionsParam)
+        : null;
+    const markedQ =
+      markedForReviewParam != null && markedForReviewParam !== ''
+        ? Number(markedForReviewParam)
+        : null;
+    return { totalQ, answeredQ, unansweredQ, skippedQ, markedQ };
+  }, [
+    questions,
+    totalQuestions,
+    attemptedQuestions,
+    unansweredQuestionsParam,
+    skippedQuestionsParam,
+    markedForReviewParam,
+  ]);
+
   const handleReviewAnswers = () => {
     navigation.navigate('ReviewAnswers', {
       questions: Array.isArray(questions) ? questions : [],
       userAnswers: userAnswers && typeof userAnswers === 'object' ? userAnswers : {},
       correctAnswers: Array.isArray(correctAnswers) ? correctAnswers : [],
       retry,
+      readOnly: true,
     });
   };
 
@@ -552,6 +600,14 @@ export default function ResultScreen() {
         </Text>
       </View>
 
+      {recoveredSubmit ? (
+        <View style={styles.recoveredBanner}>
+          <Text style={styles.recoveredBannerText}>
+            Test already submitted — showing your saved results.
+          </Text>
+        </View>
+      ) : null}
+
       {isMock ? (
         <View style={styles.attemptsBlock}>
           <View style={styles.attemptsHeaderRow}>
@@ -618,19 +674,53 @@ export default function ResultScreen() {
         </View>
       ) : null}
 
-      <View style={styles.statsRow}>
-        <View style={styles.statBox}>
-          <Text style={styles.statValue}>{String(totalQuestions)}</Text>
-          <Text style={styles.statLabel}>Total</Text>
+      <View style={styles.statsBlock}>
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{String(displayStats.totalQ)}</Text>
+            <Text style={styles.statLabel}>Total</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{String(displayStats.answeredQ)}</Text>
+            <Text style={styles.statLabel}>Answered</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{String(timeTaken ?? 0)}s</Text>
+            <Text style={styles.statLabel}>Time</Text>
+          </View>
         </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statValue}>{String(attemptedQuestions)}</Text>
-          <Text style={styles.statLabel}>Attempted</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statValue}>{String(timeTaken ?? 0)}s</Text>
-          <Text style={styles.statLabel}>Time</Text>
-        </View>
+        {!isRetry && mockAttemptStats ? (
+          <View style={[styles.statsRow, styles.statsRowSecondary]}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{String(displayStats.unansweredQ)}</Text>
+              <Text style={styles.statLabel}>Unanswered</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{String(mockAttemptStats.correct)}</Text>
+              <Text style={styles.statLabel}>Correct</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{String(mockAttemptStats.incorrect)}</Text>
+              <Text style={styles.statLabel}>Incorrect</Text>
+            </View>
+          </View>
+        ) : null}
+        {!isRetry && isMock && (displayStats.skippedQ != null || displayStats.markedQ != null) ? (
+          <View style={[styles.statsRow, styles.statsRowSecondary]}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>
+                {displayStats.skippedQ != null ? String(displayStats.skippedQ) : '—'}
+              </Text>
+              <Text style={styles.statLabel}>Skipped</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>
+                {displayStats.markedQ != null ? String(displayStats.markedQ) : '—'}
+              </Text>
+              <Text style={styles.statLabel}>Marked review</Text>
+            </View>
+          </View>
+        ) : null}
       </View>
 
       {retryStats ? (
@@ -912,6 +1002,26 @@ const styles = StyleSheet.create({
   heroAccuracyValue: { fontWeight: '700' },
   heroMessage: { fontSize: 16, fontWeight: '700', marginTop: 12 },
 
+  recoveredBanner: {
+    backgroundColor: colors.warningSoft,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  recoveredBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+  },
+
+  statsBlock: {
+    marginBottom: 24,
+    gap: 10,
+  },
   statsRow: {
     flexDirection: 'row',
     backgroundColor: CARD_BG,
@@ -919,7 +1029,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     paddingVertical: 14,
-    marginBottom: 24,
+  },
+  statsRowSecondary: {
+    marginTop: 0,
   },
   statBox: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 20, fontWeight: '700', color: TEXT },

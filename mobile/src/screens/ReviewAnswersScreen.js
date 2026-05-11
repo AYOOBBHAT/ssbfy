@@ -61,6 +61,8 @@ function formatIndexList(indexes, options) {
 export default function ReviewAnswersScreen() {
   const route = useRoute();
   const params = route.params || {};
+  /** Completed-test review from Result is read-only; default true so navigation bugs can't mutate answers. */
+  const readOnly = params.readOnly !== false;
   const questions = Array.isArray(params.questions) ? params.questions : [];
   const userAnswers = params.userAnswers && typeof params.userAnswers === 'object' ? params.userAnswers : {};
   const correctAnswers = Array.isArray(params.correctAnswers) ? params.correctAnswers : [];
@@ -172,6 +174,12 @@ export default function ReviewAnswersScreen() {
     );
   }
 
+  const listHeader = readOnly ? (
+    <View style={styles.readOnlyBanner}>
+      <Text style={styles.readOnlyText}>Review only — answers cannot be changed.</Text>
+    </View>
+  ) : null;
+
   return (
     <FlatList
       style={styles.container}
@@ -179,6 +187,7 @@ export default function ReviewAnswersScreen() {
       data={reviewItems}
       keyExtractor={(item, idx) => item.key || String(idx)}
       renderItem={renderItem}
+      ListHeaderComponent={listHeader}
     />
   );
 }
@@ -186,6 +195,22 @@ export default function ReviewAnswersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
   content: { padding: 16, paddingBottom: 32 },
+
+  readOnlyBanner: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  readOnlyText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primaryDark,
+    textAlign: 'center',
+  },
 
   card: {
     backgroundColor: CARD_BG,

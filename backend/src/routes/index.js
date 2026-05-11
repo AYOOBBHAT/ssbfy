@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import healthRoutes from './healthRoutes.js';
 import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
 import postRoutes from './postRoutes.js';
@@ -19,6 +20,7 @@ import { apiLimiter } from '../middlewares/upstashRateLimiter.js';
 
 const router = Router();
 
+router.use(healthRoutes);
 router.use('/auth', authRoutes);
 router.use('/users', apiLimiter, userRoutes);
 router.use('/posts', postRoutes);

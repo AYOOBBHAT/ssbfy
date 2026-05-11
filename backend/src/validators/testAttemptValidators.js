@@ -13,6 +13,34 @@ export const startTestValidators = [
     .withMessage('deviceId must be a non-empty string (4–256 chars)'),
 ];
 
+/** PATCH /tests/:id/progress — partial answer autosave (same shape as submit). */
+export const saveProgressValidators = [
+  body('answers').isArray({ min: 1 }).withMessage('answers must be a non-empty array'),
+  body('answers.*.questionId').isMongoId().withMessage('Each answer needs a valid questionId'),
+  body('answers.*.selectedOptionIndexes')
+    .optional()
+    .isArray()
+    .withMessage('selectedOptionIndexes must be an array')
+    .bail()
+    .custom((arr) => {
+      if (!Array.isArray(arr)) return false;
+      for (const v of arr) {
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < 0) return false;
+      }
+      return true;
+    })
+    .withMessage('Each selectedOptionIndexes entry must be a non-negative integer'),
+  body('answers.*.selectedOptionIndex')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined) return true;
+      const n = Number(value);
+      return Number.isInteger(n) && n >= 0;
+    })
+    .withMessage('selectedOptionIndex must be null (unanswered) or a non-negative integer'),
+];
+
 export const submitTestValidators = [
   body('answers').isArray().withMessage('answers must be an array'),
   body('answers.*.questionId').isMongoId().withMessage('Each answer needs a valid questionId'),

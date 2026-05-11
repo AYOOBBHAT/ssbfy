@@ -143,6 +143,80 @@ function validateAnswerCoverage(attemptQuestionIds, answers) {
   }
 }
 
+/**
+ * Rebuild the same payload shape as a successful `submit()` response from the
+ * latest submitted attempt — used when the client retries after the server
+ * already finalized (lost HTTP response, timeout, duplicate tap).
+ */
+async function buildRecoverPayloadForSubmitConflict(userId, testId) {
+  const rows = await testAttemptRepository.listSubmittedByUserAndTest(userId, testId);
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const latest = rows[0];
+  const questions = await questionRepository.findByIdsForScoring(latest.questionIds);
+  if (questions.length !== latest.questionIds.length) return null;
+
+  const qMap = new Map(questions.map((q) => [q._id.toString(), q]));
+  const answerByQ = new Map(
+    (latest.answers || []).map((a) => [a.questionId.toString(), a])
+  );
+
+  const correctAnswers = [];
+  const topicMistakes = new Map();
+
+  for (const qid of latest.questionIds) {
+    const q = qMap.get(qid.toString());
+    if (!q) return null;
+
+    const correctSet = getCorrectIndexSet(q);
+    correctAnswers.push({
+      questionId: q._id,
+      correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
+      correctAnswers: correctSet,
+      questionType: q.questionType || 'single_correct',
+    });
+
+    const ans = answerByQ.get(qid.toString());
+    const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
+    const maxIdx = optionsLen - 1;
+    const selectedSet = (ans?.selectedOptionIndexes || []).filter(
+      (i) => Number.isInteger(i) && i >= 0 && i <= maxIdx
+    );
+
+    const isCorrect = correctSet.length > 0 && indexSetsEqual(selectedSet, correctSet);
+    if (!isCorrect && selectedSet.length > 0) {
+      const tid = q.topicId.toString();
+      topicMistakes.set(tid, (topicMistakes.get(tid) || 0) + 1);
+    }
+  }
+
+  const weakTopics = [...topicMistakes.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, WEAK_TOPIC_LIMIT)
+    .map(([topicIdStr, count]) => ({
+      topicId: new mongoose.Types.ObjectId(topicIdStr),
+      mistakeCount: count,
+    }));
+
+  return {
+    attempt: latest,
+    score: latest.score ?? 0,
+    accuracy: latest.accuracy ?? 0,
+    timeTaken: latest.timeTaken ?? 0,
+    weakTopics,
+    correctAnswers,
+  };
+}
+
+function throwAlreadySubmittedConflict(recovery) {
+  throw new AppError('Test already submitted', HTTP_STATUS.CONFLICT, null, {
+    code: 'ATTEMPT_ALREADY_SUBMITTED',
+    attemptId: String(recovery.attempt._id),
+    resultAvailable: true,
+    result: recovery,
+  });
+}
+
 export const testAttemptService = {
   async start(userId, testId, { isPremium = false } = {}) {
     // Use the service view so inactive / orphaned questions are already
@@ -200,8 +274,16 @@ export const testAttemptService = {
     return { attempt, resumed: false };
   },
 
-  async submit(userId, testId, rawAnswers) {
+  /**
+   * Persist in-progress answer selections for crash recovery (partial update).
+   * Does not finalize scoring — submit() remains the only terminal path.
+   */
+  async saveProgress(userId, testId, rawAnswers) {
     const answers = normalizeAnswers(rawAnswers);
+    if (!answers.length) {
+      throw new AppError('answers must include at least one question', HTTP_STATUS.BAD_REQUEST);
+    }
+
     const test = await testRepository.findById(testId);
     if (!test) {
       throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
@@ -212,11 +294,52 @@ export const testAttemptService = {
       throw new AppError('No active attempt — start the test first', HTTP_STATUS.NOT_FOUND);
     }
 
+    const allowed = new Set(attempt.questionIds.map((id) => id.toString()));
+    const seen = new Set();
+    for (const a of answers) {
+      const sid = a.questionId.toString();
+      if (!allowed.has(sid)) {
+        throw new AppError(
+          'answers contain a questionId not in this attempt',
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+      if (seen.has(sid)) {
+        throw new AppError('Duplicate questionId in answers', HTTP_STATUS.BAD_REQUEST);
+      }
+      seen.add(sid);
+    }
+
+    const updated = await testAttemptRepository.mergeAnswersIntoOpenAttempt(
+      userId,
+      testId,
+      answers
+    );
+    if (!updated) {
+      throw new AppError('No active attempt — start the test first', HTTP_STATUS.NOT_FOUND);
+    }
+
+    return { attempt: updated };
+  },
+
+  async submit(userId, testId, rawAnswers) {
+    const answers = normalizeAnswers(rawAnswers);
+    const test = await testRepository.findById(testId);
+    if (!test) {
+      throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    const attempt = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
+    if (!attempt) {
+      const recovery = await buildRecoverPayloadForSubmitConflict(userId, testId);
+      if (recovery) {
+        throwAlreadySubmittedConflict(recovery);
+      }
+      throw new AppError('No active attempt — start the test first', HTTP_STATUS.NOT_FOUND);
+    }
+
     if (attempt.userId.toString() !== String(userId)) {
       throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
-    }
-    if (attempt.endTime != null) {
-      throw new AppError('Test already submitted', HTTP_STATUS.CONFLICT);
     }
 
     const testQuestionSet = new Set(test.questionIds.map((id) => id.toString()));
@@ -349,6 +472,10 @@ export const testAttemptService = {
     });
 
     if (!updated) {
+      const recovery = await buildRecoverPayloadForSubmitConflict(userId, testId);
+      if (recovery) {
+        throwAlreadySubmittedConflict(recovery);
+      }
       throw new AppError('Test already submitted', HTTP_STATUS.CONFLICT);
     }
 
