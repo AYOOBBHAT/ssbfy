@@ -4,7 +4,7 @@
     "slug": "ssbfy-mobile",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/new-icon.png",
+    "icon": "./assets/new_icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
@@ -20,13 +20,13 @@
       "versionCode": 6,
       "permissions": [],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/new-icon.png",
+        "foregroundImage": "./assets/new_icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/new-icon.png"
+      "favicon": "./assets/new_icon.png"
     },
     "extra": {
       "eas": {
