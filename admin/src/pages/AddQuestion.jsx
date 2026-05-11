@@ -73,7 +73,7 @@ export default function AddQuestion() {
 
   const [form, setForm] = useState(initialForm);
   const [posts, setPosts] = useState([]);
-  const [selectedPostId, setSelectedPostId] = useState('');
+  const [selectedPostIds, setSelectedPostIds] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
 
@@ -96,13 +96,8 @@ export default function AddQuestion() {
   const [similarLoading, setSimilarLoading] = useState(false);
   const [acknowledgedDuplicate, setAcknowledgedDuplicate] = useState(false);
 
-  /** Global subjects plus legacy per-post subjects; narrowed by selected exam for the picker. */
-  const subjectOptionsForPost = useMemo(() => {
-    if (!selectedPostId) return subjects;
-    return subjects.filter(
-      (s) => !s.postId || String(s.postId) === String(selectedPostId)
-    );
-  }, [subjects, selectedPostId]);
+  /** Subjects are global in the normalized hierarchy (legacy `subject.postId` ignored). */
+  const subjectOptionsForPost = useMemo(() => subjects, [subjects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,14 +187,15 @@ export default function AddQuestion() {
             ? q.subjectId._id
             : q.subjectId || ''
         );
-        if (sid) {
-          try {
-            const sub = await getSubject(sid);
-            if (sub?.postId) setSelectedPostId(String(sub.postId));
-          } catch {
-            /* ignore — admin can pick post manually */
-          }
-        }
+        // Post tags are stored on the Question (`postIds`). We do not infer
+        // post ownership from the Subject anymore (Subjects are global).
+        const existingPostIds = Array.isArray(q.postIds)
+          ? q.postIds
+              .map((p) => (p && typeof p === 'object' ? p._id : p))
+              .map((p) => (p == null ? '' : String(p).trim()))
+              .filter(Boolean)
+          : [];
+        setSelectedPostIds(existingPostIds);
 
         const topicRaw = q.topicId;
         const topicStr =
@@ -366,7 +362,6 @@ export default function AddQuestion() {
     } else if (form.questionImage.trim() && !looksLikeHttpUrl(form.questionImage)) {
       return 'Image URL must be a valid http(s) URL.';
     }
-    if (!selectedPostId) return 'Please select a post (exam).';
     if (!form.subjectId) return 'Please select a subject.';
     if (!form.topicId) return 'Please select a topic.';
     return null;
@@ -425,8 +420,11 @@ export default function AddQuestion() {
     if (form.explanation.trim()) {
       payload.explanation = form.explanation.trim();
     }
-    if (!isEdit && selectedPostId) {
-      payload.postIds = [selectedPostId];
+    const postIds = Array.isArray(selectedPostIds)
+      ? Array.from(new Set(selectedPostIds.map((x) => String(x).trim()).filter(Boolean)))
+      : [];
+    if (postIds.length > 0) {
+      payload.postIds = postIds;
     }
 
     try {
@@ -608,34 +606,64 @@ export default function AddQuestion() {
         </div>
 
         <p className="helper" style={{ marginBottom: 16 }}>
-          Subjects are <strong>global</strong>; pick an exam first so new questions get a{' '}
-          <code>postIds</code> tag. The subject list shows that exam plus any global (unlinked) subjects.
+          <strong>Subjects are global</strong> (Subject → Topic). Optionally tag the question with one or more
+          exams via <code>postIds</code>. Tagging controls where the question appears for that exam.
         </p>
 
         <div className="form-grid">
           <div className="form-row">
-            <label className="label" htmlFor="postPick">
-              Post (exam) *
-            </label>
-            <select
-              id="postPick"
-              className="input"
-              value={selectedPostId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setSelectedPostId(v);
-                updateField('subjectId', '');
-                updateField('topicId', '');
-              }}
-              disabled={submitting || loadingPosts}
-            >
-              <option value="">— Select post —</option>
-              {posts.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.name || p.slug || p._id}
-                </option>
-              ))}
-            </select>
+            <span className="label">Optional exam tags</span>
+            {loadingPosts ? (
+              <p className="helper">Loading posts…</p>
+            ) : posts.length === 0 ? (
+              <p className="helper">No posts yet.</p>
+            ) : (
+              <div
+                className="card"
+                style={{
+                  maxHeight: 190,
+                  overflowY: 'auto',
+                  padding: 12,
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {posts.map((p) => {
+                  const id = String(p?._id ?? '');
+                  if (!id) return null;
+                  const checked = selectedPostIds.includes(id);
+                  return (
+                    <label
+                      key={id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 0',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setSelectedPostIds((prev) => {
+                            const next = Array.isArray(prev) ? [...prev] : [];
+                            if (next.includes(id)) return next.filter((x) => x !== id);
+                            next.push(id);
+                            return next;
+                          })
+                        }
+                        disabled={submitting}
+                      />
+                      <span>{p?.name || p?.slug || id}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <p className="helper">
+              Leave blank to create a shared question under the Subject/Topic that is not tied to an exam yet.
+            </p>
           </div>
 
           <div className="form-row">
@@ -650,14 +678,10 @@ export default function AddQuestion() {
                 updateField('subjectId', e.target.value);
                 updateField('topicId', '');
               }}
-              disabled={submitting || !selectedPostId || loadingSubjects}
+              disabled={submitting || loadingSubjects}
             >
               <option value="">
-                {!selectedPostId
-                  ? '— Select a post first —'
-                  : loadingSubjects
-                    ? 'Loading subjects…'
-                    : '— Select subject —'}
+                {loadingSubjects ? 'Loading subjects…' : '— Select subject —'}
               </option>
               {subjectOptionsForPost.map((s) => (
                 <option key={s._id} value={s._id}>
@@ -665,9 +689,6 @@ export default function AddQuestion() {
                 </option>
               ))}
             </select>
-            {selectedPostId && !loadingSubjects && subjectOptionsForPost.length === 0 ? (
-              <p className="helper">No subjects match this exam yet (create a global subject under Subjects &amp; Topics).</p>
-            ) : null}
           </div>
 
           <div className="form-row">

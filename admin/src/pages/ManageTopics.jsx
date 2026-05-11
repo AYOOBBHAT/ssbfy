@@ -54,9 +54,6 @@ export default function ManageTopics() {
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [postsError, setPostsError] = useState('');
 
-  // Post selection filters which subjects appear in the list (globals + legacy linked).
-  const [selectedPostId, setSelectedPostId] = useState('');
-
   // ------ Create Post ------
   const [postName, setPostName] = useState('');
   const [postDescription, setPostDescription] = useState('');
@@ -64,7 +61,7 @@ export default function ManageTopics() {
   const [postMsg, setPostMsg] = useState('');
   const [postErr, setPostErr] = useState('');
 
-  // ------ Subjects (full list; UI filters by selectedPostId when set) ------
+  // ------ Subjects (global) ------
   const [subjects, setSubjects] = useState([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [subjectsError, setSubjectsError] = useState('');
@@ -100,19 +97,12 @@ export default function ManageTopics() {
       const res = await getPosts();
       const list = asArray(res, 'posts');
       setPosts(list);
-      // Auto-select the first post so the admin can start creating subjects
-      // immediately without an extra click.
-      if (list.length && !selectedPostId) {
-        setSelectedPostId(String(list[0]._id));
-      }
     } catch (e) {
       setPostsError(getApiErrorMessage(e));
       setPosts([]);
     } finally {
       setLoadingPosts(false);
     }
-    // selectedPostId is intentionally omitted to avoid re-running on selection change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSubjectsAll = useCallback(async () => {
@@ -156,33 +146,16 @@ export default function ManageTopics() {
   }, [loadSubjectsAll]);
 
   useEffect(() => {
-    // Changing the post resets subject selection so the UI never shows
-    // topics from a different post by accident.
-    setSelectedSubjectId('');
-    setTopics([]);
-  }, [selectedPostId]);
-
-  useEffect(() => {
     loadTopics(selectedSubjectId);
   }, [selectedSubjectId, loadTopics]);
-
-  const selectedPost = useMemo(
-    () => posts.find((p) => String(p._id) === String(selectedPostId)) || null,
-    [posts, selectedPostId]
-  );
 
   const selectedSubject = useMemo(
     () => subjects.find((s) => String(s._id) === String(selectedSubjectId)) || null,
     [subjects, selectedSubjectId]
   );
 
-  /** When a post is selected: globals + subjects linked to that post. No post: full catalog. */
-  const visibleSubjects = useMemo(() => {
-    if (!selectedPostId) return subjects;
-    return subjects.filter(
-      (s) => !s.postId || String(s.postId) === String(selectedPostId)
-    );
-  }, [subjects, selectedPostId]);
+  /** Subjects are global in the normalized hierarchy. */
+  const visibleSubjects = useMemo(() => subjects, [subjects]);
 
   // ------ Handlers ------
   async function handleCreatePost(e) {
@@ -217,9 +190,6 @@ export default function ManageTopics() {
       // immediately, then auto-select it so the admin can proceed straight
       // to creating subjects under it.
       await loadPosts();
-      if (created?._id) {
-        setSelectedPostId(String(created._id));
-      }
     } catch (err) {
       setPostErr(getApiErrorMessage(err));
     } finally {
@@ -403,28 +373,13 @@ export default function ManageTopics() {
     <div>
       <h1 className="page-title">Subjects & Topics</h1>
       <p className="page-subtitle">
-        <strong>Subjects are global</strong> (one name per catalog entry). Pick a post to filter which
-        subjects appear for that exam; topics always belong to the subject you select.
+        <strong>Subjects are global</strong> (one name per catalog entry). Topics belong to a subject.
+        Posts are managed separately and are used as tags/filters elsewhere (e.g. on questions).
       </p>
 
       {loadingPosts ? (
         <p className="muted" style={{ marginBottom: 12 }}>
           Loading posts…
-        </p>
-      ) : selectedPost ? (
-        <p className="muted" style={{ marginBottom: 12 }}>
-          Active path:{' '}
-          <strong>{selectedPost.name || 'Post'}</strong>
-          {selectedSubject ? (
-            <>
-              {' '}
-              → <strong>{selectedSubject.name}</strong>
-            </>
-          ) : subjects.length > 0 ? (
-            <> — select a subject to list or create topics.</>
-          ) : (
-            <> — add a subject under this post first.</>
-          )}
         </p>
       ) : null}
 
@@ -432,8 +387,7 @@ export default function ManageTopics() {
       <section className="card form">
         <h2 className="section-heading">Create Post</h2>
         <p className="helper">
-          Posts are the top level of the hierarchy (e.g. <em>JE</em>,{' '}
-          <em>Patwari</em>). Create one, then add subjects under it below.
+          Posts represent exams/categories (e.g. <em>JE</em>, <em>Patwari</em>). They do not own subjects.
         </p>
 
         {postMsg ? <div className="alert alert-success">{postMsg}</div> : null}
@@ -466,47 +420,6 @@ export default function ManageTopics() {
             {creatingPost ? 'Creating…' : 'Create Post'}
           </button>
         </form>
-      </section>
-
-      {/* ---------------- Select Post ---------------- */}
-      <section className="card form">
-        <h2 className="section-heading">Select Post</h2>
-
-        {postsError ? <div className="alert alert-error">{postsError}</div> : null}
-        {noPosts ? (
-          <div className="alert alert-error">
-            No posts yet. Create one above — you still need posts for exam pages; subjects are created
-            globally below.
-          </div>
-        ) : null}
-
-        <div className="form-row">
-          <label className="label" htmlFor="post-select">
-            Post *
-          </label>
-          <select
-            id="post-select"
-            className="input"
-            value={selectedPostId}
-            onChange={(e) => setSelectedPostId(e.target.value)}
-            disabled={loadingPosts || noPosts}
-          >
-            <option value="">
-              {loadingPosts ? 'Loading posts…' : '— Select post —'}
-            </option>
-            {posts.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name || p.slug || p._id}
-              </option>
-            ))}
-          </select>
-          {selectedPost ? (
-            <p className="helper">
-              Working under <strong>{selectedPost.name}</strong>
-              {selectedPost.slug ? ` (${selectedPost.slug})` : ''}.
-            </p>
-          ) : null}
-        </div>
       </section>
 
       {/* ---------------- Create Subject ---------------- */}
@@ -552,20 +465,15 @@ export default function ManageTopics() {
 
         <div className="subjects-list">
           <h3 className="list-heading">
-            {selectedPost
-              ? `Subjects for "${selectedPost.name}" (global + linked)`
-              : 'All subjects'}
+            All subjects
           </h3>
-          {!selectedPostId ? (
-            <p className="muted">Optional: select a post to filter this list.</p>
-          ) : null}
           {loadingSubjects ? (
             <p className="muted">Loading subjects…</p>
           ) : subjectsError ? (
             <div className="alert alert-error">{subjectsError}</div>
           ) : visibleSubjects.length === 0 ? (
             <p className="muted">
-              No subjects match this filter. Create a global subject above or pick another post.
+              No subjects yet. Create a global subject above.
             </p>
           ) : (
             <ul className="row-list">

@@ -153,7 +153,7 @@ export async function getSubjects(params = {}) {
   return unwrap(res);
 }
 
-/** Fetch one subject (includes postId). Public GET. */
+/** Fetch one subject. Legacy payloads may still include `postId`. Public GET. */
 export async function getSubject(id) {
   if (!id) throw new Error('getSubject requires an id.');
   const res = await api.get(`/subjects/${id}`);
@@ -162,14 +162,16 @@ export async function getSubject(id) {
 }
 
 /**
- * Create a new subject under a post (admin only).
- * `postId` is required — the server enforces Post → Subject hierarchy.
+ * Create a new global subject (admin only).
+ *
+ * Back-compat: some legacy installs stored `subject.postId`; the normalized
+ * model treats Posts as tags on Questions (`postIds[]`) and Subjects as global.
  */
 export async function createSubject({ name, postId, order } = {}) {
-  if (!postId) {
-    throw new Error('postId is required to create a subject.');
-  }
-  const payload = { name, postId };
+  const payload = { name };
+  // NOTE: `postId` is deprecated. If provided we pass it through for old data
+  // compatibility, but the UI should not require it.
+  if (postId) payload.postId = postId;
   if (typeof order === 'number') payload.order = order;
   const res = await api.post('/subjects', payload);
   return unwrap(res);
@@ -367,19 +369,28 @@ export async function getNotes(params = {}) {
 
 /**
  * Create a topic-wise study note (admin only). All four ids are required
- * by the server — the service validates that topic ⊂ subject ⊂ post.
+ * by the server — the service validates that topic ⊂ subject. Posts are
+ * optional tags via `postIds[]` (legacy `postId` still tolerated).
  */
 export async function createNote({
   title,
   content,
   postId,
+  postIds,
   subjectId,
   topicId,
 } = {}) {
+  const ids =
+    Array.isArray(postIds) && postIds.length > 0
+      ? postIds
+      : postId
+        ? [postId]
+        : [];
   const res = await api.post('/notes', {
     title,
     content,
     postId,
+    postIds: ids,
     subjectId,
     topicId,
   });

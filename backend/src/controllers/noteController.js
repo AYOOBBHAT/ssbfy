@@ -36,11 +36,12 @@ export const noteController = {
 
   /** POST /api/notes — admin-only; enforces hierarchy in the service. */
   create: asyncHandler(async (req, res) => {
-    const { title, content, postId, subjectId, topicId } = req.body;
+    const { title, content, postId, postIds, subjectId, topicId } = req.body;
     const note = await noteService.create({
       title,
       content,
       postId,
+      postIds,
       subjectId,
       topicId,
     });

@@ -189,30 +189,17 @@ export default function ManageQuestions() {
   }, [loadList]);
 
   const subjectOptions = useMemo(() => {
-    if (!filterPostId) return subjects;
-    return subjects.filter(
-      (s) => !s.postId || String(s.postId) === String(filterPostId)
-    );
-  }, [subjects, filterPostId]);
+    return subjects;
+  }, [subjects]);
 
   const topicOptions = useMemo(() => {
-    if (!filterSubjectId) {
-      if (!filterPostId) return topics;
-      const subs = new Set(
-        subjects
-          .filter((s) => !s.postId || String(s.postId) === String(filterPostId))
-          .map((s) => String(s._id))
-      );
-      return topics.filter((t) => subs.has(String(t.subjectId)));
-    }
+    if (!filterSubjectId) return topics;
     return topics.filter((t) => String(t.subjectId) === String(filterSubjectId));
-  }, [topics, subjects, filterSubjectId, filterPostId]);
+  }, [topics, filterSubjectId]);
 
   function handlePostChange(e) {
     const next = e.target.value;
     setFilterPostId(next);
-    setFilterSubjectId('');
-    setFilterTopicId('');
   }
 
   function handleSubjectChange(e) {

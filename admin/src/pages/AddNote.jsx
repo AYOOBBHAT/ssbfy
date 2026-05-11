@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createNote,
   getPosts,
@@ -16,7 +16,7 @@ function asArray(res, key) {
 const initialForm = {
   title: '',
   content: '',
-  postId: '',
+  postIds: [],
   subjectId: '',
   topicId: '',
 };
@@ -24,10 +24,11 @@ const initialForm = {
 /**
  * Topic-wise study note editor.
  *
- * Cascading dropdowns: Post drives Subjects, Subject drives Topics. Changing
- * a parent clears the children so the form can never submit an invalid
- * hierarchy pair — the backend also validates this, so this is just a
- * UX fast-fail.
+ * Normalized hierarchy: Subject → Topic.
+ *
+ * Notes still store a required `postId` in the backend, but Posts are not
+ * an ownership hierarchy for Subjects/Topics. So Subjects must be global
+ * and Topics must depend only on Subject selection.
  */
 export default function AddNote() {
   const [form, setForm] = useState(initialForm);
@@ -66,17 +67,18 @@ export default function AddNote() {
     };
   }, []);
 
-  // ---- Reload subjects whenever the selected post changes ----
+  const selectablePosts = useMemo(
+    () => posts.filter((p) => p && p.isActive !== false),
+    [posts]
+  );
+
+  // ---- Load subjects once (global catalog) ----
   useEffect(() => {
     let cancelled = false;
-    if (!form.postId) {
-      setSubjects([]);
-      return undefined;
-    }
     (async () => {
       try {
         setLoadingSubjects(true);
-        const res = await getSubjects({ postId: form.postId });
+        const res = await getSubjects({ includeInactive: true });
         if (cancelled) return;
         setSubjects(asArray(res, 'subjects'));
       } catch (e) {
@@ -91,7 +93,7 @@ export default function AddNote() {
     return () => {
       cancelled = true;
     };
-  }, [form.postId]);
+  }, []);
 
   // ---- Reload topics whenever the selected subject changes ----
   useEffect(() => {
@@ -134,7 +136,6 @@ export default function AddNote() {
       return 'Title must be at least 2 characters.';
     }
     if (!form.content.trim()) return 'Content cannot be empty.';
-    if (!form.postId) return 'Please select a post.';
     if (!form.subjectId) return 'Please select a subject.';
     // This is the spec's hard gate: "Cannot create note without topic".
     if (!form.topicId) return 'Please select a topic.';
@@ -158,7 +159,7 @@ export default function AddNote() {
       await createNote({
         title: form.title.trim(),
         content: form.content,
-        postId: form.postId,
+        postIds: Array.isArray(form.postIds) ? form.postIds : [],
         subjectId: form.subjectId,
         topicId: form.topicId,
       });
@@ -171,9 +172,7 @@ export default function AddNote() {
     }
   }
 
-  const topicPlaceholder = !form.postId
-    ? '— Select a post first —'
-    : !form.subjectId
+  const topicPlaceholder = !form.subjectId
     ? '— Select a subject first —'
     : loadingTopics
     ? 'Loading topics…'
@@ -181,20 +180,19 @@ export default function AddNote() {
     ? 'No topics for this subject'
     : '— Select topic —';
 
-  const subjectPlaceholder = !form.postId
-    ? '— Select a post first —'
-    : loadingSubjects
+  const subjectPlaceholder = loadingSubjects
     ? 'Loading subjects…'
     : subjects.length === 0
-    ? 'No subjects for this post'
+    ? 'No subjects available'
     : '— Select subject —';
 
   return (
     <div>
       <h1 className="page-title">Add Note</h1>
       <p className="page-subtitle">
-        Create topic-wise study notes. Notes follow the same{' '}
-        <strong>Post → Subject → Topic</strong> hierarchy as questions.
+        Create topic-wise study notes organized by{' '}
+        <strong>Subject → Topic</strong>. Optionally tag notes to one or more exams (posts) for filtering,
+        but subjects/topics are always global.
       </p>
 
       {metaError ? <div className="alert alert-error">{metaError}</div> : null}
@@ -223,43 +221,61 @@ export default function AddNote() {
 
         <div className="form-grid">
           <div className="form-row">
-            <label className="label" htmlFor="postId">
-              Post *
-            </label>
-            <select
-              id="postId"
-              className="input"
-              value={form.postId}
-              onChange={(e) =>
-                // Changing the post invalidates any previously-selected
-                // subject/topic, so we reset both in the same update.
-                setForm((prev) => ({
-                  ...prev,
-                  postId: e.target.value,
-                  subjectId: '',
-                  topicId: '',
-                }))
-              }
-              disabled={submitting || loadingPosts || posts.length === 0}
-            >
-              <option value="">
-                {loadingPosts
-                  ? 'Loading posts…'
-                  : posts.length === 0
-                  ? 'No posts yet'
-                  : '— Select post —'}
-              </option>
-              {posts.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.name || p.slug || p._id}
-                </option>
-              ))}
-            </select>
-            {!loadingPosts && posts.length === 0 ? (
+            <span className="label">Optional exam tags</span>
+            {loadingPosts ? (
+              <p className="helper">Loading posts…</p>
+            ) : selectablePosts.length === 0 ? (
               <p className="helper">
-                Create a post in <strong>Subjects &amp; Topics</strong> first.
+                No active posts yet. Create one in <strong>Subjects &amp; Topics</strong>.
               </p>
-            ) : null}
+            ) : (
+              <div
+                className="card"
+                style={{
+                  maxHeight: 220,
+                  overflowY: 'auto',
+                  padding: 12,
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {selectablePosts.map((p) => {
+                  const id = String(p._id);
+                  const checked = Array.isArray(form.postIds) && form.postIds.includes(id);
+                  return (
+                    <label
+                      key={id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 0',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setForm((prev) => {
+                            const next = Array.isArray(prev.postIds) ? [...prev.postIds] : [];
+                            if (next.includes(id)) {
+                              return { ...prev, postIds: next.filter((x) => x !== id) };
+                            }
+                            next.push(id);
+                            return { ...prev, postIds: next };
+                          })
+                        }
+                        disabled={submitting}
+                      />
+                      <span>{p.name || p.slug || id}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <p className="helper">
+              Optional: used to filter notes per exam. Subjects/topics remain global.
+            </p>
           </div>
 
           <div className="form-row">
@@ -277,7 +293,7 @@ export default function AddNote() {
                   topicId: '',
                 }))
               }
-              disabled={submitting || !form.postId || loadingSubjects}
+              disabled={submitting || loadingSubjects}
             >
               <option value="">{subjectPlaceholder}</option>
               {subjects.map((s) => (

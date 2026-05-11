@@ -91,9 +91,6 @@ export default function CreateTest() {
         if (cancelled) return;
         const list = Array.isArray(res) ? res : res?.posts || [];
         setPosts(list);
-        if (list.length && !selectedPostId) {
-          setSelectedPostId(String(list[0]._id));
-        }
       } catch (e) {
         if (!cancelled) setErrorMsg(getApiErrorMessage(e));
       } finally {
@@ -129,11 +126,8 @@ export default function CreateTest() {
   }, []);
 
   const subjectsForPicker = useMemo(() => {
-    if (!selectedPostId) return subjects;
-    return subjects.filter(
-      (s) => !s.postId || String(s.postId) === String(selectedPostId)
-    );
-  }, [subjects, selectedPostId]);
+    return subjects;
+  }, [subjects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,12 +275,6 @@ export default function CreateTest() {
     const tid =
       topicRef && typeof topicRef === 'object' ? String(topicRef._id ?? '') : String(topicRef || '');
     let postId = null;
-    if (subjectRef && typeof subjectRef === 'object' && subjectRef.postId) {
-      postId = String(subjectRef.postId);
-    } else {
-      const subj = subjects.find((s) => String(s._id) === sid);
-      if (subj?.postId) postId = String(subj.postId);
-    }
     if (!postId && Array.isArray(q.postIds) && q.postIds.length > 0) {
       const first = q.postIds[0];
       postId =
@@ -521,7 +509,7 @@ export default function CreateTest() {
           <div className="form-grid">
             <div className="form-row">
               <label className="label" htmlFor="postPick">
-                Post (exam) *
+                Post (exam filter)
               </label>
               <select
                 id="postPick"
@@ -531,7 +519,7 @@ export default function CreateTest() {
                 disabled={submitting || loadingPosts}
               >
                 <option value="">
-                  {loadingPosts ? 'Loading posts…' : '— Select post —'}
+                  {loadingPosts ? 'Loading posts…' : 'All posts'}
                 </option>
                 {posts.map((p) => (
                   <option key={p._id} value={p._id}>
@@ -558,9 +546,7 @@ export default function CreateTest() {
                 <option value="">
                   {loadingSubjects
                     ? 'Loading subjects…'
-                    : selectedPostId
-                      ? 'All matching subjects (global + this exam)'
-                      : 'All subjects'}
+                    : 'All subjects'}
                 </option>
                 {subjectsForPicker.map((s) => (
                   <option key={s._id} value={s._id}>
@@ -568,9 +554,6 @@ export default function CreateTest() {
                   </option>
                 ))}
               </select>
-              {selectedPostId && !loadingSubjects && subjectsForPicker.length === 0 ? (
-                <p className="helper">No subjects match this exam filter yet.</p>
-              ) : null}
             </div>
 
             <div className="form-row">
@@ -657,7 +640,7 @@ export default function CreateTest() {
                   type="checkbox"
                   checked={filterPostTag}
                   onChange={(e) => setFilterPostTag(e.target.checked)}
-                  disabled={submitting || !selectedPostId}
+                    disabled={submitting || !selectedPostId}
                 />
                 Limit to questions tagged with this post
               </label>

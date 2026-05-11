@@ -3,33 +3,21 @@ import { AppError } from '../utils/AppError.js';
 import { noteRepository } from '../repositories/noteRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
-import { postRepository } from '../repositories/postRepository.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * Walk Post → Subject → Topic and verify the triple is internally
- * consistent AND every level is currently active. Returns the loaded
- * docs so callers can use them (e.g. to echo the post/subject name).
+ * Walk Subject → Topic and verify the pair is internally consistent AND
+ * every level is currently active. Returns the loaded docs so callers
+ * can use them (e.g. to echo the subject/topic name).
  *
  * Throws 400 `AppError` with a precise message for each failure mode so
  * the admin UI can show something meaningful instead of "Bad Request".
  */
-async function resolveHierarchy({ postId, subjectId, topicId }) {
-  const [post, subject, topic] = await Promise.all([
-    postRepository.findById(postId),
+async function resolveHierarchy({ subjectId, topicId }) {
+  const [subject, topic] = await Promise.all([
     subjectRepository.findById(subjectId),
     topicRepository.findById(topicId),
   ]);
-
-  if (!post) {
-    throw new AppError('Post not found', HTTP_STATUS.BAD_REQUEST);
-  }
-  if (post.isActive === false) {
-    throw new AppError(
-      'Post is inactive; cannot attach notes to it.',
-      HTTP_STATUS.BAD_REQUEST
-    );
-  }
 
   if (!subject) {
     throw new AppError('Subject not found', HTTP_STATUS.BAD_REQUEST);
@@ -37,15 +25,6 @@ async function resolveHierarchy({ postId, subjectId, topicId }) {
   if (subject.isActive === false) {
     throw new AppError(
       'Subject is inactive; cannot attach notes to it.',
-      HTTP_STATUS.BAD_REQUEST
-    );
-  }
-  // Global subjects (`postId` null) are reusable across posts; the note's
-  // `postId` pins which exam the note appears under. Legacy subjects still
-  // tied to a single post must match that post.
-  if (subject.postId != null && String(subject.postId) !== String(postId)) {
-    throw new AppError(
-      'Subject does not belong to the given post.',
       HTTP_STATUS.BAD_REQUEST
     );
   }
@@ -66,7 +45,7 @@ async function resolveHierarchy({ postId, subjectId, topicId }) {
     );
   }
 
-  return { post, subject, topic };
+  return { subject, topic };
 }
 
 export const noteService = {
@@ -88,7 +67,10 @@ export const noteService = {
     includeInactive = false,
   } = {}) {
     const filter = {};
-    if (postId) filter.postId = postId;
+    if (postId) {
+      // Back-compat: `postId` query matches either legacy `postId` OR new `postIds[]`.
+      filter.$or = [{ postId }, { postIds: postId }];
+    }
     if (subjectId) filter.subjectId = subjectId;
     if (Array.isArray(topicIds) && topicIds.length > 0) {
       filter.topicId = { $in: topicIds };
@@ -107,7 +89,7 @@ export const noteService = {
     return note;
   },
 
-  async create({ title, content, postId, subjectId, topicId } = {}) {
+  async create({ title, content, postId, postIds, subjectId, topicId } = {}) {
     // Trim here instead of trusting the validator so we don't depend on
     // validator ordering if this service is ever called from elsewhere.
     const trimmedTitle = typeof title === 'string' ? title.trim() : '';
@@ -118,15 +100,32 @@ export const noteService = {
       throw new AppError('Note content is required', HTTP_STATUS.BAD_REQUEST);
     }
 
-    // Hierarchy consistency is enforced at the service layer so every
-    // write path (admin PATCH UIs, future import scripts, etc.) shares
-    // the same invariant: topic ⊂ subject ⊂ post.
-    await resolveHierarchy({ postId, subjectId, topicId });
+    // Hierarchy consistency is enforced at the service layer so every write path
+    // shares the same invariant: topic ⊂ subject.
+    await resolveHierarchy({ subjectId, topicId });
+
+    // Normalize post tags:
+    // - prefer `postIds[]` (new)
+    // - tolerate legacy `postId` (deprecated) by mirroring it into postIds when
+    //   postIds is absent/empty
+    const normalizedPostIds = Array.isArray(postIds)
+      ? postIds.map((p) => String(p)).filter(Boolean)
+      : [];
+    const legacyPostId = postId != null && String(postId).trim() ? String(postId).trim() : '';
+    const postIdsFinal =
+      normalizedPostIds.length > 0
+        ? Array.from(new Set(normalizedPostIds))
+        : legacyPostId
+        ? [legacyPostId]
+        : [];
 
     return noteRepository.create({
       title: trimmedTitle,
       content,
-      postId,
+      // Keep legacy postId if provided (backward compatibility), but new callers
+      // should rely on postIds.
+      postId: legacyPostId || undefined,
+      postIds: postIdsFinal,
       subjectId,
       topicId,
     });

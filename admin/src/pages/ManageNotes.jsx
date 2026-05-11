@@ -132,30 +132,13 @@ export default function ManageNotes() {
 
   // ---- Filter option sets scoped by parent ---------------------------
   const subjectOptions = useMemo(() => {
-    if (!filterPostId) return subjects;
-    return subjects.filter(
-      (s) => !s.postId || String(s.postId) === String(filterPostId)
-    );
-  }, [subjects, filterPostId]);
+    return subjects;
+  }, [subjects]);
 
   const topicOptions = useMemo(() => {
-    if (!filterSubjectId) {
-      // If no subject picked but a post is picked, show topics whose
-      // subject belongs to that post. Otherwise show everything.
-      if (!filterPostId) return topics;
-      const subjectsOfPost = new Set(
-        subjects
-          .filter((s) => !s.postId || String(s.postId) === String(filterPostId))
-          .map((s) => String(s._id))
-      );
-      return topics.filter((t) =>
-        subjectsOfPost.has(String(t.subjectId))
-      );
-    }
-    return topics.filter(
-      (t) => String(t.subjectId) === String(filterSubjectId)
-    );
-  }, [topics, subjects, filterSubjectId, filterPostId]);
+    if (!filterSubjectId) return topics;
+    return topics.filter((t) => String(t.subjectId) === String(filterSubjectId));
+  }, [topics, filterSubjectId]);
 
   // ---- Handlers -------------------------------------------------------
   function handlePostChange(e) {
@@ -230,6 +213,19 @@ export default function ManageNotes() {
     return map.get(String(id))?.name || fallback;
   }
 
+  function postNamesFor(note) {
+    const ids = Array.isArray(note?.postIds) && note.postIds.length > 0
+      ? note.postIds
+      : note?.postId
+        ? [note.postId]
+        : [];
+    const labels = ids
+      .map((id) => nameFor(postsById, id, ''))
+      .map((s) => String(s || '').trim())
+      .filter(Boolean);
+    return labels.length > 0 ? labels.join(', ') : '';
+  }
+
   const hasActiveFilters =
     Boolean(filterPostId) ||
     Boolean(filterSubjectId) ||
@@ -279,12 +275,10 @@ export default function ManageNotes() {
               className="input"
               value={filterSubjectId}
               onChange={handleSubjectChange}
-              disabled={refLoading || !filterPostId}
+              disabled={refLoading}
             >
               <option value="">
-                {!filterPostId
-                  ? 'Select a post first'
-                  : subjectOptions.length === 0
+                {subjectOptions.length === 0
                   ? 'No subjects for this post'
                   : 'All subjects'}
               </option>
@@ -393,9 +387,7 @@ export default function ManageNotes() {
                       {nameFor(topicsById, note.topicId, 'Unknown topic')}
                       {' · '}
                       {nameFor(subjectsById, note.subjectId, 'Unknown subject')}
-                      {note.postId
-                        ? ` · ${nameFor(postsById, note.postId, '')}`
-                        : ''}
+                      {postNamesFor(note) ? ` · ${postNamesFor(note)}` : ''}
                     </div>
                   </div>
 

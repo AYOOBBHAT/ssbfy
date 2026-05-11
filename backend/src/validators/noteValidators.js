@@ -17,12 +17,31 @@ export const createNoteValidators = [
     // against accidental garbage without getting in the way of real use.
     .isLength({ min: 1, max: 65_000 })
     .withMessage('content must be 1-65000 characters'),
+  // Back-compat: legacy callers may send a single `postId`. New callers should
+  // send `postIds: []` (optional tag/filtering).
   body('postId')
-    .exists({ checkNull: true, checkFalsy: true })
-    .withMessage('postId is required')
-    .bail()
+    .optional({ checkFalsy: true })
     .isMongoId()
     .withMessage('postId must be a valid id'),
+  body('postIds')
+    .optional()
+    .isArray()
+    .withMessage('postIds must be an array'),
+  body('postIds.*')
+    .optional()
+    .isMongoId()
+    .withMessage('postIds entries must be valid ids'),
+  body('postIds')
+    .optional()
+    .custom((value) => {
+      if (!Array.isArray(value)) return true;
+      const ids = value.map((v) => String(v)).filter(Boolean);
+      const set = new Set(ids);
+      if (set.size !== ids.length) {
+        throw new Error('postIds must not contain duplicates');
+      }
+      return true;
+    }),
   body('subjectId')
     .exists({ checkNull: true, checkFalsy: true })
     .withMessage('subjectId is required')
@@ -44,6 +63,7 @@ export const createNoteValidators = [
  */
 export const updateNoteValidators = [
   param('id').isMongoId().withMessage('id must be a valid Mongo id'),
+  // Note: hierarchy fields (subjectId/topicId/postIds) are not patchable yet.
   body('title')
     .optional()
     .trim()

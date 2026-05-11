@@ -18,6 +18,7 @@ export const noteRepository = {
       title: data.title,
       content: data.content,
       postId: data.postId,
+      postIds: Array.isArray(data.postIds) ? data.postIds : [],
       subjectId: data.subjectId,
       topicId: data.topicId,
     });
