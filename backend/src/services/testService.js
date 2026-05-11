@@ -115,6 +115,17 @@ async function inferTestType(questionIds) {
   if (postKeys.size === 1) {
     return TEST_TYPE.POST;
   }
+  if (postKeys.size === 0) {
+    const postIdFromQs = new Set();
+    for (const q of qs) {
+      for (const pid of q.postIds || []) {
+        postIdFromQs.add(String(pid));
+      }
+    }
+    if (postIdFromQs.size === 1) {
+      return TEST_TYPE.POST;
+    }
+  }
   return TEST_TYPE.MIXED;
 }
 

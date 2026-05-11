@@ -9,6 +9,7 @@ export const subjectService = {
     return subjectRepository.findAll(filter);
   },
 
+  /** @deprecated Use `list({ postId })` — same filter semantics. */
   async listByPost(postId) {
     if (!postId) {
       throw new AppError('postId is required', HTTP_STATUS.BAD_REQUEST);
@@ -29,32 +30,32 @@ export const subjectService = {
     if (!trimmedName) {
       throw new AppError('Subject name is required', HTTP_STATUS.BAD_REQUEST);
     }
-    if (!postId) {
-      throw new AppError('postId is required', HTTP_STATUS.BAD_REQUEST);
+
+    if (postId) {
+      const post = await postRepository.findById(postId);
+      if (!post) {
+        throw new AppError('Post not found', HTTP_STATUS.BAD_REQUEST);
+      }
     }
 
-    const post = await postRepository.findById(postId);
-    if (!post) {
-      throw new AppError('Post not found', HTTP_STATUS.BAD_REQUEST);
-    }
-
-    // App-level duplicate guard — case-insensitive, scoped to the post.
-    const duplicate = await subjectRepository.findOneByNameInPost(trimmedName, postId);
+    const duplicate = await subjectRepository.findOneByNameGlobal(trimmedName);
     if (duplicate) {
       throw new AppError(
-        'A subject with this name already exists for this post.',
+        'A subject with this name already exists (names are unique globally, case-insensitive).',
         HTTP_STATUS.CONFLICT
       );
     }
 
     try {
-      return await subjectRepository.create({ name: trimmedName, postId, order });
+      return await subjectRepository.create({
+        name: trimmedName,
+        postId: postId ?? null,
+        order,
+      });
     } catch (err) {
-      // Storage-level backstop in case of a race between the duplicate check
-      // and the insert: MongoDB duplicate-key error code is 11000.
       if (err?.code === 11000) {
         throw new AppError(
-          'A subject with this name already exists for this post.',
+          'A subject with this name already exists (names are unique globally, case-insensitive).',
           HTTP_STATUS.CONFLICT
         );
       }
@@ -63,13 +64,8 @@ export const subjectService = {
   },
 
   /**
-   * Partial update. Only `name`, `order`, and `isActive` are mutable from
-   * the admin PATCH endpoint — `postId` is intentionally immutable because
-   * moving a subject between posts would invalidate every question tagged
-   * under it.
-   *
-   * `actor` is the authenticated user issuing the change; it is persisted as
-   * `updatedBy` for audit purposes and also included in the admin log line.
+   * Partial update. `name`, `order`, `isActive` mutable. `postId` is not
+   * accepted here — use migration tools to normalize legacy rows.
    */
   async update(id, patch, actor = null) {
     const existing = await subjectRepository.findById(id);
@@ -84,17 +80,11 @@ export const subjectService = {
       if (!trimmedName) {
         throw new AppError('Subject name cannot be empty', HTTP_STATUS.BAD_REQUEST);
       }
-      // Only re-check for duplicates when the name actually changed; the
-      // case-insensitive compound index would reject it anyway, but giving
-      // a 409 with a clear message is kinder than a 500.
       if (trimmedName.toLowerCase() !== String(existing.name).toLowerCase()) {
-        const duplicate = await subjectRepository.findOneByNameInPost(
-          trimmedName,
-          existing.postId
-        );
+        const duplicate = await subjectRepository.findOneByNameGlobal(trimmedName);
         if (duplicate && String(duplicate._id) !== String(id)) {
           throw new AppError(
-            'A subject with this name already exists for this post.',
+            'A subject with this name already exists (names are unique globally, case-insensitive).',
             HTTP_STATUS.CONFLICT
           );
         }
@@ -110,14 +100,9 @@ export const subjectService = {
     }
 
     if (Object.keys(update).length === 0) {
-      // Nothing to change — return the unchanged doc so the client has a
-      // consistent shape to re-render from.
       return existing;
     }
 
-    // Stamp the audit fields on every real change. `updatedAt` is updated
-    // automatically by Mongoose via `{ timestamps: true }`; we only need
-    // to stamp `updatedBy` explicitly.
     const actorId = actor?.id ? String(actor.id) : null;
     if (actorId) {
       update.updatedBy = actorId;
@@ -129,17 +114,13 @@ export const subjectService = {
     } catch (err) {
       if (err?.code === 11000) {
         throw new AppError(
-          'A subject with this name already exists for this post.',
+          'A subject with this name already exists (names are unique globally, case-insensitive).',
           HTTP_STATUS.CONFLICT
         );
       }
       throw err;
     }
 
-    // Emit an admin-trail log line for each meaningful change. Status flips
-    // get their own message so they're trivial to grep (`Subject disabled`
-    // / `Subject enabled`); other field changes produce a generic update
-    // line so the audit trail is complete, not just status-focused.
     if (patch.isActive !== undefined && Boolean(patch.isActive) !== existing.isActive) {
       const verb = update.isActive ? 'enabled' : 'disabled';
       logger.info(`[ADMIN] Subject ${verb}:`, {
@@ -162,10 +143,6 @@ export const subjectService = {
   },
 };
 
-/**
- * Build a compact before/after diff for audit logs. Only fields present in
- * the update are reported to keep logs small and signal-dense.
- */
 function pickChanges(before, update) {
   const out = {};
   for (const key of ['name', 'order', 'isActive']) {

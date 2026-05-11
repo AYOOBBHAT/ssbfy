@@ -7,12 +7,11 @@ export const createSubjectValidators = [
     .withMessage('name is required')
     .isLength({ min: 2, max: 100 })
     .withMessage('name must be 2-100 characters'),
+  /** Optional legacy tag — global subjects omit `postId`. */
   body('postId')
-    .exists({ checkNull: true, checkFalsy: true })
-    .withMessage('postId is required')
-    .bail()
+    .optional({ nullable: true, checkFalsy: true })
     .isMongoId()
-    .withMessage('postId must be a valid id'),
+    .withMessage('postId must be a valid id when provided'),
   body('order')
     .optional()
     .isInt({ min: 0 })

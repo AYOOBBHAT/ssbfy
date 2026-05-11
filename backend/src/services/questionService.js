@@ -229,12 +229,6 @@ async function resolveHierarchy(subjectId, topicId) {
   if (!subject) {
     throw new AppError('Subject not found', HTTP_STATUS.NOT_FOUND);
   }
-  if (!subject.postId) {
-    throw new AppError(
-      'Subject is not linked to any post; cannot tag question.',
-      HTTP_STATUS.BAD_REQUEST
-    );
-  }
   // `isActive === false` means the admin has hidden this subject; we refuse
   // to attach new questions to it. Legacy docs without the field are treated
   // as active (schema default).
@@ -281,6 +275,15 @@ async function assertPostIds(postIds) {
  */
 function reconcilePostIds(postIds, subjectPostId) {
   const provided = Array.isArray(postIds) ? postIds.map(String) : [];
+  if (subjectPostId == null || subjectPostId === '') {
+    if (provided.length === 0) {
+      throw new AppError(
+        'postIds must include at least one exam when the subject is global (no legacy post link).',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    return Array.from(new Set(provided));
+  }
   const parent = String(subjectPostId);
   if (provided.length === 0) {
     return [parent];

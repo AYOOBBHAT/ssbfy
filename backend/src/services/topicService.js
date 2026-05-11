@@ -35,20 +35,16 @@ export const topicService = {
     if (!subject) {
       throw new AppError('Subject not found', HTTP_STATUS.BAD_REQUEST);
     }
-    // Enforce hierarchy Post → Subject → Topic: the subject must already be
-    // bound to an existing post. Legacy orphan subjects are rejected.
-    if (!subject.postId) {
-      throw new AppError(
-        'Subject is not linked to any post; cannot create topic.',
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
-    const post = await postRepository.findById(subject.postId);
-    if (!post) {
-      throw new AppError(
-        'Parent post for this subject no longer exists.',
-        HTTP_STATUS.BAD_REQUEST
-      );
+    // Legacy subjects may still reference a post; global subjects (`postId`
+    // null) are valid — topics attach only to the subject.
+    if (subject.postId) {
+      const post = await postRepository.findById(subject.postId);
+      if (!post) {
+        throw new AppError(
+          'Parent post for this subject no longer exists.',
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
     }
 
     const duplicate = await topicRepository.findOneByNameInSubject(trimmedName, subjectId);

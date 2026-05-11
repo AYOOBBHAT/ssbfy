@@ -40,7 +40,10 @@ async function resolveHierarchy({ postId, subjectId, topicId }) {
       HTTP_STATUS.BAD_REQUEST
     );
   }
-  if (String(subject.postId) !== String(postId)) {
+  // Global subjects (`postId` null) are reusable across posts; the note's
+  // `postId` pins which exam the note appears under. Legacy subjects still
+  // tied to a single post must match that post.
+  if (subject.postId != null && String(subject.postId) !== String(postId)) {
     throw new AppError(
       'Subject does not belong to the given post.',
       HTTP_STATUS.BAD_REQUEST

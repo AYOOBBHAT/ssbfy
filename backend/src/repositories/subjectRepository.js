@@ -8,20 +8,29 @@ function toOidSet(ids) {
 }
 
 export const subjectRepository = {
+  /**
+   * List subjects. When `filter.postId` is set, returns **global** subjects
+   * (`postId` null/absent) **plus** subjects scoped to that post (backward
+   * compatibility during migration).
+   */
   async findAll(filter = {}) {
-    // Admin-controlled display order first, then stable tiebreak by creation time.
-    return Subject.find(filter).sort({ order: 1, createdAt: 1 }).lean().exec();
+    const { postId, ...rest } = filter;
+    const q = { ...rest };
+    if (postId && mongoose.isValidObjectId(String(postId))) {
+      const oid = new mongoose.Types.ObjectId(String(postId));
+      q.$or = [
+        { postId: oid },
+        { postId: null },
+        { postId: { $exists: false } },
+      ];
+    }
+    return Subject.find(q).sort({ order: 1, createdAt: 1 }).lean().exec();
   },
 
   async findById(id) {
     return Subject.findById(id).lean().exec();
   },
 
-  /**
-   * Bulk lean fetch by ids. Returns only `_id` and `isActive` because that is
-   * all callers need when they are just classifying each id as active/inactive
-   * (e.g. test-creation hierarchy checks). Caller order is NOT preserved.
-   */
   async findByIds(ids) {
     if (!ids?.length) return [];
     const unique = [...new Set(ids.map(String))];
@@ -30,9 +39,6 @@ export const subjectRepository = {
       .exec();
   },
 
-  /**
-   * For test-type inference: needs parent post per subject.
-   */
   async findByIdsWithPost(ids) {
     const oids = toOidSet(ids);
     if (!oids.length) return [];
@@ -42,14 +48,24 @@ export const subjectRepository = {
   },
 
   /**
-   * Case-insensitive duplicate lookup **within** a post. `postId` is
-   * required — ambiguity across posts is prevented by scoping here.
+   * Case-insensitive duplicate lookup within a single post (legacy).
+   * @deprecated Prefer `findOneByNameGlobal` for new writes.
    */
   async findOneByNameInPost(name, postId) {
     if (!postId) {
-      throw new Error('findOneByNameInPost requires postId');
+      return null;
     }
     return Subject.findOne({ postId, name: new RegExp(`^${escapeRegex(name)}$`, 'i') })
+      .lean()
+      .exec();
+  },
+
+  /** Case-insensitive duplicate lookup across all subjects (global uniqueness). */
+  async findOneByNameGlobal(name) {
+    const n = String(name ?? '').trim();
+    if (!n) return null;
+    return Subject.findOne({ name: n })
+      .collation({ locale: 'en', strength: 2 })
       .lean()
       .exec();
   },
@@ -57,17 +73,12 @@ export const subjectRepository = {
   async create(data) {
     const doc = await Subject.create({
       name: data.name,
-      postId: data.postId,
+      postId: data.postId ?? null,
       order: data.order ?? 0,
     });
     return doc.toObject();
   },
 
-  /**
-   * Apply a partial update and return the fresh lean document.
-   * Only keys present in `patch` are written; `{ new: true }` returns the
-   * post-update state (which is what admin UIs want to render).
-   */
   async updateById(id, patch) {
     return Subject.findByIdAndUpdate(id, { $set: patch }, { new: true })
       .lean()

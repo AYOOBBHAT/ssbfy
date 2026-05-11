@@ -1,21 +1,27 @@
 import mongoose from 'mongoose';
 
+/**
+ * Subject is **global** (unique name, case-insensitive). `postId` is optional
+ * and **deprecated**: legacy rows used Post → Subject ownership; new rows
+ * should leave `postId` null. Post tagging for questions lives on
+ * `Question.postIds[]`.
+ */
 const subjectSchema = new mongoose.Schema(
   {
+    /**
+     * @deprecated Optional legacy link to a single Post. Prefer global subjects
+     * (`postId` null) and tag exams on questions via `postIds`.
+     */
     postId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Post',
-      required: true,
+      required: false,
+      default: null,
       index: true,
     },
     name: { type: String, required: true, trim: true },
     order: { type: Number, default: 0, index: true },
-    // Soft enable/disable. Default `true` so legacy docs without the field
-    // behave as active. We index it because user-facing GETs always filter by it.
     isActive: { type: Boolean, default: true, index: true },
-    // Audit: last admin who mutated this doc. `updatedAt` is handled by the
-    // `timestamps: true` option below — Mongoose rewrites it on every save,
-    // so we don't redeclare it here (that would shadow the built-in).
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -25,15 +31,16 @@ const subjectSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Compound unique index using a case-insensitive collation so
-// "Reasoning", "reasoning", and "REASONING" under the same post
-// all collide and get rejected at the storage layer.
+/** Legacy compound index (non-unique) — supports old admin filters during transition. */
+subjectSchema.index({ postId: 1, name: 1 }, { name: 'idx_subject_post_name' });
+
+/** Global uniqueness on normalized name (case-insensitive). */
 subjectSchema.index(
-  { postId: 1, name: 1 },
+  { name: 1 },
   {
     unique: true,
     collation: { locale: 'en', strength: 2 },
-    name: 'uniq_postId_name_ci',
+    name: 'uniq_subject_name_ci_global',
   }
 );
 
