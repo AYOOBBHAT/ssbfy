@@ -68,6 +68,12 @@ Requires valid `MONGODB_URI`. Run from `backend/`:
 
 Env templates: `mobile/.env.example` (`EXPO_PUBLIC_*`, Sentry).
 
+### Sentry note (launch default)
+
+We **keep Sentry runtime reporting enabled** (DSN-based), but we **disable automatic sourcemap uploads** in EAS builds by default so builds succeed without `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`.
+
+To re-enable uploads later: remove `SENTRY_DISABLE_AUTO_UPLOAD=true` from `mobile/eas.json`, then configure Sentry credentials in EAS secrets/env.
+
 ---
 
 ## Admin panel (`admin/`)

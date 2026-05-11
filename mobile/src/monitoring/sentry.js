@@ -6,6 +6,12 @@ const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 /**
  * Derive release channel without leaking secrets.
  * EAS injects channel via updates; fall back to env-style naming.
+ *
+ * Note: We intentionally ship Sentry runtime reporting, but we disable
+ * automatic Android sourcemap upload in EAS builds for now because it
+ * requires SENTRY_AUTH_TOKEN / org / project configuration. When we're
+ * ready to enable uploads, remove `SENTRY_DISABLE_AUTO_UPLOAD=true` from
+ * `mobile/eas.json` and provide Sentry credentials in EAS secrets/env.
  */
 function resolveEnvironment() {
   if (__DEV__) return 'development';
