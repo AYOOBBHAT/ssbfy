@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { EmptyState } from '../components/StateView';
@@ -56,140 +56,6 @@ function formatIndexList(indexes, options) {
       return `${String.fromCharCode(65 + i)}. ${options[i] ?? ''}`;
     })
     .join('  •  ');
-}
-
-export default function ReviewAnswersScreen() {
-  const route = useRoute();
-  const params = route.params || {};
-  /** Completed-test review from Result is read-only; default true so navigation bugs can't mutate answers. */
-  const readOnly = params.readOnly !== false;
-  const questions = Array.isArray(params.questions) ? params.questions : [];
-  const userAnswers = params.userAnswers && typeof params.userAnswers === 'object' ? params.userAnswers : {};
-  const correctAnswers = Array.isArray(params.correctAnswers) ? params.correctAnswers : [];
-
-  const correctAnswerMap = useMemo(() => {
-    const m = new Map();
-    for (const c of correctAnswers) {
-      if (c?.questionId == null) continue;
-      const arr = toIndexArray(
-        Array.isArray(c.correctAnswers) && c.correctAnswers.length > 0 ? c.correctAnswers : c.correctAnswerIndex
-      );
-      m.set(String(c.questionId), arr);
-    }
-    return m;
-  }, [correctAnswers]);
-
-  const reviewItems = useMemo(() => {
-    return questions.map((q) => {
-      const qid = String(q?._id ?? '');
-      const userArr = toIndexArray(userAnswers[qid]);
-      const fromMap = correctAnswerMap.get(qid);
-      const correctArr =
-        Array.isArray(fromMap) && fromMap.length > 0
-          ? fromMap
-          : toIndexArray(
-              Array.isArray(q?.correctAnswers) && q.correctAnswers.length > 0
-                ? q.correctAnswers
-                : q?.correctAnswerIndex
-            );
-      return { key: qid, question: q, userSet: userArr, correctSet: correctArr };
-    });
-  }, [questions, userAnswers, correctAnswerMap]);
-
-  const renderItem = ({ item, index }) => {
-    const { question, userSet, correctSet } = item || {};
-    const options = Array.isArray(question?.options) ? question.options : [];
-    const explanation =
-      typeof question?.explanation === 'string' && question.explanation.trim()
-        ? question.explanation
-        : null;
-    const unanswered = !Array.isArray(userSet) || userSet.length === 0;
-    const isMulti =
-      question?.questionType === 'multiple_correct' ||
-      (Array.isArray(correctSet) && correctSet.length > 1);
-    const isOverallCorrect =
-      Array.isArray(correctSet) &&
-      correctSet.length > 0 &&
-      indexSetsEqual(userSet, correctSet);
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.qHeaderRow}>
-          <Text style={styles.qIndex}>Q{index + 1}</Text>
-          {isMulti ? (
-            <View style={styles.multiBadge}>
-              <Text style={styles.multiBadgeText}>Multiple Correct</Text>
-            </View>
-          ) : null}
-          {!unanswered ? (
-            <View
-              style={[
-                styles.verdictBadge,
-                isOverallCorrect ? styles.verdictBadgeOk : styles.verdictBadgeBad,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.verdictBadgeText,
-                  isOverallCorrect
-                    ? styles.verdictBadgeTextOk
-                    : styles.verdictBadgeTextBad,
-                ]}
-              >
-                {isOverallCorrect ? 'Correct' : 'Wrong'}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-        <Text style={styles.qText}>{question?.questionText ?? '(missing question)'}</Text>
-        {options.map((opt, i) => (
-          <View key={i} style={[styles.optionRow, getOptionStyle(i, correctSet, userSet)]}>
-            <Text style={styles.optionText}>
-              {`${String.fromCharCode(65 + i)}. ${opt ?? ''}`}
-            </Text>
-          </View>
-        ))}
-        <Text style={styles.metaLine}>
-          Your answer{userSet?.length > 1 ? 's' : ''}:{' '}
-          {unanswered ? 'Not answered' : formatIndexList(userSet, options)}
-        </Text>
-        <Text style={styles.metaLine}>
-          Correct answer{correctSet?.length > 1 ? 's' : ''}:{' '}
-          {formatIndexList(correctSet, options)}
-        </Text>
-        {explanation ? (
-          <Text style={styles.explanation}>Explanation: {explanation}</Text>
-        ) : null}
-      </View>
-    );
-  };
-
-  if (questions.length === 0) {
-    return (
-      <EmptyState
-        title="No questions to review"
-        subtitle="Nothing to display for this attempt."
-        emoji="📭"
-      />
-    );
-  }
-
-  const listHeader = readOnly ? (
-    <View style={styles.readOnlyBanner}>
-      <Text style={styles.readOnlyText}>Review only — answers cannot be changed.</Text>
-    </View>
-  ) : null;
-
-  return (
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      data={reviewItems}
-      keyExtractor={(item, idx) => item.key || String(idx)}
-      renderItem={renderItem}
-      ListHeaderComponent={listHeader}
-    />
-  );
 }
 
 const styles = StyleSheet.create({
@@ -257,3 +123,144 @@ const styles = StyleSheet.create({
   explanation: { marginTop: 10, color: TEXT, fontSize: 13, lineHeight: 18 },
 });
 
+const ReviewAnswerRow = memo(function ReviewAnswerRow({ item, index }) {
+  const { question, userSet, correctSet } = item || {};
+  const options = Array.isArray(question?.options) ? question.options : [];
+  const explanation =
+    typeof question?.explanation === 'string' && question.explanation.trim()
+      ? question.explanation
+      : null;
+  const unanswered = !Array.isArray(userSet) || userSet.length === 0;
+  const isMulti =
+    question?.questionType === 'multiple_correct' ||
+    (Array.isArray(correctSet) && correctSet.length > 1);
+  const isOverallCorrect =
+    Array.isArray(correctSet) &&
+    correctSet.length > 0 &&
+    indexSetsEqual(userSet, correctSet);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.qHeaderRow}>
+        <Text style={styles.qIndex}>Q{index + 1}</Text>
+        {isMulti ? (
+          <View style={styles.multiBadge}>
+            <Text style={styles.multiBadgeText}>Multiple Correct</Text>
+          </View>
+        ) : null}
+        {!unanswered ? (
+          <View
+            style={[
+              styles.verdictBadge,
+              isOverallCorrect ? styles.verdictBadgeOk : styles.verdictBadgeBad,
+            ]}
+          >
+            <Text
+              style={[
+                styles.verdictBadgeText,
+                isOverallCorrect ? styles.verdictBadgeTextOk : styles.verdictBadgeTextBad,
+              ]}
+            >
+              {isOverallCorrect ? 'Correct' : 'Wrong'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <Text style={styles.qText}>{question?.questionText ?? '(missing question)'}</Text>
+      {options.map((opt, i) => (
+        <View key={i} style={[styles.optionRow, getOptionStyle(i, correctSet, userSet)]}>
+          <Text style={styles.optionText}>
+            {`${String.fromCharCode(65 + i)}. ${opt ?? ''}`}
+          </Text>
+        </View>
+      ))}
+      <Text style={styles.metaLine}>
+        Your answer{userSet?.length > 1 ? 's' : ''}:{' '}
+        {unanswered ? 'Not answered' : formatIndexList(userSet, options)}
+      </Text>
+      <Text style={styles.metaLine}>
+        Correct answer{correctSet?.length > 1 ? 's' : ''}:{' '}
+        {formatIndexList(correctSet, options)}
+      </Text>
+      {explanation ? (
+        <Text style={styles.explanation}>Explanation: {explanation}</Text>
+      ) : null}
+    </View>
+  );
+});
+
+export default function ReviewAnswersScreen() {
+  const route = useRoute();
+  const params = route.params || {};
+  /** Completed-test review from Result is read-only; default true so navigation bugs can't mutate answers. */
+  const readOnly = params.readOnly !== false;
+  const questions = Array.isArray(params.questions) ? params.questions : [];
+  const userAnswers = params.userAnswers && typeof params.userAnswers === 'object' ? params.userAnswers : {};
+  const correctAnswers = Array.isArray(params.correctAnswers) ? params.correctAnswers : [];
+
+  const correctAnswerMap = useMemo(() => {
+    const m = new Map();
+    for (const c of correctAnswers) {
+      if (c?.questionId == null) continue;
+      const arr = toIndexArray(
+        Array.isArray(c.correctAnswers) && c.correctAnswers.length > 0 ? c.correctAnswers : c.correctAnswerIndex
+      );
+      m.set(String(c.questionId), arr);
+    }
+    return m;
+  }, [correctAnswers]);
+
+  const reviewItems = useMemo(() => {
+    return questions.map((q) => {
+      const qid = String(q?._id ?? '');
+      const userArr = toIndexArray(userAnswers[qid]);
+      const fromMap = correctAnswerMap.get(qid);
+      const correctArr =
+        Array.isArray(fromMap) && fromMap.length > 0
+          ? fromMap
+          : toIndexArray(
+              Array.isArray(q?.correctAnswers) && q.correctAnswers.length > 0
+                ? q.correctAnswers
+                : q?.correctAnswerIndex
+            );
+      return { key: qid, question: q, userSet: userArr, correctSet: correctArr };
+    });
+  }, [questions, userAnswers, correctAnswerMap]);
+
+  const renderItem = useCallback(({ item, index }) => {
+    return <ReviewAnswerRow item={item} index={index} />;
+  }, []);
+
+  const keyExtractor = useCallback((item, idx) => item.key || String(idx), []);
+
+  if (questions.length === 0) {
+    return (
+      <EmptyState
+        title="No questions to review"
+        subtitle="Nothing to display for this attempt."
+        emoji="📭"
+      />
+    );
+  }
+
+  const listHeader = readOnly ? (
+    <View style={styles.readOnlyBanner}>
+      <Text style={styles.readOnlyText}>Review only — answers cannot be changed.</Text>
+    </View>
+  ) : null;
+
+  return (
+    <FlatList
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      data={reviewItems}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      ListHeaderComponent={listHeader}
+      initialNumToRender={6}
+      maxToRenderPerBatch={8}
+      windowSize={8}
+      removeClippedSubviews
+    />
+  );
+}

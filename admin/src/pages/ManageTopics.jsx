@@ -54,8 +54,7 @@ export default function ManageTopics() {
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [postsError, setPostsError] = useState('');
 
-  // Post selection drives both the "create subject under this post" form
-  // and the "list subjects scoped to this post" section below.
+  // Post selection filters which subjects appear in the list (globals + legacy linked).
   const [selectedPostId, setSelectedPostId] = useState('');
 
   // ------ Create Post ------
@@ -65,7 +64,7 @@ export default function ManageTopics() {
   const [postMsg, setPostMsg] = useState('');
   const [postErr, setPostErr] = useState('');
 
-  // ------ Subjects (scoped to selectedPostId) ------
+  // ------ Subjects (full list; UI filters by selectedPostId when set) ------
   const [subjects, setSubjects] = useState([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [subjectsError, setSubjectsError] = useState('');
@@ -116,17 +115,11 @@ export default function ManageTopics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadSubjects = useCallback(async (postId) => {
-    if (!postId) {
-      setSubjects([]);
-      return;
-    }
+  const loadSubjectsAll = useCallback(async () => {
     setLoadingSubjects(true);
     setSubjectsError('');
     try {
-      // Admins manage status, so we need to see inactive items here too.
-      // The backend only honors `includeInactive` for authenticated admins.
-      const res = await getSubjects({ postId, includeInactive: true });
+      const res = await getSubjects({ includeInactive: true });
       setSubjects(asArray(res, 'subjects'));
     } catch (e) {
       setSubjectsError(getApiErrorMessage(e));
@@ -159,12 +152,15 @@ export default function ManageTopics() {
   }, [loadPosts]);
 
   useEffect(() => {
+    loadSubjectsAll();
+  }, [loadSubjectsAll]);
+
+  useEffect(() => {
     // Changing the post resets subject selection so the UI never shows
     // topics from a different post by accident.
     setSelectedSubjectId('');
     setTopics([]);
-    loadSubjects(selectedPostId);
-  }, [selectedPostId, loadSubjects]);
+  }, [selectedPostId]);
 
   useEffect(() => {
     loadTopics(selectedSubjectId);
@@ -179,6 +175,14 @@ export default function ManageTopics() {
     () => subjects.find((s) => String(s._id) === String(selectedSubjectId)) || null,
     [subjects, selectedSubjectId]
   );
+
+  /** When a post is selected: globals + subjects linked to that post. No post: full catalog. */
+  const visibleSubjects = useMemo(() => {
+    if (!selectedPostId) return subjects;
+    return subjects.filter(
+      (s) => !s.postId || String(s.postId) === String(selectedPostId)
+    );
+  }, [subjects, selectedPostId]);
 
   // ------ Handlers ------
   async function handleCreatePost(e) {
@@ -229,11 +233,6 @@ export default function ManageTopics() {
     setSubjectMsg('');
     setSubjectErr('');
 
-    if (!selectedPostId) {
-      setSubjectErr('Please select a post first.');
-      return;
-    }
-
     const name = subjectName.trim();
     if (!name) {
       setSubjectErr('Subject name is required.');
@@ -254,13 +253,12 @@ export default function ManageTopics() {
       setCreatingSubject(true);
       const res = await createSubject({
         name,
-        postId: selectedPostId,
         ...(orderValue !== undefined ? { order: orderValue } : {}),
       });
-      setSubjectMsg(`Subject "${name}" created.`);
+      setSubjectMsg(`Subject "${name}" created (global).`);
       setSubjectName('');
       setSubjectOrder('');
-      await loadSubjects(selectedPostId);
+      await loadSubjectsAll();
 
       const created = res?.subject;
       if (created?._id) {
@@ -405,8 +403,8 @@ export default function ManageTopics() {
     <div>
       <h1 className="page-title">Subjects & Topics</h1>
       <p className="page-subtitle">
-        Hierarchy: <strong>Post → Subject → Topic → Question</strong>. Pick a
-        post to create subjects under it, then add topics.
+        <strong>Subjects are global</strong> (one name per catalog entry). Pick a post to filter which
+        subjects appear for that exam; topics always belong to the subject you select.
       </p>
 
       {loadingPosts ? (
@@ -477,8 +475,8 @@ export default function ManageTopics() {
         {postsError ? <div className="alert alert-error">{postsError}</div> : null}
         {noPosts ? (
           <div className="alert alert-error">
-            No posts yet. Create one above — subjects cannot exist without a
-            parent post.
+            No posts yet. Create one above — you still need posts for exam pages; subjects are created
+            globally below.
           </div>
         ) : null}
 
@@ -515,10 +513,6 @@ export default function ManageTopics() {
       <section className="card form">
         <h2 className="section-heading">Create Subject</h2>
 
-        {!selectedPostId ? (
-          <p className="helper">Select a post above to enable subject creation.</p>
-        ) : null}
-
         {subjectMsg ? <div className="alert alert-success">{subjectMsg}</div> : null}
         {subjectErr ? <div className="alert alert-error">{subjectErr}</div> : null}
 
@@ -526,14 +520,10 @@ export default function ManageTopics() {
           <input
             type="text"
             className="input"
-            placeholder={
-              selectedPost
-                ? `New subject under "${selectedPost.name}"`
-                : 'Select a post first'
-            }
+            placeholder="New global subject name"
             value={subjectName}
             onChange={(e) => setSubjectName(e.target.value)}
-            disabled={!selectedPostId || creatingSubject}
+            disabled={creatingSubject}
             maxLength={100}
           />
           <input
@@ -545,12 +535,12 @@ export default function ManageTopics() {
             title="Display order (optional, lower appears first). Leave blank for 0."
             value={subjectOrder}
             onChange={(e) => setSubjectOrder(e.target.value)}
-            disabled={!selectedPostId || creatingSubject}
+            disabled={creatingSubject}
           />
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={!selectedPostId || creatingSubject || !subjectName.trim()}
+            disabled={creatingSubject || !subjectName.trim()}
           >
             {creatingSubject ? 'Creating…' : 'Create Subject'}
           </button>
@@ -562,19 +552,24 @@ export default function ManageTopics() {
 
         <div className="subjects-list">
           <h3 className="list-heading">
-            {selectedPost ? `Subjects in "${selectedPost.name}"` : 'Subjects'}
+            {selectedPost
+              ? `Subjects for "${selectedPost.name}" (global + linked)`
+              : 'All subjects'}
           </h3>
           {!selectedPostId ? (
-            <p className="muted">Select a post to view its subjects.</p>
-          ) : loadingSubjects ? (
+            <p className="muted">Optional: select a post to filter this list.</p>
+          ) : null}
+          {loadingSubjects ? (
             <p className="muted">Loading subjects…</p>
           ) : subjectsError ? (
             <div className="alert alert-error">{subjectsError}</div>
-          ) : subjects.length === 0 ? (
-            <p className="muted">No subjects yet for this post. Create one above.</p>
+          ) : visibleSubjects.length === 0 ? (
+            <p className="muted">
+              No subjects match this filter. Create a global subject above or pick another post.
+            </p>
           ) : (
             <ul className="row-list">
-              {subjects.map((s) => {
+              {visibleSubjects.map((s) => {
                 const isSelected = String(s._id) === String(selectedSubjectId);
                 const isActive = s.isActive !== false; // treat missing as active
                 const busy = togglingSubjectId === String(s._id);
@@ -641,18 +636,16 @@ export default function ManageTopics() {
             className="input"
             value={selectedSubjectId}
             onChange={(e) => setSelectedSubjectId(e.target.value)}
-            disabled={loadingSubjects || subjects.length === 0}
+            disabled={loadingSubjects || visibleSubjects.length === 0}
           >
             <option value="">
-              {!selectedPostId
-                ? '— Select a post first —'
-                : loadingSubjects
+              {loadingSubjects
                 ? 'Loading subjects…'
-                : subjects.length === 0
-                ? 'No subjects yet for this post'
+                : visibleSubjects.length === 0
+                ? 'No subjects in current filter'
                 : '— Select subject —'}
             </option>
-            {subjects.map((s) => (
+            {visibleSubjects.map((s) => (
               <option key={s._id} value={s._id}>
                 {s.name}
               </option>

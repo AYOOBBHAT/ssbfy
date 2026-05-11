@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   createQuestion,
@@ -96,6 +96,14 @@ export default function AddQuestion() {
   const [similarLoading, setSimilarLoading] = useState(false);
   const [acknowledgedDuplicate, setAcknowledgedDuplicate] = useState(false);
 
+  /** Global subjects plus legacy per-post subjects; narrowed by selected exam for the picker. */
+  const subjectOptionsForPost = useMemo(() => {
+    if (!selectedPostId) return subjects;
+    return subjects.filter(
+      (s) => !s.postId || String(s.postId) === String(selectedPostId)
+    );
+  }, [subjects, selectedPostId]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -119,17 +127,10 @@ export default function AddQuestion() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!selectedPostId) {
-      setSubjects([]);
-      return undefined;
-    }
     (async () => {
       try {
         setLoadingSubjects(true);
-        const subjectsRes = await getSubjects({
-          postId: selectedPostId,
-          includeInactive: true,
-        });
+        const subjectsRes = await getSubjects({ includeInactive: true });
         if (cancelled) return;
         setSubjects(
           Array.isArray(subjectsRes) ? subjectsRes : subjectsRes?.subjects || []
@@ -143,7 +144,7 @@ export default function AddQuestion() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPostId]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -366,7 +367,6 @@ export default function AddQuestion() {
       return 'Image URL must be a valid http(s) URL.';
     }
     if (!selectedPostId) return 'Please select a post (exam).';
-    if (!selectedPostId) return 'Please select a post (exam).';
     if (!form.subjectId) return 'Please select a subject.';
     if (!form.topicId) return 'Please select a topic.';
     return null;
@@ -424,6 +424,9 @@ export default function AddQuestion() {
     }
     if (form.explanation.trim()) {
       payload.explanation = form.explanation.trim();
+    }
+    if (!isEdit && selectedPostId) {
+      payload.postIds = [selectedPostId];
     }
 
     try {
@@ -605,8 +608,8 @@ export default function AddQuestion() {
         </div>
 
         <p className="helper" style={{ marginBottom: 16 }}>
-          Hierarchy: <strong>Post → Subject → Topic</strong>. Pick the exam first; subjects are scoped to
-          that post.
+          Subjects are <strong>global</strong>; pick an exam first so new questions get a{' '}
+          <code>postIds</code> tag. The subject list shows that exam plus any global (unlinked) subjects.
         </p>
 
         <div className="form-grid">
@@ -656,14 +659,14 @@ export default function AddQuestion() {
                     ? 'Loading subjects…'
                     : '— Select subject —'}
               </option>
-              {subjects.map((s) => (
+              {subjectOptionsForPost.map((s) => (
                 <option key={s._id} value={s._id}>
                   {s.name || s.title || s._id}
                 </option>
               ))}
             </select>
-            {selectedPostId && !loadingSubjects && subjects.length === 0 ? (
-              <p className="helper">No subjects under this post yet.</p>
+            {selectedPostId && !loadingSubjects && subjectOptionsForPost.length === 0 ? (
+              <p className="helper">No subjects match this exam yet (create a global subject under Subjects &amp; Topics).</p>
             ) : null}
           </div>
 

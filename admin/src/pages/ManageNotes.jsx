@@ -134,7 +134,7 @@ export default function ManageNotes() {
   const subjectOptions = useMemo(() => {
     if (!filterPostId) return subjects;
     return subjects.filter(
-      (s) => String(s.postId) === String(filterPostId)
+      (s) => !s.postId || String(s.postId) === String(filterPostId)
     );
   }, [subjects, filterPostId]);
 
@@ -145,7 +145,7 @@ export default function ManageNotes() {
       if (!filterPostId) return topics;
       const subjectsOfPost = new Set(
         subjects
-          .filter((s) => String(s.postId) === String(filterPostId))
+          .filter((s) => !s.postId || String(s.postId) === String(filterPostId))
           .map((s) => String(s._id))
       );
       return topics.filter((t) =>

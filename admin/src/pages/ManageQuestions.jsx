@@ -190,7 +190,9 @@ export default function ManageQuestions() {
 
   const subjectOptions = useMemo(() => {
     if (!filterPostId) return subjects;
-    return subjects.filter((s) => String(s.postId) === String(filterPostId));
+    return subjects.filter(
+      (s) => !s.postId || String(s.postId) === String(filterPostId)
+    );
   }, [subjects, filterPostId]);
 
   const topicOptions = useMemo(() => {
@@ -198,7 +200,7 @@ export default function ManageQuestions() {
       if (!filterPostId) return topics;
       const subs = new Set(
         subjects
-          .filter((s) => String(s.postId) === String(filterPostId))
+          .filter((s) => !s.postId || String(s.postId) === String(filterPostId))
           .map((s) => String(s._id))
       );
       return topics.filter((t) => subs.has(String(t.subjectId)));

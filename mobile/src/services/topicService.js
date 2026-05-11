@@ -14,18 +14,30 @@ let topicsInFlight = null;
  * @returns {Promise<{ topics: object[] }>}
  */
 export async function getTopics(opts = {}) {
-  if (!opts.force && topicsCache) {
+  const { force = false, signal } = opts;
+  if (!force && !signal && topicsCache) {
     return topicsCache;
   }
-  if (!opts.force && topicsInFlight) {
+  if (!force && !signal && topicsInFlight) {
     return topicsInFlight;
+  }
+
+  const exec = async () => {
+    const { data } = await api.get('/topics', { signal });
+    const result = data?.data ?? { topics: [] };
+    if (!signal) {
+      topicsCache = result;
+    }
+    return result;
+  };
+
+  if (signal) {
+    return exec();
   }
 
   topicsInFlight = (async () => {
     try {
-      const { data } = await api.get('/topics');
-      topicsCache = data?.data ?? { topics: [] };
-      return topicsCache;
+      return await exec();
     } finally {
       topicsInFlight = null;
     }

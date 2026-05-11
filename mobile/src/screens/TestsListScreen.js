@@ -8,7 +8,7 @@ import { LoadingState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getMyTestStatus } from '../services/testService';
 
 function EmptyTests() {
@@ -40,26 +40,26 @@ export default function TestsListScreen() {
   } = useMockTests();
 
   useEffect(() => {
-    let alive = true;
+    const ac = new AbortController();
     const loadStatuses = async () => {
       try {
         setStatusError(null);
         setStatusLoading(true);
-        const data = await getMyTestStatus();
+        const data = await getMyTestStatus({ signal: ac.signal });
         const next = data?.status && typeof data.status === 'object' ? data.status : {};
-        if (!alive) return;
+        if (ac.signal.aborted) return;
         setStatusMap(next);
       } catch (e) {
-        if (!alive) return;
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
         setStatusError(getApiErrorMessage(e));
         setStatusMap({});
       }
-      if (!alive) return;
+      if (ac.signal.aborted) return;
       setStatusLoading(false);
     };
     void loadStatuses();
     return () => {
-      alive = false;
+      ac.abort();
     };
   }, []);
 

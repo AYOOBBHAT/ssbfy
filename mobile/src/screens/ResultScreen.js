@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  FlatList,
+  Alert,
+} from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
@@ -8,9 +16,10 @@ import { getNotes, previewOf } from '../services/noteService';
 import {
   formatFileSize,
   getPdfNotes,
-  resolvePdfOpenUrl,
+  getPdfOpenUserMessage,
+  openPdfInAppBrowser,
 } from '../services/pdfService';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import logger from '../utils/logger';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
@@ -131,28 +140,32 @@ export default function ResultScreen() {
   const [attempts, setAttempts] = useState([]);
 
   useEffect(() => {
-    let alive = true;
+    const ac = new AbortController();
     const loadAttempts = async () => {
-      if (!isMock) return;
+      if (!isMock) {
+        setAttemptsLoading(false);
+        return;
+      }
       setAttemptsLoading(true);
       setAttemptsError(null);
       try {
-        const data = await getTestAttempts(testId);
+        const data = await getTestAttempts(testId, { signal: ac.signal });
         const list = Array.isArray(data?.attempts) ? data.attempts : [];
-        if (!alive) return;
+        if (ac.signal.aborted) return;
         setAttempts(list);
       } catch (e) {
-        if (!alive) return;
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
         setAttemptsError(getApiErrorMessage(e));
         setAttempts([]);
       } finally {
-        if (!alive) return;
-        setAttemptsLoading(false);
+        if (!ac.signal.aborted) {
+          setAttemptsLoading(false);
+        }
       }
     };
     void loadAttempts();
     return () => {
-      alive = false;
+      ac.abort();
     };
   }, [isMock, testId]);
 
@@ -390,10 +403,10 @@ export default function ResultScreen() {
   }, [questions]);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     (async () => {
       try {
-        const data = await getTopics();
+        const data = await getTopics({ signal: ac.signal });
         const list = Array.isArray(data?.topics) ? data.topics : [];
         const map = {};
         list.forEach((t) => {
@@ -401,13 +414,14 @@ export default function ResultScreen() {
             map[String(t._id)] = t.name ?? '';
           }
         });
-        if (!cancelled) setTopicMap(map);
+        if (!ac.signal.aborted) setTopicMap(map);
       } catch (e) {
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
         logger.info('[TOPICS] failed to load:', getApiErrorMessage(e));
       }
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, []);
 
@@ -428,48 +442,56 @@ export default function ResultScreen() {
       return undefined;
     }
 
-    let cancelled = false;
+    const ac = new AbortController();
     setRecLoading(true);
     setRecError(null);
 
     (async () => {
-      const [notesResult, pdfsResult] = await Promise.allSettled([
-        getNotes({ topicIds: weakTopicIds }),
-        // `recommendedPostId` may legitimately be null (e.g. questions
-        // lacked postIds in a legacy record). Treat that as "no pdfs"
-        // rather than fetching every pdf in the catalog.
-        recommendedPostId ? getPdfNotes(recommendedPostId) : Promise.resolve({ pdfs: [] }),
-      ]);
+      try {
+        const [notesResult, pdfsResult] = await Promise.allSettled([
+          getNotes({ topicIds: weakTopicIds }, { signal: ac.signal }),
+          // `recommendedPostId` may legitimately be null (e.g. questions
+          // lacked postIds in a legacy record). Treat that as "no pdfs"
+          // rather than fetching every pdf in the catalog.
+          recommendedPostId
+            ? getPdfNotes(recommendedPostId, { signal: ac.signal })
+            : Promise.resolve({ pdfs: [] }),
+        ]);
 
-      if (cancelled) return;
+        if (ac.signal.aborted) return;
 
-      const nextNotes =
-        notesResult.status === 'fulfilled'
-          ? (Array.isArray(notesResult.value?.notes) ? notesResult.value.notes : [])
-          : [];
-      const nextPdfs =
-        pdfsResult.status === 'fulfilled'
-          ? (Array.isArray(pdfsResult.value?.pdfs) ? pdfsResult.value.pdfs : [])
-          : [];
+        const nextNotes =
+          notesResult.status === 'fulfilled'
+            ? (Array.isArray(notesResult.value?.notes) ? notesResult.value.notes : [])
+            : [];
+        const nextPdfs =
+          pdfsResult.status === 'fulfilled'
+            ? (Array.isArray(pdfsResult.value?.pdfs) ? pdfsResult.value.pdfs : [])
+            : [];
 
-      setRecommendedNotes(nextNotes.slice(0, MAX_RECOMMENDATIONS));
-      setRecommendedPdfs(nextPdfs.slice(0, MAX_RECOMMENDATIONS));
+        setRecommendedNotes(nextNotes.slice(0, MAX_RECOMMENDATIONS));
+        setRecommendedPdfs(nextPdfs.slice(0, MAX_RECOMMENDATIONS));
 
-      // Only surface an error when BOTH requests failed — a partial
-      // success is a useful recommender and we'd rather hide a pdf
-      // outage than scare the user with a red banner.
-      if (
-        notesResult.status === 'rejected' &&
-        pdfsResult.status === 'rejected'
-      ) {
-        setRecError(getApiErrorMessage(notesResult.reason));
+        // Only surface an error when BOTH requests failed — a partial
+        // success is a useful recommender and we'd rather hide a pdf
+        // outage than scare the user with a red banner.
+        if (
+          notesResult.status === 'rejected' &&
+          pdfsResult.status === 'rejected'
+        ) {
+          const r1 = notesResult.reason;
+          const r2 = pdfsResult.reason;
+          if (!isRequestCancelled(r1) && !isRequestCancelled(r2)) {
+            setRecError(getApiErrorMessage(r1));
+          }
+        }
+      } finally {
+        setRecLoading(false);
       }
-
-      setRecLoading(false);
     })();
 
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, [weakTopicIds, recommendedPostId]);
 
@@ -485,19 +507,10 @@ export default function ResultScreen() {
    */
   const handleOpenPdf = async (pdf) => {
     const id = pdf?._id;
-    const finalUrl = resolvePdfOpenUrl(pdf);
-    if (__DEV__) {
-      logger.debug('PDF API RESPONSE (open):', {
-        _id: pdf?._id,
-        signedUrl: pdf?.signedUrl,
-        fileName: pdf?.fileName,
-      });
-      logger.debug('FINAL PDF URL:', finalUrl);
-    }
-    if (!finalUrl) return;
+    if (!id) return;
     setOpeningPdfId(id);
     try {
-      await WebBrowser.openBrowserAsync(finalUrl, {
+      await openPdfInAppBrowser(pdf, {
         toolbarColor: colors.primary,
         controlsColor: colors.textOnPrimary,
         showTitle: true,
@@ -505,11 +518,9 @@ export default function ResultScreen() {
         dismissButtonStyle: 'close',
         presentationStyle:
           WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
-      });
-    } catch {
-      // Fail quiet — the PDF list elsewhere in the app shows a richer
-      // error flow; from the result screen a silent no-op is less noisy
-      // than an alert popping over the score.
+      }, { pdfId: String(id) });
+    } catch (e) {
+      Alert.alert('Could not open PDF', getPdfOpenUserMessage(e));
     } finally {
       setOpeningPdfId(null);
     }

@@ -1,6 +1,9 @@
 import axios from 'axios';
 import logger from '../utils/logger';
+import { isRequestCancelled } from '../utils/requestCancel.js';
 import { recordHttpFailure } from '../monitoring/apiTrack';
+
+export { isRequestCancelled };
 
 /**
  * API base URL is env-configurable for release channels.
@@ -54,6 +57,15 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (isRequestCancelled(error)) {
+      if (__DEV__) {
+        logger.debug('[API] request cancelled', {
+          url: String(error?.config?.url || '').split('?')[0],
+        });
+      }
+      return Promise.reject(error);
+    }
+
     const cfg = error.config || {};
     const start = cfg.metadata?.startTime ?? Date.now();
     const latencyMs = Date.now() - start;
@@ -99,6 +111,9 @@ export default api;
 
 /** Safe user-facing copy — never echoes tokens or stack traces. */
 export function getApiErrorMessage(error) {
+  if (isRequestCancelled(error)) {
+    return '';
+  }
   const d = error?.response?.data;
 
   if (typeof d?.message === 'string' && d.message.trim()) {
@@ -146,6 +161,31 @@ export function getApiErrorMessage(error) {
     return error.message;
   }
   return 'Something went wrong';
+}
+
+export function isTimeoutError(error) {
+  if (!error?.response) {
+    const msg = String(error?.message || '');
+    if (error?.code === 'ECONNABORTED' || /timeout/i.test(msg)) return true;
+  }
+  return false;
+}
+
+export function isOfflineError(error) {
+  if (error?.response) return false;
+  const msg = String(error?.message || '').toLowerCase();
+  if (
+    error?.code === 'ERR_NETWORK' ||
+    msg.includes('network error') ||
+    msg.includes('network request failed')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function isAuthExpiredError(error) {
+  return error?.response?.status === 401;
 }
 
 /** Mirrors backend `AppError` copy for free-tier blocks (403). */

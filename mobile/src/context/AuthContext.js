@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import * as authService from '../services/authService';
-import api, { setAuthToken, clearAuthToken } from '../services/api';
+import api, { setAuthToken, clearAuthToken, isRequestCancelled } from '../services/api';
 import { clearTopicsCache } from '../services/topicService';
 import { setMonitoringUser } from '../monitoring/sentry';
 
@@ -31,6 +31,7 @@ export function AuthProvider({ children }) {
   const [initializing, setInitializing] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const refreshUserAbortRef = useRef(null);
 
   const isAuthenticated = !!token;
 
@@ -43,11 +44,11 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (cancelled) {
+        if (ac.signal.aborted) {
           return;
         }
         if (raw) {
@@ -57,13 +58,15 @@ export function AuthProvider({ children }) {
             setToken(t);
             setAuthToken(t);
             try {
-              const res = await api.get('/users/me');
+              const res = await api.get('/users/me', { signal: ac.signal });
               const freshUser = res?.data?.data?.user;
+              if (ac.signal.aborted) return;
               if (freshUser && typeof freshUser === 'object') {
                 setUser(freshUser);
                 await persistSession(t, freshUser);
               }
-            } catch {
+            } catch (e) {
+              if (ac.signal.aborted || isRequestCancelled(e)) return;
               await clearStoredSession();
               setToken(null);
               setUser(null);
@@ -74,13 +77,11 @@ export function AuthProvider({ children }) {
       } catch {
         await AsyncStorage.removeItem(STORAGE_KEY);
       } finally {
-        if (!cancelled) {
-          setInitializing(false);
-        }
+        setInitializing(false);
       }
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, []);
 
@@ -133,9 +134,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
+    refreshUserAbortRef.current?.abort();
+    const ac = new AbortController();
+    refreshUserAbortRef.current = ac;
     try {
-      const res = await api.get('/users/me');
+      const res = await api.get('/users/me', { signal: ac.signal });
       const freshUser = res?.data?.data?.user;
+      if (refreshUserAbortRef.current !== ac) return null;
       if (freshUser && typeof freshUser === 'object') {
         setUser(freshUser);
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -146,7 +151,8 @@ export function AuthProvider({ children }) {
         }
         return freshUser;
       }
-    } catch {
+    } catch (e) {
+      if (isRequestCancelled(e)) return null;
       // Swallow errors; global 401 handler logs auth issues separately.
     }
     return null;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,7 @@ import {
   FlatList,
   RefreshControl,
 } from 'react-native';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getLeaderboard } from '../services/leaderboardService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
@@ -16,8 +16,12 @@ export default function LeaderboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const loadAbortRef = useRef(null);
 
   const load = useCallback(async ({ isRefresh = false } = {}) => {
+    loadAbortRef.current?.abort();
+    const ac = new AbortController();
+    loadAbortRef.current = ac;
     if (isRefresh) {
       setRefreshing(true);
     } else {
@@ -25,23 +29,31 @@ export default function LeaderboardScreen() {
     }
     setError(null);
     try {
-      const data = await getLeaderboard();
+      const data = await getLeaderboard({ signal: ac.signal });
+      if (loadAbortRef.current !== ac) return;
       const list = Array.isArray(data?.leaderboard) ? data.leaderboard : [];
       setEntries(list);
     } catch (e) {
+      if (isRequestCancelled(e) || loadAbortRef.current !== ac) return;
       setError(getApiErrorMessage(e));
       setEntries([]);
     } finally {
-      if (isRefresh) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
+      if (loadAbortRef.current === ac) {
+        if (isRefresh) {
+          setRefreshing(false);
+        } else {
+          setLoading(false);
+        }
       }
     }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {
+      loadAbortRef.current?.abort();
+      loadAbortRef.current = null;
+    };
   }, [load]);
 
   const renderItem = ({ item, index }) => {

@@ -19,6 +19,7 @@ import {
   isPaymentCancelledError,
 } from '../services/paymentService';
 import { colors } from '../theme/colors';
+import { isRequestCancelled } from '../services/api';
 
 const BENEFITS = [
   'Unlimited Mock Tests',
@@ -61,12 +62,12 @@ export default function PremiumScreen() {
   const contextLine = FROM_COPY[from] ?? FROM_COPY.home;
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     const loadPlans = async () => {
       try {
         setPlansLoading(true);
-        const data = await getSubscriptionPlans();
-        if (cancelled) return;
+        const data = await getSubscriptionPlans({ signal: ac.signal });
+        if (ac.signal.aborted) return;
         const rows = Array.isArray(data?.plans) ? data.plans : [];
         setPlans(rows);
         if (rows.length > 0) {
@@ -76,16 +77,16 @@ export default function PremiumScreen() {
           setSelectedId('');
         }
       } catch (e) {
-        if (cancelled) return;
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
         setPlans([]);
         setError(formatPaymentError(e));
       } finally {
-        if (!cancelled) setPlansLoading(false);
+        setPlansLoading(false);
       }
     };
     void loadPlans();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, []);
 

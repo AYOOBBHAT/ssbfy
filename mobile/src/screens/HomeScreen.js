@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   getApiErrorMessage,
   isFreeTestLimitError,
   FREE_TEST_LIMIT_MESSAGE,
+  isRequestCancelled,
 } from '../services/api';
 import { getDailyPractice } from '../services/dailyPracticeService';
 import { colors, brand } from '../theme/colors';
@@ -30,6 +31,7 @@ export default function HomeScreen() {
   const { user, refreshUser } = useAuth();
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyError, setDailyError] = useState(null);
+  const dailyAbortRef = useRef(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -39,10 +41,14 @@ export default function HomeScreen() {
 
   const handleStartDailyPractice = async () => {
     if (dailyLoading) return;
+    dailyAbortRef.current?.abort();
+    const ac = new AbortController();
+    dailyAbortRef.current = ac;
     setDailyError(null);
     setDailyLoading(true);
     try {
-      const data = await getDailyPractice();
+      const data = await getDailyPractice({ signal: ac.signal });
+      if (dailyAbortRef.current !== ac) return;
       const questions = Array.isArray(data?.questions) ? data.questions : [];
       const questionIds = questions.map((q) => String(q?._id)).filter(Boolean);
       if (!questionIds.length) {
@@ -55,13 +61,16 @@ export default function HomeScreen() {
         questions,
       });
     } catch (e) {
+      if (isRequestCancelled(e) || dailyAbortRef.current !== ac) return;
       setDailyError(
         isFreeTestLimitError(e)
           ? FREE_TEST_LIMIT_MESSAGE
           : getApiErrorMessage(e)
       );
     } finally {
-      setDailyLoading(false);
+      if (dailyAbortRef.current === ac) {
+        setDailyLoading(false);
+      }
     }
   };
 

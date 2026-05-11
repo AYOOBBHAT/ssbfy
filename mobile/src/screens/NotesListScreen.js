@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getPosts } from '../services/pdfService';
 import {
@@ -79,13 +79,19 @@ export default function NotesListScreen() {
   const [notesError, setNotesError] = useState(null);
   const [savedNoteIds, setSavedNoteIds] = useState(new Set());
   const [savingId, setSavingId] = useState(null);
+  const postsLoadRef = useRef(null);
+  const notesLoadRef = useRef(null);
 
   // ---- Load posts once -------------------------------------------------
   const loadPosts = useCallback(async () => {
+    postsLoadRef.current?.abort();
+    const ac = new AbortController();
+    postsLoadRef.current = ac;
     setPostsError(null);
     setPostsLoading(true);
     try {
-      const data = await getPosts({ force: true });
+      const data = await getPosts({ force: true, signal: ac.signal });
+      if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
       // If nothing was preselected, pick the first post so the screen
@@ -95,19 +101,26 @@ export default function NotesListScreen() {
         return list[0]?._id || '';
       });
     } catch (e) {
+      if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
     } finally {
-      setPostsLoading(false);
+      if (postsLoadRef.current === ac) {
+        setPostsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadPosts();
+    void loadPosts();
+    return () => {
+      postsLoadRef.current?.abort();
+      postsLoadRef.current = null;
+    };
   }, [loadPosts]);
 
   // ---- Load subjects whenever post changes ----------------------------
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     if (!selectedPostId) {
       setSubjects([]);
       return undefined;
@@ -115,23 +128,24 @@ export default function NotesListScreen() {
     (async () => {
       try {
         setSubjectsLoading(true);
-        const data = await getSubjectsForPost(selectedPostId);
-        if (cancelled) return;
+        const data = await getSubjectsForPost(selectedPostId, { signal: ac.signal });
+        if (ac.signal.aborted) return;
         setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
-      } catch {
-        if (!cancelled) setSubjects([]);
+      } catch (e) {
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
+        setSubjects([]);
       } finally {
-        if (!cancelled) setSubjectsLoading(false);
+        if (!ac.signal.aborted) setSubjectsLoading(false);
       }
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, [selectedPostId]);
 
   // ---- Load topics whenever subject changes ---------------------------
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     if (!selectedSubjectId) {
       setTopics([]);
       return undefined;
@@ -139,17 +153,18 @@ export default function NotesListScreen() {
     (async () => {
       try {
         setTopicsLoading(true);
-        const data = await getTopicsForSubject(selectedSubjectId);
-        if (cancelled) return;
+        const data = await getTopicsForSubject(selectedSubjectId, { signal: ac.signal });
+        if (ac.signal.aborted) return;
         setTopics(Array.isArray(data?.topics) ? data.topics : []);
-      } catch {
-        if (!cancelled) setTopics([]);
+      } catch (e) {
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
+        setTopics([]);
       } finally {
-        if (!cancelled) setTopicsLoading(false);
+        if (!ac.signal.aborted) setTopicsLoading(false);
       }
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, [selectedSubjectId]);
 
@@ -157,54 +172,71 @@ export default function NotesListScreen() {
   const loadNotes = useCallback(async () => {
     // No post selected means no meaningful list to show yet.
     if (!selectedPostId) {
+      notesLoadRef.current?.abort();
+      notesLoadRef.current = null;
       setNotes([]);
       return;
     }
+    notesLoadRef.current?.abort();
+    const ac = new AbortController();
+    notesLoadRef.current = ac;
     setNotesError(null);
     setNotesLoading(true);
     try {
-      const data = await getNotes({
-        postId: selectedPostId,
-        subjectId: selectedSubjectId || undefined,
-        topicId: selectedTopicId || undefined,
-      });
+      const data = await getNotes(
+        {
+          postId: selectedPostId,
+          subjectId: selectedSubjectId || undefined,
+          topicId: selectedTopicId || undefined,
+        },
+        { signal: ac.signal }
+      );
+      if (notesLoadRef.current !== ac) return;
       setNotes(Array.isArray(data?.notes) ? data.notes : []);
     } catch (e) {
+      if (isRequestCancelled(e) || notesLoadRef.current !== ac) return;
       setNotesError(getApiErrorMessage(e));
       setNotes([]);
     } finally {
-      setNotesLoading(false);
+      if (notesLoadRef.current === ac) {
+        setNotesLoading(false);
+      }
     }
   }, [selectedPostId, selectedSubjectId, selectedTopicId]);
 
   useEffect(() => {
-    loadNotes();
+    void loadNotes();
+    return () => {
+      notesLoadRef.current?.abort();
+      notesLoadRef.current = null;
+    };
   }, [loadNotes]);
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
+      const ac = new AbortController();
       const loadSaved = async () => {
         if (!userHasPremiumAccess(user)) {
           setSavedNoteIds(new Set());
           return;
         }
         try {
-          const data = await getSavedMaterials();
-          if (cancelled) return;
+          const data = await getSavedMaterials({ signal: ac.signal });
+          if (ac.signal.aborted) return;
           const next = new Set(
             (data?.savedNotes || [])
               .map((n) => String(n?.noteId || '').trim())
               .filter(Boolean)
           );
           setSavedNoteIds(next);
-        } catch {
-          if (!cancelled) setSavedNoteIds(new Set());
+        } catch (e) {
+          if (ac.signal.aborted || isRequestCancelled(e)) return;
+          setSavedNoteIds(new Set());
         }
       };
       void loadSaved();
       return () => {
-        cancelled = true;
+        ac.abort();
       };
     }, [user])
   );

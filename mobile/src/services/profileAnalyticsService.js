@@ -12,8 +12,9 @@ import api from './api.js';
  *
  * All numeric fields are guaranteed to be safe integers (>= 0).
  */
-export async function getProfileAnalytics() {
-  const { data } = await api.get('/users/profile-analytics');
+export async function getProfileAnalytics(opts = {}) {
+  const { signal } = opts;
+  const { data } = await api.get('/users/profile-analytics', { signal });
   const payload = data?.data ?? {};
   return {
     totalMocks: toSafeInt(payload.totalMocks),

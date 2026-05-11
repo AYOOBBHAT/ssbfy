@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getPosts } from '../services/pdfService';
 import { getSubjectsForPost, getTopicsForSubject } from '../services/noteService';
 import { postSmartPractice } from '../services/testService';
@@ -48,29 +48,41 @@ export default function SmartPracticeScreen() {
 
   const [startError, setStartError] = useState(null);
   const [starting, setStarting] = useState(false);
+  const postsLoadRef = useRef(null);
 
   const loadPosts = useCallback(async () => {
+    postsLoadRef.current?.abort();
+    const ac = new AbortController();
+    postsLoadRef.current = ac;
     setPostsError(null);
     setPostsLoading(true);
     try {
-      const data = await getPosts({ force: true });
+      const data = await getPosts({ force: true, signal: ac.signal });
+      if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
       setSelectedPostId((prev) => prev || list[0]?._id || '');
     } catch (e) {
+      if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
       setPosts([]);
     } finally {
-      setPostsLoading(false);
+      if (postsLoadRef.current === ac) {
+        setPostsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadPosts();
+    void loadPosts();
+    return () => {
+      postsLoadRef.current?.abort();
+      postsLoadRef.current = null;
+    };
   }, [loadPosts]);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     if (!selectedPostId) {
       setSubjects([]);
       return undefined;
@@ -78,22 +90,23 @@ export default function SmartPracticeScreen() {
     (async () => {
       setSubjectsLoading(true);
       try {
-        const data = await getSubjectsForPost(selectedPostId);
-        if (cancelled) return;
+        const data = await getSubjectsForPost(selectedPostId, { signal: ac.signal });
+        if (ac.signal.aborted) return;
         setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
-      } catch {
-        if (!cancelled) setSubjects([]);
+      } catch (e) {
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
+        setSubjects([]);
       } finally {
-        if (!cancelled) setSubjectsLoading(false);
+        if (!ac.signal.aborted) setSubjectsLoading(false);
       }
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, [selectedPostId]);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     if (!selectedSubjectId) {
       setTopics([]);
       return undefined;
@@ -101,17 +114,18 @@ export default function SmartPracticeScreen() {
     (async () => {
       setTopicsLoading(true);
       try {
-        const data = await getTopicsForSubject(selectedSubjectId);
-        if (cancelled) return;
+        const data = await getTopicsForSubject(selectedSubjectId, { signal: ac.signal });
+        if (ac.signal.aborted) return;
         setTopics(Array.isArray(data?.topics) ? data.topics : []);
-      } catch {
-        if (!cancelled) setTopics([]);
+      } catch (e) {
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
+        setTopics([]);
       } finally {
-        if (!cancelled) setTopicsLoading(false);
+        if (!ac.signal.aborted) setTopicsLoading(false);
       }
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, [selectedSubjectId]);
 

@@ -12,8 +12,9 @@ export async function createPremiumOrder(planId) {
   return data?.data ?? {};
 }
 
-export async function getSubscriptionPlans() {
-  const { data } = await api.get('/subscription-plans');
+export async function getSubscriptionPlans(opts = {}) {
+  const { signal } = opts;
+  const { data } = await api.get('/subscription-plans', { signal });
   const payload = data?.data ?? {};
   return {
     plans: Array.isArray(payload.plans) ? payload.plans : [],

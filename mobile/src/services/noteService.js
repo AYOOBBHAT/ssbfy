@@ -11,7 +11,8 @@ import api from './api.js';
  * Always returns a `{ notes: [...] }` shape so callers can destructure
  * safely even when the backend returns an unexpected payload.
  */
-export async function getNotes(params = {}) {
+export async function getNotes(params = {}, opts = {}) {
+  const { signal } = opts;
   const clean = {};
   if (params.postId) clean.postId = params.postId;
   if (params.subjectId) clean.subjectId = params.subjectId;
@@ -29,7 +30,7 @@ export async function getNotes(params = {}) {
     clean.topicId = params.topicId;
   }
 
-  const { data } = await api.get('/notes', { params: clean });
+  const { data } = await api.get('/notes', { params: clean, signal });
   const payload = data?.data ?? {};
   const notes = Array.isArray(payload.notes) ? payload.notes : [];
   return { notes };
@@ -40,17 +41,19 @@ export async function getNotes(params = {}) {
  * These don't cache — the user can change filters often, so a stale
  * cache would be more annoying than a tiny network refetch.
  */
-export async function getSubjectsForPost(postId) {
+export async function getSubjectsForPost(postId, opts = {}) {
+  const { signal } = opts;
   if (!postId) return { subjects: [] };
-  const { data } = await api.get('/subjects', { params: { postId } });
+  const { data } = await api.get('/subjects', { params: { postId }, signal });
   const payload = data?.data ?? {};
   const subjects = Array.isArray(payload.subjects) ? payload.subjects : [];
   return { subjects };
 }
 
-export async function getTopicsForSubject(subjectId) {
+export async function getTopicsForSubject(subjectId, opts = {}) {
+  const { signal } = opts;
   if (!subjectId) return { topics: [] };
-  const { data } = await api.get('/topics', { params: { subjectId } });
+  const { data } = await api.get('/topics', { params: { subjectId }, signal });
   const payload = data?.data ?? {};
   const topics = Array.isArray(payload.topics) ? payload.topics : [];
   return { topics };

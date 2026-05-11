@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as WebBrowser from 'expo-web-browser';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import {
   formatFileSize,
   getPdfNotes,
   getPosts,
-  resolvePdfOpenUrl,
+  getPdfOpenUserMessage,
+  openPdfInAppBrowser,
 } from '../services/pdfService';
 import logger from '../utils/logger';
 import {
@@ -64,14 +65,20 @@ export default function PdfListScreen() {
   const [openingId, setOpeningId] = useState(null);
   const [savedPdfIds, setSavedPdfIds] = useState(new Set());
   const [savingId, setSavingId] = useState(null);
+  const postsLoadRef = useRef(null);
+  const pdfsLoadRef = useRef(null);
 
   // ---- Posts -------------------------------------------------------------
 
   const loadPosts = useCallback(async () => {
+    postsLoadRef.current?.abort();
+    const ac = new AbortController();
+    postsLoadRef.current = ac;
     setPostsError(null);
     setPostsLoading(true);
     try {
-      const data = await getPosts({ force: true });
+      const data = await getPosts({ force: true, signal: ac.signal });
+      if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
       // Auto-select the first post the first time we see them so the
@@ -81,14 +88,21 @@ export default function PdfListScreen() {
         return list[0]?._id || null;
       });
     } catch (e) {
+      if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
     } finally {
-      setPostsLoading(false);
+      if (postsLoadRef.current === ac) {
+        setPostsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadPosts();
+    void loadPosts();
+    return () => {
+      postsLoadRef.current?.abort();
+      postsLoadRef.current = null;
+    };
   }, [loadPosts]);
 
   // ---- PDFs --------------------------------------------------------------
@@ -97,55 +111,71 @@ export default function PdfListScreen() {
     // A post must be picked before we can list. This is guarded by the
     // UI, but we no-op defensively if called without one.
     if (!selectedPostId) {
+      pdfsLoadRef.current?.abort();
+      pdfsLoadRef.current = null;
       setPdfs([]);
       return;
     }
     if (!userHasPremiumAccess(user)) {
+      pdfsLoadRef.current?.abort();
+      pdfsLoadRef.current = null;
       setPdfs([]);
       setPdfsError(null);
       return;
     }
+    pdfsLoadRef.current?.abort();
+    const ac = new AbortController();
+    pdfsLoadRef.current = ac;
     setPdfsError(null);
     setPdfsLoading(true);
     try {
-      const data = await getPdfNotes(selectedPostId);
+      const data = await getPdfNotes(selectedPostId, { signal: ac.signal });
+      if (pdfsLoadRef.current !== ac) return;
       setPdfs(Array.isArray(data?.pdfs) ? data.pdfs : []);
     } catch (e) {
+      if (isRequestCancelled(e) || pdfsLoadRef.current !== ac) return;
       setPdfsError(getApiErrorMessage(e));
       setPdfs([]);
     } finally {
-      setPdfsLoading(false);
+      if (pdfsLoadRef.current === ac) {
+        setPdfsLoading(false);
+      }
     }
   }, [selectedPostId, user]);
 
   useEffect(() => {
-    loadPdfs();
+    void loadPdfs();
+    return () => {
+      pdfsLoadRef.current?.abort();
+      pdfsLoadRef.current = null;
+    };
   }, [loadPdfs]);
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
+      const ac = new AbortController();
       const loadSaved = async () => {
         if (!userHasPremiumAccess(user)) {
           setSavedPdfIds(new Set());
           return;
         }
         try {
-          const data = await getSavedMaterials();
-          if (cancelled) return;
+          const data = await getSavedMaterials({ signal: ac.signal });
+          if (ac.signal.aborted) return;
           const next = new Set(
             (data?.savedPdfs || [])
               .map((p) => String(p?.pdfId || '').trim())
               .filter(Boolean)
           );
           setSavedPdfIds(next);
-        } catch {
-          if (!cancelled) setSavedPdfIds(new Set());
+        } catch (e) {
+          if (ac.signal.aborted || isRequestCancelled(e)) return;
+          setSavedPdfIds(new Set());
         }
       };
       void loadSaved();
       return () => {
-        cancelled = true;
+        ac.abort();
       };
     }, [user])
   );
@@ -166,37 +196,34 @@ export default function PdfListScreen() {
    */
   const handleOpenPdf = async (pdf) => {
     const id = pdf?._id;
-    const finalUrl = resolvePdfOpenUrl(pdf);
-    if (__DEV__) {
-      logger.debug('PDF API RESPONSE (open):', {
-        _id: pdf?._id,
-        signedUrl: pdf?.signedUrl,
-        fileName: pdf?.fileName,
-      });
-      logger.debug('FINAL PDF URL:', finalUrl);
-    }
-    if (!finalUrl) {
+    if (!id) {
       Alert.alert('Cannot open', 'This PDF has no valid link.');
       return;
     }
+    const browserOpts = {
+      toolbarColor: colors.primary,
+      controlsColor: colors.textOnPrimary,
+      enableBarCollapsing: true,
+      showTitle: true,
+      dismissButtonStyle: 'close',
+      presentationStyle:
+        WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
+    };
+    if (__DEV__) {
+      logger.debug('PDF open:', { _id: pdf?._id, fileName: pdf?.fileName });
+    }
     setOpeningId(id);
     try {
-      await WebBrowser.openBrowserAsync(finalUrl, {
-        toolbarColor: colors.primary,
-        controlsColor: colors.textOnPrimary,
-        // iOS reader mode is useful for HTML but irrelevant for PDFs,
-        // so we leave it off to avoid an unnecessary "AA" button.
-        enableBarCollapsing: true,
-        showTitle: true,
-        dismissButtonStyle: 'close',
-        presentationStyle:
-          WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
+      await openPdfInAppBrowser(pdf, browserOpts, {
+        pdfId: String(id || ''),
+        onRefreshed: (signedUrl) => {
+          setPdfs((prev) =>
+            prev.map((p) => (String(p._id) === String(id) ? { ...p, signedUrl } : p))
+          );
+        },
       });
     } catch (err) {
-      Alert.alert(
-        'Could not open PDF',
-        err?.message || 'Unable to open the in-app browser for this file.'
-      );
+      Alert.alert('Could not open PDF', getPdfOpenUserMessage(err));
     } finally {
       setOpeningId(null);
     }

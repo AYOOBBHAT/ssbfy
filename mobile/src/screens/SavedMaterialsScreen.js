@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
-import { getApiErrorMessage } from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getSavedMaterials, toggleSavedMaterial } from '../services/savedMaterialService';
-import { resolvePdfOpenUrl } from '../services/pdfService';
+import { getPdfOpenUserMessage, openPdfInAppBrowser } from '../services/pdfService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
 
@@ -22,21 +22,22 @@ export default function SavedMaterialsScreen() {
   const [savedPdfs, setSavedPdfs] = useState([]);
   const [savedNotes, setSavedNotes] = useState([]);
   const [workingId, setWorkingId] = useState(null);
+  const loadAbortRef = useRef(null);
   const openSavedPdf = async (item) => {
-    const finalUrl = resolvePdfOpenUrl(item);
-    if (!finalUrl) {
+    const pdfId = String(item?.pdfId || '').trim();
+    if (!pdfId) {
       Alert.alert('Cannot open', 'This PDF has no valid link.');
       return;
     }
     try {
-      await WebBrowser.openBrowserAsync(finalUrl, {
+      await openPdfInAppBrowser(item, {
         toolbarColor: colors.primary,
         controlsColor: colors.textOnPrimary,
         showTitle: true,
         dismissButtonStyle: 'close',
-      });
+      }, { pdfId });
     } catch (e) {
-      Alert.alert('Could not open PDF', getApiErrorMessage(e));
+      Alert.alert('Could not open PDF', getPdfOpenUserMessage(e));
     }
   };
 
@@ -50,14 +51,16 @@ export default function SavedMaterialsScreen() {
   };
 
 
-  const loadSaved = useCallback(async () => {
+  const loadSaved = useCallback(async (signal) => {
     setError(null);
     setLoading(true);
     try {
-      const data = await getSavedMaterials();
+      const data = await getSavedMaterials({ signal });
+      if (signal?.aborted) return;
       setSavedPdfs(Array.isArray(data?.savedPdfs) ? data.savedPdfs : []);
       setSavedNotes(Array.isArray(data?.savedNotes) ? data.savedNotes : []);
     } catch (e) {
+      if (signal?.aborted || isRequestCancelled(e)) return;
       setError(getApiErrorMessage(e));
       setSavedPdfs([]);
       setSavedNotes([]);
@@ -68,7 +71,14 @@ export default function SavedMaterialsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadSaved();
+      loadAbortRef.current?.abort();
+      const ac = new AbortController();
+      loadAbortRef.current = ac;
+      void loadSaved(ac.signal);
+      return () => {
+        ac.abort();
+        loadAbortRef.current = null;
+      };
     }, [loadSaved])
   );
 

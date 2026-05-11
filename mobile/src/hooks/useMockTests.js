@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import {
   getApiErrorMessage,
   isFreeTestLimitError,
   FREE_TEST_LIMIT_MESSAGE,
+  isRequestCancelled,
 } from '../services/api';
 import { getTests, startTest } from '../services/testService';
 
@@ -14,23 +15,36 @@ export function useMockTests() {
   const [error, setError] = useState(null);
   const [mockStartError, setMockStartError] = useState(null);
   const [startingId, setStartingId] = useState(null);
+  const loadAbortRef = useRef(null);
 
   const loadTests = useCallback(async () => {
+    loadAbortRef.current?.abort();
+    const ac = new AbortController();
+    loadAbortRef.current = ac;
     setError(null);
     setLoading(true);
     try {
-      const data = await getTests();
+      const data = await getTests({ signal: ac.signal });
+      if (loadAbortRef.current !== ac) return;
       setTests(Array.isArray(data?.tests) ? data.tests : []);
     } catch (e) {
+      if (isRequestCancelled(e)) return;
+      if (loadAbortRef.current !== ac) return;
       setError(getApiErrorMessage(e));
       setTests([]);
     } finally {
-      setLoading(false);
+      if (loadAbortRef.current === ac) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadTests();
+    void loadTests();
+    return () => {
+      loadAbortRef.current?.abort();
+      loadAbortRef.current = null;
+    };
   }, [loadTests]);
 
   const handleStartTest = async (item) => {
@@ -53,6 +67,7 @@ export function useMockTests() {
         durationMinutes: item?.duration,
       });
     } catch (e) {
+      if (isRequestCancelled(e)) return;
       setMockStartError(
         isFreeTestLimitError(e)
           ? FREE_TEST_LIMIT_MESSAGE

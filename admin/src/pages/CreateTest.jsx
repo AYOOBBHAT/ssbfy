@@ -107,14 +107,10 @@ export default function CreateTest() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!selectedPostId) {
-      setSubjects([]);
-      return undefined;
-    }
     (async () => {
       try {
         setLoadingSubjects(true);
-        const res = await getSubjects({ postId: selectedPostId, includeInactive: true });
+        const res = await getSubjects({ includeInactive: true });
         if (cancelled) return;
         const list = Array.isArray(res) ? res : res?.subjects || [];
         setSubjects(list);
@@ -130,7 +126,14 @@ export default function CreateTest() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPostId]);
+  }, []);
+
+  const subjectsForPicker = useMemo(() => {
+    if (!selectedPostId) return subjects;
+    return subjects.filter(
+      (s) => !s.postId || String(s.postId) === String(selectedPostId)
+    );
+  }, [subjects, selectedPostId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -224,7 +227,6 @@ export default function CreateTest() {
   );
 
   useEffect(() => {
-    if (!selectedPostId) return;
     setPage(1);
     fetchPage(1, false);
   }, [
@@ -284,6 +286,13 @@ export default function CreateTest() {
     } else {
       const subj = subjects.find((s) => String(s._id) === sid);
       if (subj?.postId) postId = String(subj.postId);
+    }
+    if (!postId && Array.isArray(q.postIds) && q.postIds.length > 0) {
+      const first = q.postIds[0];
+      postId =
+        first && typeof first === 'object' && first._id != null
+          ? String(first._id)
+          : String(first || '');
     }
     return { subjectId: sid, topicId: tid, postId };
   }
@@ -404,8 +413,8 @@ export default function CreateTest() {
     <div>
       <h1 className="page-title">Create Test</h1>
       <p className="page-subtitle">
-        Post → Subject → Topic hierarchy filters the question bank. Optional post tag narrows to
-        questions that reference this exam in <code>postIds</code>. Test type is inferred on save.
+        Subjects are global; filters narrow the question bank. Optional exam + “post tag” filter limits
+        to rows whose <code>postIds</code> include that exam. Test type is inferred on save.
       </p>
 
       <form className="form" onSubmit={handleSubmit}>
@@ -504,9 +513,9 @@ export default function CreateTest() {
           </div>
 
           <div className="hierarchy-hint muted" style={{ marginBottom: 12 }}>
-            <strong>Hierarchy:</strong> Post → Subject → Topic → Questions. Pick a post first; then
-            narrow subject and topic. Search matches question wording; topic search matches topic
-            names within the selected subject.
+            <strong>Filters:</strong> Subjects are global. Optionally pick an exam to narrow the subject
+            list and to tag-filter questions (<code>postIds</code>). Search matches question text; topic
+            search matches topic names under the selected subject.
           </div>
 
           <div className="form-grid">
@@ -544,23 +553,23 @@ export default function CreateTest() {
                 className="input"
                 value={filterSubjectId}
                 onChange={(e) => onSubjectChange(e.target.value)}
-                disabled={submitting || !selectedPostId || loadingSubjects}
+                disabled={submitting || loadingSubjects}
               >
                 <option value="">
-                  {!selectedPostId
-                    ? '— Select a post first —'
-                    : loadingSubjects
-                      ? 'Loading subjects…'
-                      : 'All subjects under this post'}
+                  {loadingSubjects
+                    ? 'Loading subjects…'
+                    : selectedPostId
+                      ? 'All matching subjects (global + this exam)'
+                      : 'All subjects'}
                 </option>
-                {subjects.map((s) => (
+                {subjectsForPicker.map((s) => (
                   <option key={s._id} value={s._id}>
                     {s.name || s.title || s._id}
                   </option>
                 ))}
               </select>
-              {selectedPostId && !loadingSubjects && subjects.length === 0 ? (
-                <p className="helper">No subjects for this post yet.</p>
+              {selectedPostId && !loadingSubjects && subjectsForPicker.length === 0 ? (
+                <p className="helper">No subjects match this exam filter yet.</p>
               ) : null}
             </div>
 

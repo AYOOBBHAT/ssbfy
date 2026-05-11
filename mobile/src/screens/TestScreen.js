@@ -10,15 +10,17 @@ import {
   BackHandler,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import api, {
+import {
   getApiErrorMessage,
   isAttemptAlreadySubmittedError,
   getSubmitConflictRecoveryResult,
+  isRequestCancelled,
 } from '../services/api';
-import { submitTest, saveTestProgress } from '../services/testService';
+import { submitTest, saveTestProgress, getQuestionsByIds } from '../services/testService';
 import { completeDailyPractice } from '../services/dailyPracticeService';
 import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
+import TestCountdownBar from '../components/TestCountdownBar';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import {
@@ -32,13 +34,6 @@ import { captureFlowException } from '../monitoring/sentry';
 
 const DRAFT_DEBOUNCE_MS = 450;
 const SERVER_SYNC_INTERVAL_MS = 25000;
-
-function formatMmSs(totalSeconds) {
-  const s = Math.max(0, Number(totalSeconds) || 0);
-  const mm = Math.floor(s / 60);
-  const ss = s % 60;
-  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
-}
 
 /**
  * Coerce whatever shape we got (legacy scalar, new array, undefined) into a
@@ -186,30 +181,15 @@ export default function TestScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(initialSeconds);
 
-  const intervalRef = useRef(null);
-  const endTimeMsRef = useRef(0);
   const submitLockRef = useRef(false);
   const submissionCompletedRef = useRef(false);
-  const autoFiredRef = useRef(false);
   const draftSaveTimerRef = useRef(null);
   const serverSyncTimerRef = useRef(null);
   const progressSeqRef = useRef(0);
 
-  const stopTimer = useCallback(() => {
-    if (intervalRef.current != null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
   useEffect(() => {
-    autoFiredRef.current = false;
-  }, [initialSeconds]);
-
-  useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
 
     async function load() {
       if (!questionIds.length) {
@@ -237,29 +217,26 @@ export default function TestScreen() {
       setError(null);
       setLoading(true);
       try {
-        const idsParam = questionIds.map((id) => String(id)).join(',');
-        const { data } = await api.get('/questions', { params: { ids: idsParam } });
-        const raw = data?.data?.questions ?? [];
         const order = questionIds.map((id) => String(id));
+        const payload = await getQuestionsByIds(order, { signal: ac.signal });
+        const raw = Array.isArray(payload?.questions) ? payload.questions : [];
         const byId = new Map(raw.map((q) => [String(q._id), q]));
         const ordered = order.map((id) => byId.get(id));
-        if (!cancelled) {
-          setQuestions(ordered);
-        }
+        if (ac.signal.aborted) return;
+        setQuestions(ordered);
       } catch (e) {
-        if (!cancelled) {
-          setError(getApiErrorMessage(e));
-        }
+        if (ac.signal.aborted || isRequestCancelled(e)) return;
+        setError(getApiErrorMessage(e));
       } finally {
-        if (!cancelled) {
+        if (!ac.signal.aborted) {
           setLoading(false);
         }
       }
     }
 
-    load();
+    void load();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
   }, [idsKey, isLocal, isRetry, isPractice, isDaily, preloadedQuestions]);
 
@@ -565,6 +542,8 @@ export default function TestScreen() {
     [questionIds, answers]
   );
 
+  const executeSubmitRef = useRef(async () => {});
+
   const navigateToResult = useCallback(
     (data, navOptions = {}) => {
       const payload = data || {};
@@ -629,7 +608,6 @@ export default function TestScreen() {
       if (submitLockRef.current) return;
       submitLockRef.current = true;
       setSubmitting(true);
-      stopTimer();
       setSubmitError(null);
 
       try {
@@ -718,8 +696,17 @@ export default function TestScreen() {
         }
       }
     },
-    [testId, questionIds, questions, answers, navigateToResult, stopTimer]
+    [testId, questionIds, questions, answers, navigateToResult]
   );
+
+  useEffect(() => {
+    executeSubmitRef.current = executeSubmit;
+  }, [executeSubmit]);
+
+  const handleTimerExpired = useCallback(() => {
+    if (submitLockRef.current) return;
+    void executeSubmitRef.current({ autoSubmit: true });
+  }, []);
 
   const confirmManualSubmit = useCallback(() => {
     void executeSubmit({ autoSubmit: false });
@@ -834,71 +821,13 @@ export default function TestScreen() {
     }
   }, [navigation, answers, questions, isRetry, isDaily]);
 
-  useEffect(() => {
-    if (loading || error || total === 0) return;
-    if (!isLocal && !resumeResolved) return;
-    if (initialSeconds <= 0) return;
+  const countdownEnabled =
+    !loading &&
+    !error &&
+    total > 0 &&
+    (isLocal || resumeResolved) &&
+    !submitting;
 
-    if (!isLocal && attempt?.startTime) {
-      const startMs = new Date(attempt.startTime).getTime();
-      const anchor = Number.isFinite(startMs) ? startMs : Date.now();
-      endTimeMsRef.current = anchor + initialSeconds * 1000;
-    } else {
-      endTimeMsRef.current = Date.now() + initialSeconds * 1000;
-    }
-
-    const tick = () => {
-      const remaining = Math.max(
-        0,
-        Math.floor((endTimeMsRef.current - Date.now()) / 1000)
-      );
-      setTimeLeft(remaining);
-      if (remaining <= 0 && intervalRef.current != null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-
-    tick();
-    intervalRef.current = setInterval(tick, 1000);
-
-    return () => {
-      if (intervalRef.current != null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [loading, error, total, initialSeconds, isLocal, attempt?.startTime, resumeResolved]);
-
-  useEffect(() => {
-    if (loading || error || total === 0) return;
-    if (!isLocal && !resumeResolved) return;
-    if (initialSeconds <= 0) return;
-    if (timeLeft > 0) return;
-    if (autoFiredRef.current) return;
-    if (submitLockRef.current) return;
-    autoFiredRef.current = true;
-    void executeSubmit({ autoSubmit: true });
-  }, [
-    loading,
-    error,
-    total,
-    initialSeconds,
-    timeLeft,
-    executeSubmit,
-    isLocal,
-    resumeResolved,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      stopTimer();
-    };
-  }, [stopTimer]);
-
-  const timerLabel =
-    initialSeconds > 0 ? `Time Left: ${formatMmSs(timeLeft)}` : null;
-  const showTimerWarning = initialSeconds > 0 && timeLeft <= 60;
   const attempted = Object.keys(answers).filter(
     (k) => Array.isArray(answers[k]) && answers[k].length > 0
   ).length;
@@ -908,6 +837,18 @@ export default function TestScreen() {
   const attemptSummaryLabel = `Attempted ${attempted} / ${totalQuestionsCount}${
     !isLocal ? ` · Skipped ${skippedVisible} · Marked ${markedVisible}` : ''
   }`;
+
+  const countdownEl =
+    initialSeconds > 0 ? (
+      <TestCountdownBar
+        key={`tc-${String(testId ?? 'na')}-${String(attempt?._id ?? (isLocal ? 'local' : 'na'))}-${initialSeconds}`}
+        initialSeconds={initialSeconds}
+        enabled={countdownEnabled}
+        serverStartTime={!isLocal && attempt?.startTime ? attempt.startTime : undefined}
+        isLocal={isLocal}
+        onExpire={handleTimerExpired}
+      />
+    ) : null;
 
   if (!isLocal && !resumeResolved && questions.length > 0) {
     return (
@@ -945,12 +886,7 @@ export default function TestScreen() {
     return (
       <View style={styles.container}>
         {localHeaderLabel ? <Text style={styles.retryHeader}>{localHeaderLabel}</Text> : null}
-        {timerLabel ? (
-          <View style={styles.timerBlock}>
-            <Text style={[styles.timer, showTimerWarning && styles.timerWarn]}>{timerLabel}</Text>
-            {showTimerWarning ? <Text style={styles.hurryText}>Hurry up!</Text> : null}
-          </View>
-        ) : null}
+        {countdownEl}
         <Text style={styles.attemptSummary}>{attemptSummaryLabel}</Text>
         <Text style={styles.header}>
           Question {index + 1} / {total}
@@ -1004,12 +940,7 @@ export default function TestScreen() {
   return (
     <View style={styles.container}>
       {localHeaderLabel ? <Text style={styles.retryHeader}>{localHeaderLabel}</Text> : null}
-      {timerLabel ? (
-        <View style={styles.timerBlock}>
-          <Text style={[styles.timer, showTimerWarning && styles.timerWarn]}>{timerLabel}</Text>
-          {showTimerWarning ? <Text style={styles.hurryText}>Hurry up!</Text> : null}
-        </View>
-      ) : null}
+      {countdownEl}
       <Text style={styles.attemptSummary}>{attemptSummaryLabel}</Text>
       <Text style={styles.header}>
         Question {index + 1} / {total}
@@ -1114,10 +1045,6 @@ export default function TestScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: colors.bg },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
-  timerBlock: { marginBottom: 4 },
-  timer: { fontSize: 16, fontWeight: '600', marginBottom: 4, color: colors.text },
-  timerWarn: { color: colors.danger },
-  hurryText: { color: colors.danger, fontWeight: '600', marginBottom: 4 },
   attemptSummary: { fontSize: 14, marginBottom: 8, color: colors.muted },
   retryHeader: { fontSize: 16, fontWeight: '700', marginBottom: 8, color: colors.primary },
   header: { fontSize: 16, marginBottom: 12, fontWeight: '600', color: colors.text },

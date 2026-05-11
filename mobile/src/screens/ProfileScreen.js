@@ -16,6 +16,7 @@ import { colors, brand } from '../theme/colors';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getSubscriptionStatus, formatPlanDate } from '../utils/subscriptionStatus';
 import { getProfileAnalytics } from '../services/profileAnalyticsService';
+import { isRequestCancelled } from '../services/api';
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
@@ -29,21 +30,23 @@ export default function ProfileScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
+      const ac = new AbortController();
       (async () => {
         try {
           setAnalyticsLoading(true);
           setAnalyticsError(false);
-          const data = await getProfileAnalytics();
-          if (!cancelled) setAnalytics(data);
-        } catch {
-          if (!cancelled) setAnalyticsError(true);
+          const data = await getProfileAnalytics({ signal: ac.signal });
+          if (ac.signal.aborted) return;
+          setAnalytics(data);
+        } catch (e) {
+          if (ac.signal.aborted || isRequestCancelled(e)) return;
+          setAnalyticsError(true);
         } finally {
-          if (!cancelled) setAnalyticsLoading(false);
+          setAnalyticsLoading(false);
         }
       })();
       return () => {
-        cancelled = true;
+        ac.abort();
       };
     }, [])
   );
