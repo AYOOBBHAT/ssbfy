@@ -39,8 +39,11 @@ export const topicService = {
     if (!subject) {
       throw new AppError('Subject not found', HTTP_STATUS.BAD_REQUEST);
     }
-    // Legacy subjects may still reference a post; global subjects (`postId`
-    // null) are valid — topics attach only to the subject.
+    // Compatibility-only: some legacy subjects still store `subject.postId`.
+    // If set, ensure that Post still exists (avoids dangling ref). Topics are
+    // owned by `subjectId` only — this is NOT Post → Subject hierarchy.
+    // TODO(compatibility): Replace with periodic audit job or remove when no
+    // subject has `postId` set (verify DB + imports first).
     if (subject.postId) {
       const post = await postRepository.findById(subject.postId);
       if (!post) {

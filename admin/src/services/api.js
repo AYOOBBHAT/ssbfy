@@ -164,8 +164,11 @@ export async function getSubject(id) {
 /**
  * Create a new global subject (admin only).
  *
- * Back-compat: some legacy installs stored `subject.postId`; the normalized
- * model treats Posts as tags on Questions (`postIds[]`) and Subjects as global.
+ * Compatibility-only: optional `postId` is passed through for legacy scripts/API
+ * clients — **not** normalized hierarchy. Subjects are global; exams are tags
+ * on questions/notes via `postIds[]`.
+ *
+ * TODO(compatibility): Remove `postId` from this helper when no caller sends it.
  */
 export async function createSubject({ name, postId, order } = {}) {
   const payload = { name };

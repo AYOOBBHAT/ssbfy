@@ -11,7 +11,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getPosts } from '../services/pdfService';
-import { getSubjectsForPost, getTopicsForSubject } from '../services/noteService';
+import { getSubjects, getTopicsForSubject } from '../services/noteService';
 import { postSmartPractice } from '../services/testService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
@@ -49,6 +49,7 @@ export default function SmartPracticeScreen() {
   const [startError, setStartError] = useState(null);
   const [starting, setStarting] = useState(false);
   const postsLoadRef = useRef(null);
+  const subjectsLoadRef = useRef(null);
 
   const loadPosts = useCallback(async () => {
     postsLoadRef.current?.abort();
@@ -82,28 +83,29 @@ export default function SmartPracticeScreen() {
   }, [loadPosts]);
 
   useEffect(() => {
+    subjectsLoadRef.current?.abort();
     const ac = new AbortController();
-    if (!selectedPostId) {
-      setSubjects([]);
-      return undefined;
-    }
+    subjectsLoadRef.current = ac;
     (async () => {
       setSubjectsLoading(true);
       try {
-        const data = await getSubjectsForPost(selectedPostId, { signal: ac.signal });
-        if (ac.signal.aborted) return;
+        const data = await getSubjects({ signal: ac.signal });
+        if (subjectsLoadRef.current !== ac) return;
         setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
       } catch (e) {
-        if (ac.signal.aborted || isRequestCancelled(e)) return;
+        if (isRequestCancelled(e) || subjectsLoadRef.current !== ac) return;
         setSubjects([]);
       } finally {
-        if (!ac.signal.aborted) setSubjectsLoading(false);
+        if (subjectsLoadRef.current === ac) {
+          setSubjectsLoading(false);
+        }
       }
     })();
     return () => {
-      ac.abort();
+      subjectsLoadRef.current?.abort();
+      subjectsLoadRef.current = null;
     };
-  }, [selectedPostId]);
+  }, []);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -131,8 +133,6 @@ export default function SmartPracticeScreen() {
 
   function pickPost(id) {
     setSelectedPostId(id);
-    setSelectedSubjectId('');
-    setSelectedTopicId('');
   }
 
   function pickSubject(id) {
@@ -249,7 +249,7 @@ export default function SmartPracticeScreen() {
           })}
         </ScrollView>
         {label === 'Subject' && selectedPostId ? (
-          <Text style={styles.hint}>Tap again to clear — practice all subjects in this post.</Text>
+          <Text style={styles.hint}>Tap again to clear — practice all subjects (still filtered by this post if set).</Text>
         ) : null}
         {label === 'Topic' && selectedSubjectId ? (
           <Text style={styles.hint}>Tap again to clear — practice the whole subject.</Text>
@@ -295,29 +295,27 @@ export default function SmartPracticeScreen() {
     >
       <Text style={styles.title}>Practice by Topic</Text>
       <Text style={styles.subtitle}>
-        Select a subject or topic and start targeted practice. Choose post and
-        filters below—questions run with no timer.
+        Select a subject or topic and start targeted practice. Post is an optional filter (exam tag);
+        questions run with no timer.
       </Text>
 
       {renderChipRow(
-        'Post',
+        'Post (optional filter)',
         activePosts,
         selectedPostId,
         pickPost,
         false,
-        'Pick a post'
+        'All posts'
       )}
 
-      {selectedPostId
-        ? renderChipRow(
-            'Subject',
-            subjects,
-            selectedSubjectId,
-            pickSubject,
-            subjectsLoading,
-            'No subjects for this post'
-          )
-        : null}
+      {renderChipRow(
+        'Subject',
+        subjects,
+        selectedSubjectId,
+        pickSubject,
+        subjectsLoading,
+        'No subjects yet'
+      )}
 
       {selectedSubjectId
         ? renderChipRow(

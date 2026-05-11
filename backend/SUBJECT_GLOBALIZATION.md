@@ -28,8 +28,8 @@
 
 ## Admin UX
 
-- **ManageTopics**: loads all subjects; post selector **filters** the visible list; **Create Subject** creates a **global** subject (no `postId`).
-- **AddQuestion** / **CreateTest** / **ManageQuestions** / **ManageNotes**: subject pickers include globals and legacy subjects for the selected exam (`!postId || postId === filter`).
+- **ManageTopics**: global subject catalog; posts are not required to manage subjects/topics.
+- **AddQuestion** / **CreateTest** / **ManageQuestions** / **ManageNotes**: subjects are global; optional post/exam controls **filter content** (questions, notes, tests), not subject existence.
 
 ## Backward compatibility
 
@@ -39,5 +39,21 @@
 ## Remaining technical debt
 
 - Manual resolution for migration **skipped** groups (duplicate topic names under two subjects being merged).
-- Multi-select `postIds` in admin Add Question (currently one exam drives default tags).
 - Optional removal of deprecated `postId` on Subject after a stabilization period and full audit.
+
+---
+
+## Legacy compatibility layer (not the normalized hierarchy)
+
+These paths exist **only** so old rows, old clients, and migration-era data keep working. They are **not** “Post owns Subject” rules at runtime.
+
+| Area | What is tolerated | Canonical field / behavior | Safe removal (high level) |
+|------|-------------------|----------------------------|---------------------------|
+| `Subject.postId` | Optional deprecated link on some old subjects | Global subjects; exams tagged on `Question.postIds[]` / `Note.postIds[]` | After DB audit shows `postId` unused or null everywhere you care about, and imports/UI always send explicit tags |
+| `subjectRepository.findAll({ postId })` | API **narrowing**: globals + legacy subjects for that post | Same list semantics without implying ownership | When no client relies on `?postId=` for subject lists (or behavior is replicated elsewhere) |
+| `questionService.reconcilePostIds` | Ensures legacy `subject.postId` appears inside `postIds` when still set | Caller-supplied `postIds[]` for global subjects | When no subject has `postId` set, or policy changes to never auto-inject |
+| `noteService` list filter | `postId` query matches `note.postId` **or** `note.postIds` | `postIds[]` for tags; optional legacy `postId` on documents | When all notes migrated and queries use only tag semantics you define |
+| CSV `questionImportService` | Requires subject with `postId` for import rows; derives `postIds: [subject.postId]` | Future: explicit post/exam column or IDs in CSV | When import template and ops are updated; **risky** to drop before that |
+| `topicService.create` | Verifies referenced `subject.postId` still points at an existing Post (if set) | Topic ownership is `subjectId` only | When no subject carries a stale `postId`, or check is replaced with a one-off audit job |
+
+**TODO markers** in code point to the same conditions. Do **not** treat compatibility shims as architecture to copy into new features.

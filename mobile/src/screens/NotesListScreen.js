@@ -16,7 +16,7 @@ import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getPosts } from '../services/pdfService';
 import {
   getNotes,
-  getSubjectsForPost,
+  getSubjects,
   getTopicsForSubject,
   previewOf,
 } from '../services/noteService';
@@ -33,13 +33,13 @@ import { colors } from '../theme/colors';
  *
  * Navigation contract:
  *   - Can be opened from Home with no params — the screen then drives a
- *     3-step cascading picker (Post → Subject → Topic).
+ *     filter picker (Post (optional) → Subject → Topic).
  *   - Can be deep-linked with `{ postId, subjectId, topicId }` route
  *     params to preselect any subset of the hierarchy.
  *
  * Data flow:
  *   1. Load posts on mount (cached in pdfService).
- *   2. When a post is selected, load its subjects.
+ *   2. Load global subjects on mount.
  *   3. When a subject is selected, load its topics.
  *   4. Whenever any filter changes we call `getNotes(filter)` — the
  *      backend does the filtering so this scales to large datasets.
@@ -81,6 +81,7 @@ export default function NotesListScreen() {
   const [savingId, setSavingId] = useState(null);
   const postsLoadRef = useRef(null);
   const notesLoadRef = useRef(null);
+  const subjectsLoadRef = useRef(null);
 
   // ---- Load posts once -------------------------------------------------
   const loadPosts = useCallback(async () => {
@@ -94,12 +95,6 @@ export default function NotesListScreen() {
       if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
-      // If nothing was preselected, pick the first post so the screen
-      // isn't a blank chip row on first open.
-      setSelectedPostId((prev) => {
-        if (prev) return prev;
-        return list[0]?._id || '';
-      });
     } catch (e) {
       if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
@@ -118,30 +113,31 @@ export default function NotesListScreen() {
     };
   }, [loadPosts]);
 
-  // ---- Load subjects whenever post changes ----------------------------
+  // ---- Load global subjects once --------------------------------------
   useEffect(() => {
+    subjectsLoadRef.current?.abort();
     const ac = new AbortController();
-    if (!selectedPostId) {
-      setSubjects([]);
-      return undefined;
-    }
+    subjectsLoadRef.current = ac;
     (async () => {
       try {
         setSubjectsLoading(true);
-        const data = await getSubjectsForPost(selectedPostId, { signal: ac.signal });
-        if (ac.signal.aborted) return;
+        const data = await getSubjects({ signal: ac.signal });
+        if (subjectsLoadRef.current !== ac) return;
         setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
       } catch (e) {
-        if (ac.signal.aborted || isRequestCancelled(e)) return;
+        if (isRequestCancelled(e) || subjectsLoadRef.current !== ac) return;
         setSubjects([]);
       } finally {
-        if (!ac.signal.aborted) setSubjectsLoading(false);
+        if (subjectsLoadRef.current === ac) {
+          setSubjectsLoading(false);
+        }
       }
     })();
     return () => {
-      ac.abort();
+      subjectsLoadRef.current?.abort();
+      subjectsLoadRef.current = null;
     };
-  }, [selectedPostId]);
+  }, []);
 
   // ---- Load topics whenever subject changes ---------------------------
   useEffect(() => {
@@ -170,13 +166,6 @@ export default function NotesListScreen() {
 
   // ---- Load notes whenever any filter changes -------------------------
   const loadNotes = useCallback(async () => {
-    // No post selected means no meaningful list to show yet.
-    if (!selectedPostId) {
-      notesLoadRef.current?.abort();
-      notesLoadRef.current = null;
-      setNotes([]);
-      return;
-    }
     notesLoadRef.current?.abort();
     const ac = new AbortController();
     notesLoadRef.current = ac;
@@ -185,7 +174,7 @@ export default function NotesListScreen() {
     try {
       const data = await getNotes(
         {
-          postId: selectedPostId,
+          postId: selectedPostId || undefined,
           subjectId: selectedSubjectId || undefined,
           topicId: selectedTopicId || undefined,
         },
@@ -250,8 +239,6 @@ export default function NotesListScreen() {
 
   function pickPost(id) {
     setSelectedPostId(id);
-    setSelectedSubjectId('');
-    setSelectedTopicId('');
   }
 
   function pickSubject(id) {
@@ -386,18 +373,6 @@ export default function NotesListScreen() {
   };
 
   const renderNotesBody = () => {
-    if (!selectedPostId) {
-      return (
-        <View style={styles.card}>
-          <EmptyState
-            title="Pick a post"
-            subtitle="Select a post above to see its notes."
-            emoji="👆"
-            compact
-          />
-        </View>
-      );
-    }
     if (notesLoading) {
       return (
         <View style={styles.card}>
@@ -468,7 +443,7 @@ export default function NotesListScreen() {
       );
     }
     return renderChipRow({
-      label: 'Post',
+      label: 'Post (optional filter)',
       items: activePosts,
       selectedId: selectedPostId,
       onSelect: pickPost,
@@ -496,16 +471,14 @@ export default function NotesListScreen() {
       ) : null}
       {renderPostRow()}
 
-      {selectedPostId
-        ? renderChipRow({
-            label: 'Subject',
-            items: subjects,
-            selectedId: selectedSubjectId,
-            onSelect: pickSubject,
-            loading: subjectsLoading,
-            emptyText: 'No subjects for this post',
-          })
-        : null}
+      {renderChipRow({
+        label: 'Subject',
+        items: subjects,
+        selectedId: selectedSubjectId,
+        onSelect: pickSubject,
+        loading: subjectsLoading,
+        emptyText: 'No subjects yet',
+      })}
 
       {selectedSubjectId
         ? renderChipRow({

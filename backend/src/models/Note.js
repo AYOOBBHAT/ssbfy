@@ -11,8 +11,9 @@ const noteSchema = new mongoose.Schema(
     // exactly one subject). Posts are NOT a hierarchy owner anymore; they
     // are optional tags/filtering (same as Questions' `postIds`).
     //
-    // Back-compat: legacy notes stored a single `postId`. We keep that field
-    // readable for now and migrate gradually to `postIds`.
+    // Compatibility-only: legacy notes may have a single `postId`. Canonical
+    // exam tags: `postIds[]`. TODO(compatibility): stop persisting `postId` on
+    // new writes after clients + migration confirm — keep readable until then.
     postId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Post',

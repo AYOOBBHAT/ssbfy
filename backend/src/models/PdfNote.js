@@ -7,8 +7,9 @@ import mongoose from 'mongoose';
  * invariants: a text `Note` requires subject + topic + content, while a
  * PDF note is a top-level resource attached to one or more Posts (e.g. the
  * same "Reasoning Notes" PDF for JKSSB, Banking, and SSC). The canonical
- * field is `postIds`; `postId` is kept for legacy documents and is mirrored
- * to `postIds[0]` on new writes.
+ * field is `postIds[]` (exam tags, not hierarchy). `postId` is compatibility-only
+ * for legacy documents; mirrored into `postIds` on reads/writes where applicable.
+ * TODO(compatibility): Remove `postId` from schema after DB backfill — see pdfNoteService.
  */
 const pdfNoteSchema = new mongoose.Schema(
   {

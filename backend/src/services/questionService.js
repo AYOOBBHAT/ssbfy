@@ -248,8 +248,8 @@ export function projectPublicQuestions(list) {
 }
 
 /**
- * Walk the Post → Subject → Topic hierarchy and return the parent `subject`
- * so callers can derive/verify dependent fields (e.g. postIds).
+ * Resolve Subject + Topic and return both docs.
+ * (Posts are tags via `postIds[]`; `subject.postId` may exist only on legacy rows.)
  */
 async function resolveHierarchy(subjectId, topicId) {
   const subject = await subjectRepository.findById(subjectId);
@@ -295,10 +295,16 @@ async function assertPostIds(postIds) {
 }
 
 /**
- * Ensure the subject's parent post is present in `postIds`. If the caller
- * passed an empty array, we derive `[subject.postId]` for them so that every
- * question is always reachable from its primary post. If they passed a list,
- * it must include the subject's post.
+ * **Compatibility-only — not part of the normalized hierarchy.**
+ *
+ * If a Subject still has deprecated `subject.postId`, we ensure that Post id
+ * appears in `Question.postIds[]` so legacy-linked rows stay tagged consistently.
+ * Canonical tagging for new work: explicit `postIds[]` from callers; global
+ * subjects have `subject.postId` null/empty.
+ *
+ * TODO(compatibility): Safe to remove or relax after DB audit confirms no
+ * subject carries `postId`, or policy explicitly drops auto-injection — high
+ * risk to legacy questions until then.
  */
 function reconcilePostIds(postIds, subjectPostId) {
   const provided = Array.isArray(postIds) ? postIds.map(String) : [];
@@ -317,7 +323,7 @@ function reconcilePostIds(postIds, subjectPostId) {
   }
   if (!provided.includes(parent)) {
     throw new AppError(
-      'postIds must include the subject\'s parent post',
+      'postIds must include the subject\'s legacy parent post',
       HTTP_STATUS.BAD_REQUEST
     );
   }
@@ -856,8 +862,8 @@ export const questionService = {
     doc.correctAnswerIndex = fields.correctAnswerIndex;
     doc.correctAnswerValue = fields.correctAnswerValue;
 
-    // If subject/topic/postIds are touched, we must re-walk the hierarchy and
-    // re-reconcile postIds so the Post → Subject → Topic invariant holds.
+    // If subject/topic/postIds are touched, re-check Subject/Topic, then
+    // reconcile postIds for legacy subject-linked rows (subject.postId).
     const hierarchyTouched =
       patch.subjectId !== undefined ||
       patch.topicId !== undefined ||

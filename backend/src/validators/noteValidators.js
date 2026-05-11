@@ -17,8 +17,9 @@ export const createNoteValidators = [
     // against accidental garbage without getting in the way of real use.
     .isLength({ min: 1, max: 65_000 })
     .withMessage('content must be 1-65000 characters'),
-  // Back-compat: legacy callers may send a single `postId`. New callers should
-  // send `postIds: []` (optional tag/filtering).
+  // Compatibility-only: legacy callers may send a single `postId`. Canonical:
+  // `postIds[]` (optional tags). TODO(compatibility): reject lone postId only
+  // after all clients migrated (coordinate with mobile/admin).
   body('postId')
     .optional({ checkFalsy: true })
     .isMongoId()

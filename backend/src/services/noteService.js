@@ -68,7 +68,10 @@ export const noteService = {
   } = {}) {
     const filter = {};
     if (postId) {
-      // Back-compat: `postId` query matches either legacy `postId` OR new `postIds[]`.
+      // Compatibility-only: list filter by exam — matches legacy `note.postId`
+      // OR membership in `note.postIds[]`. NOT subject ownership.
+      // TODO(compatibility): Safe to narrow semantics only after all notes
+      // migrated and clients updated; until then keeps legacy rows visible.
       filter.$or = [{ postId }, { postIds: postId }];
     }
     if (subjectId) filter.subjectId = subjectId;
@@ -104,10 +107,11 @@ export const noteService = {
     // shares the same invariant: topic ⊂ subject.
     await resolveHierarchy({ subjectId, topicId });
 
-    // Normalize post tags:
-    // - prefer `postIds[]` (new)
-    // - tolerate legacy `postId` (deprecated) by mirroring it into postIds when
-    //   postIds is absent/empty
+    // Compatibility-only — canonical tags are `postIds[]`:
+    // - prefer `postIds[]` from the caller
+    // - tolerate legacy single `postId` by mirroring into `postIds` when empty
+    // TODO(compatibility): Safe to stop mirroring when no client sends lone
+    // `postId` and DB backfill complete — keep until then for old payloads/rows.
     const normalizedPostIds = Array.isArray(postIds)
       ? postIds.map((p) => String(p)).filter(Boolean)
       : [];

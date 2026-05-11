@@ -2,9 +2,12 @@ import mongoose from 'mongoose';
 
 /**
  * Subject is **global** (unique name, case-insensitive). `postId` is optional
- * and **deprecated**: legacy rows used Post → Subject ownership; new rows
- * should leave `postId` null. Post tagging for questions lives on
- * `Question.postIds[]`.
+ * and **deprecated** (compatibility-only on the document — not a runtime
+ * hierarchy rule). New rows should leave `postId` null. Exam tagging is
+ * `Question.postIds[]` / `Note.postIds[]`.
+ *
+ * TODO(compatibility): Safe to drop `postId` from schema only after data audit
+ * + migration — see SUBJECT_GLOBALIZATION.md "Legacy compatibility layer".
  */
 const subjectSchema = new mongoose.Schema(
   {

@@ -9,9 +9,16 @@ function toOidSet(ids) {
 
 export const subjectRepository = {
   /**
-   * List subjects. When `filter.postId` is set, returns **global** subjects
-   * (`postId` null/absent) **plus** subjects scoped to that post (backward
-   * compatibility during migration).
+   * List subjects.
+   *
+   * **Compatibility-only (`filter.postId`):** optional API narrowing for old
+   * clients — returns global subjects (`postId` null/absent) **plus** legacy rows
+   * tied to that post. This is **not** “subjects belong to posts”; normalized
+   * hierarchy is Subject → Topic → content with `postIds[]` tags.
+   *
+   * TODO(compatibility): Safe to simplify or remove after all callers use
+   * global subject lists and filter exams only on questions/notes/tests — verify
+   * mobile + admin + any scripts first (breaking change risk).
    */
   async findAll(filter = {}) {
     const { postId, ...rest } = filter;

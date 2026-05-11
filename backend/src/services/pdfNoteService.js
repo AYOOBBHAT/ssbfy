@@ -43,8 +43,9 @@ function coalescePostIdsField(postIds) {
 }
 
 /**
- * Accept `postId` and/or `postIds` and return a non-empty, de-duplicated
- * array of ObjectIds. Legacy single `postId` is converted to `[postId]`.
+ * **Compatibility-only** — canonical input is `postIds[]`.
+ * Accepts legacy single `postId` and merges into the resolved id set.
+ * TODO(compatibility): Require only `postIds` once admin/mobile always send it.
  */
 function resolveInputPostIds({ postId, postIds } = {}) {
   const raw = [];
@@ -83,8 +84,10 @@ async function assertAllPostsActiveByIds(oids) {
 }
 
 /**
- * If `postIds` is empty but legacy `postId` exists, treat as `[postId]`.
- * Ensures every API consumer sees a consistent `postIds` array.
+ * Read-path normalization: if `postIds` is empty but legacy `postId` exists,
+ * treat as `[postId]` so consumers see a consistent `postIds` view.
+ * NOT hierarchy ownership — tags only.
+ * TODO(compatibility): Remove when no PdfNote documents lack `postIds`.
  */
 function normalizePdfNoteDoc(doc) {
   if (!doc) return doc;

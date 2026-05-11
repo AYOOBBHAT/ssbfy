@@ -37,14 +37,14 @@ export async function getNotes(params = {}, opts = {}) {
 }
 
 /**
- * Small helpers used by NotesListScreen for its cascading picker.
- * These don't cache — the user can change filters often, so a stale
- * cache would be more annoying than a tiny network refetch.
+ * Fetch the global subject catalog.
+ *
+ * Notes are organized by Subject → Topic. Posts are optional exam tags
+ * (filters) and must NOT control subject visibility.
  */
-export async function getSubjectsForPost(postId, opts = {}) {
+export async function getSubjects(opts = {}) {
   const { signal } = opts;
-  if (!postId) return { subjects: [] };
-  const { data } = await api.get('/subjects', { params: { postId }, signal });
+  const { data } = await api.get('/subjects', { signal });
   const payload = data?.data ?? {};
   const subjects = Array.isArray(payload.subjects) ? payload.subjects : [];
   return { subjects };

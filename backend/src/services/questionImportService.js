@@ -190,6 +190,12 @@ async function resolveSubjectAndTopic({ subjectRaw, topicRaw, caches }) {
   if (subject && subject.isActive === false) {
     reasons.push(`subject is inactive: ${subject.name || subject._id}`);
   }
+  // Compatibility-only: this import path historically assumed each subject row
+  // carried `subject.postId` so questions could default-tag that exam.
+  // Global subjects (postId null) are valid elsewhere; CSV import still expects
+  // a linked subject OR resolve by id until the template gains explicit postIds.
+  // TODO(compatibility): Accept explicit exam/post column in CSV and drop this
+  // requirement once ops migrate — unsafe to remove before that.
   if (subject && !subject.postId) {
     reasons.push('subject is not linked to a post');
   }
@@ -225,8 +231,8 @@ async function resolveSubjectAndTopic({ subjectRaw, topicRaw, caches }) {
 
 /**
  * Pre-fetch subject + topic catalogs so dry-run / commit don't hit Mongo
- * once per row. Indexed by both `_id` and lowercase name (subject name is
- * unique per post; topic name is scoped per subject).
+ * once per row. Indexed by `_id` and lowercase subject name (global name
+ * uniqueness) and by `${subjectId}::topicName` for topics.
  */
 async function buildLookupCaches() {
   const [subjects, topics] = await Promise.all([
@@ -515,6 +521,10 @@ export async function analyzeRows(parsedRows) {
 function buildInsertPayload({ parsed, subject, topic }) {
   const correctAnswers = parsed.correctIndexes;
   const primary = correctAnswers[0];
+  // Compatibility-only: import derives default postIds from legacy `subject.postId`.
+  // Canonical model: explicit postIds on each row when CSV supports it.
+  // TODO(compatibility): Thread explicit postIds from CSV; then relax
+  // resolveSubjectAndTopic's subject.postId requirement above.
   return {
     questionText: parsed.questionText,
     options: parsed.options,
