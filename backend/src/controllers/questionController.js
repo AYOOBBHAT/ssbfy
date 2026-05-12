@@ -94,6 +94,18 @@ export const questionController = {
     return sendSuccess(res, result, 'Bulk status updated');
   }),
 
+  bulkAddPostTags: asyncHandler(async (req, res) => {
+    const { questionIds, postIds } = req.body || {};
+    const result = await questionService.bulkAddPostTags({ questionIds, postIds });
+    return sendSuccess(res, result, 'Post tags added');
+  }),
+
+  bulkRemovePostTags: asyncHandler(async (req, res) => {
+    const { questionIds, postIds } = req.body || {};
+    const result = await questionService.bulkRemovePostTags({ questionIds, postIds });
+    return sendSuccess(res, result, 'Post tags removed');
+  }),
+
   findSimilar: asyncHandler(async (req, res) => {
     const { questionText, subjectId, excludeId } = req.query || {};
     const result = await questionService.findSimilar({

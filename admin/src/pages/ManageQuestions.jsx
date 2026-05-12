@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  bulkAddQuestionPostTags,
+  bulkRemoveQuestionPostTags,
   bulkSetQuestionStatus,
   getApiErrorMessage,
   getPosts,
@@ -25,6 +27,8 @@ const DIFFICULTY_LABELS = {
 
 const PAGE_SIZE = 20;
 const BULK_TYPED_CONFIRM_THRESHOLD = 10;
+/** Matches server `bulkPostTagsBodyValidators` / `bulkStatusValidators`. */
+const MAX_BULK_QUESTION_IDS = 500;
 
 function asArray(res, key) {
   if (Array.isArray(res)) return res;
@@ -99,6 +103,13 @@ export default function ManageQuestions() {
   const [confirmDialog, setConfirmDialog] = useState(null); // { type, payload, title, body, requireTyping, danger }
   const [typedConfirm, setTypedConfirm] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  const [tagModalMode, setTagModalMode] = useState(null); // 'add' | 'remove' | null
+  const [tagPostSearch, setTagPostSearch] = useState('');
+  const [tagModalSelectedPostIds, setTagModalSelectedPostIds] = useState(
+    () => new Set()
+  );
+  const [bulkTagBusy, setBulkTagBusy] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -197,6 +208,16 @@ export default function ManageQuestions() {
     return topics.filter((t) => String(t.subjectId) === String(filterSubjectId));
   }, [topics, filterSubjectId]);
 
+  const filteredPostsForTagModal = useMemo(() => {
+    const q = tagPostSearch.trim().toLowerCase();
+    if (!q) return posts;
+    return posts.filter((p) => {
+      const name = String(p.name || '').toLowerCase();
+      const slug = String(p.slug || '').toLowerCase();
+      return name.includes(q) || slug.includes(q);
+    });
+  }, [posts, tagPostSearch]);
+
   function handlePostChange(e) {
     const next = e.target.value;
     setFilterPostId(next);
@@ -259,6 +280,96 @@ export default function ManageQuestions() {
 
   function clearSelection() {
     setSelectedIds(new Set());
+  }
+
+  function openTagModal(mode) {
+    setTagModalMode(mode);
+    setTagPostSearch('');
+    setTagModalSelectedPostIds(new Set());
+  }
+
+  function closeTagModal() {
+    setTagModalMode(null);
+    setTagPostSearch('');
+    setTagModalSelectedPostIds(new Set());
+  }
+
+  function toggleTagModalPost(postId) {
+    const id = String(postId);
+    setTagModalSelectedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function submitBulkAddTags() {
+    const postIds = Array.from(tagModalSelectedPostIds);
+    const questionIds = Array.from(selectedIds);
+    if (!postIds.length) {
+      setStatusErr('Select at least one exam to tag.');
+      return;
+    }
+    if (bulkTagBusy) return;
+    clearAlerts();
+    setBulkTagBusy(true);
+    try {
+      const result = await bulkAddQuestionPostTags({ questionIds, postIds });
+      closeTagModal();
+      const mod = result?.modifiedQuestions ?? result?.matchedQuestions ?? 0;
+      const skipped = result?.skippedQuestions ?? 0;
+      setStatusMsg(
+        `Added tags on ${mod} question(s).` +
+          (skipped > 0 ? ` ${skipped} id(s) did not match a question.` : '')
+      );
+      setSelectedIds(new Set());
+      await loadList();
+    } catch (e) {
+      setStatusErr(getApiErrorMessage(e));
+    } finally {
+      setBulkTagBusy(false);
+    }
+  }
+
+  function askBulkRemoveTagsConfirm() {
+    const postIds = Array.from(tagModalSelectedPostIds);
+    const questionIds = Array.from(selectedIds);
+    if (!postIds.length) {
+      setStatusErr('Select at least one exam tag to remove.');
+      return;
+    }
+    closeTagModal();
+    setTypedConfirm('');
+    setConfirmDialog({
+      type: 'bulk-remove-tags',
+      payload: { postIds, questionIds },
+      title: 'Remove exam tags?',
+      body: `Remove ${postIds.length} tag(s) from ${questionIds.length} selected question(s). Other tags and question content stay unchanged.`,
+      requireTyping: false,
+      danger: true,
+    });
+  }
+
+  async function applyBulkRemoveTags({ postIds, questionIds }) {
+    if (bulkTagBusy) return;
+    clearAlerts();
+    setBulkTagBusy(true);
+    try {
+      const result = await bulkRemoveQuestionPostTags({ questionIds, postIds });
+      const mod = result?.modifiedQuestions ?? result?.matchedQuestions ?? 0;
+      const skipped = result?.skippedQuestions ?? 0;
+      setStatusMsg(
+        `Removed tags on ${mod} question(s).` +
+          (skipped > 0 ? ` ${skipped} question id(s) did not match.` : '')
+      );
+      setSelectedIds(new Set());
+      await loadList();
+    } catch (e) {
+      setStatusErr(getApiErrorMessage(e));
+    } finally {
+      setBulkTagBusy(false);
+    }
   }
 
   const allOnPageSelected = useMemo(() => {
@@ -393,6 +504,8 @@ export default function ManageQuestions() {
       await applySingleToggle(dialog.payload);
     } else if (dialog.type === 'bulk-status') {
       await applyBulkSetStatus(dialog.payload);
+    } else if (dialog.type === 'bulk-remove-tags') {
+      await applyBulkRemoveTags(dialog.payload);
     }
   }
 
@@ -437,15 +550,16 @@ export default function ManageQuestions() {
   const totalPages = pagination?.totalPages ?? 0;
   const total = pagination?.total ?? 0;
   const selectedCount = selectedIds.size;
+  const bulkSelectionOverLimit = selectedCount > MAX_BULK_QUESTION_IDS;
 
   return (
     <div>
       <h1 className="page-title">Manage Questions</h1>
       <p className="page-subtitle">
-        Search, filter, edit, and enable/disable questions. Disabled
-        questions stay in old test history but are hidden from students and
-        from Smart / weak / daily practice. Bulk-disable is reversible — hard
-        delete is not exposed by design.
+        Search, filter, edit, enable/disable, and bulk add/remove exam tags
+        (postIds). Disabled questions stay in old test history but are hidden
+        from students and from Smart / weak / daily practice. Bulk-disable is
+        reversible — hard delete is not exposed by design.
       </p>
 
       {refError ? <div className="alert alert-error">{refError}</div> : null}
@@ -599,12 +713,39 @@ export default function ManageQuestions() {
         <div className="bulk-bar">
           <span className="bulk-bar-count">
             {selectedCount} selected
+            {bulkSelectionOverLimit ? (
+              <span style={{ color: '#b45309', marginLeft: 8 }}>
+                (max {MAX_BULK_QUESTION_IDS} per bulk action — narrow selection)
+              </span>
+            ) : null}
           </span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => openTagModal('add')}
+            disabled={
+              bulkBusy || bulkTagBusy || bulkSelectionOverLimit
+            }
+            title="Attach exam tags (postIds) to selected questions"
+          >
+            Add exam tags
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => openTagModal('remove')}
+            disabled={
+              bulkBusy || bulkTagBusy || bulkSelectionOverLimit
+            }
+            title="Remove exam tags from selected questions"
+          >
+            Remove exam tags
+          </button>
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => askBulkSetStatus(true)}
-            disabled={bulkBusy}
+            disabled={bulkBusy || bulkSelectionOverLimit}
           >
             Enable selected
           </button>
@@ -612,7 +753,7 @@ export default function ManageQuestions() {
             type="button"
             className="btn btn-danger"
             onClick={() => askBulkSetStatus(false)}
-            disabled={bulkBusy}
+            disabled={bulkBusy || bulkSelectionOverLimit}
           >
             Disable selected
           </button>
@@ -620,7 +761,7 @@ export default function ManageQuestions() {
             type="button"
             className="btn btn-secondary"
             onClick={clearSelection}
-            disabled={bulkBusy}
+            disabled={bulkBusy || bulkTagBusy}
           >
             Clear selection
           </button>
@@ -815,6 +956,109 @@ export default function ManageQuestions() {
         </p>
       </div>
 
+      {tagModalMode ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card" style={{ maxWidth: 520, width: '100%' }}>
+            <h3>
+              {tagModalMode === 'add' ? 'Add exam tags' : 'Remove exam tags'}
+            </h3>
+            <p className="helper">
+              {tagModalMode === 'add'
+                ? "Selected posts are merged into each question's postIds (deduped automatically)."
+                : 'Only the tags you select here are removed; other tags stay.'}
+            </p>
+            <div className="form-row">
+              <label className="label" htmlFor="tag-modal-search">
+                Search exams
+              </label>
+              <input
+                id="tag-modal-search"
+                className="input"
+                value={tagPostSearch}
+                onChange={(e) => setTagPostSearch(e.target.value)}
+                placeholder="Filter by name or slug…"
+                autoComplete="off"
+              />
+            </div>
+            <div
+              style={{
+                maxHeight: 280,
+                overflowY: 'auto',
+                border: '1px solid var(--border-color, #e5e7eb)',
+                borderRadius: 8,
+                padding: 8,
+                marginBottom: 12,
+              }}
+            >
+              {filteredPostsForTagModal.length === 0 ? (
+                <p className="helper">No exams match this filter.</p>
+              ) : (
+                filteredPostsForTagModal.map((p) => {
+                  const pid = String(p._id);
+                  const checked = tagModalSelectedPostIds.has(pid);
+                  return (
+                    <label
+                      key={pid}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleTagModalPost(pid)}
+                      />
+                      <span>{p.name || p.slug || pid}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeTagModal}
+                disabled={bulkTagBusy}
+              >
+                Cancel
+              </button>
+              {tagModalMode === 'add' ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={submitBulkAddTags}
+                  disabled={
+                    bulkTagBusy ||
+                    tagModalSelectedPostIds.size === 0 ||
+                    bulkSelectionOverLimit
+                  }
+                >
+                  {bulkTagBusy ? 'Applying…' : 'Add tags'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={askBulkRemoveTagsConfirm}
+                  disabled={
+                    bulkTagBusy ||
+                    tagModalSelectedPostIds.size === 0 ||
+                    bulkSelectionOverLimit
+                  }
+                >
+                  Continue…
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {confirmDialog ? (
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-card">
@@ -849,11 +1093,16 @@ export default function ManageQuestions() {
                 className={`btn ${confirmDialog.danger ? 'btn-danger' : 'btn-primary'}`}
                 onClick={handleConfirm}
                 disabled={
-                  confirmDialog.requireTyping &&
-                  typedConfirm.trim().toUpperCase() !== 'CONFIRM'
+                  bulkTagBusy ||
+                  (confirmDialog.requireTyping &&
+                    typedConfirm.trim().toUpperCase() !== 'CONFIRM')
                 }
               >
-                {confirmDialog.danger ? 'Yes, disable' : 'Yes, continue'}
+                {confirmDialog.type === 'bulk-remove-tags'
+                  ? 'Yes, remove tags'
+                  : confirmDialog.danger
+                    ? 'Yes, disable'
+                    : 'Yes, continue'}
               </button>
             </div>
           </div>

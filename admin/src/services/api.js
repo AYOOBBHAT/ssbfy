@@ -274,6 +274,40 @@ export async function bulkSetQuestionStatus({ ids, isActive } = {}) {
 }
 
 /**
+ * Bulk-append exam `postIds` to many questions (admin). Max 500 questions, 64 posts per request.
+ */
+export async function bulkAddQuestionPostTags({ questionIds, postIds } = {}) {
+  if (!Array.isArray(questionIds) || questionIds.length === 0) {
+    throw new Error('bulkAddQuestionPostTags requires questionIds.');
+  }
+  if (!Array.isArray(postIds) || postIds.length === 0) {
+    throw new Error('bulkAddQuestionPostTags requires postIds.');
+  }
+  const res = await api.post('/questions/admin/bulk-add-post-tags', {
+    questionIds,
+    postIds,
+  });
+  return unwrap(res);
+}
+
+/**
+ * Bulk-remove exam `postIds` from many questions (admin). Removing absent tags is safe server-side.
+ */
+export async function bulkRemoveQuestionPostTags({ questionIds, postIds } = {}) {
+  if (!Array.isArray(questionIds) || questionIds.length === 0) {
+    throw new Error('bulkRemoveQuestionPostTags requires questionIds.');
+  }
+  if (!Array.isArray(postIds) || postIds.length === 0) {
+    throw new Error('bulkRemoveQuestionPostTags requires postIds.');
+  }
+  const res = await api.post('/questions/admin/bulk-remove-post-tags', {
+    questionIds,
+    postIds,
+  });
+  return unwrap(res);
+}
+
+/**
  * "Possible duplicate?" lookup for the AddQuestion form. Returns
  * `{ exactDuplicateId, similar: [{_id, questionText, isActive, ...}] }`.
  * Empty `subjectId` or short text returns an empty result.

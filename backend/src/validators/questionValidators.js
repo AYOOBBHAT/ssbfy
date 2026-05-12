@@ -341,6 +341,21 @@ export const bulkStatusValidators = [
 ];
 
 /**
+ * POST /questions/admin/bulk-add-post-tags and bulk-remove-post-tags.
+ * Bounds worst-case updateMany payload size.
+ */
+export const bulkPostTagsBodyValidators = [
+  body('questionIds')
+    .isArray({ min: 1, max: 500 })
+    .withMessage('questionIds must have 1..500 entries'),
+  body('questionIds.*').isMongoId(),
+  body('postIds')
+    .isArray({ min: 1, max: 64 })
+    .withMessage('postIds must have 1..64 entries'),
+  body('postIds.*').isMongoId(),
+];
+
+/**
  * GET /questions/admin/similar — soft duplicate-detection helper. Both
  * fields are required; the service returns an empty result for blanks
  * but we'd rather catch the obvious typo at the boundary.

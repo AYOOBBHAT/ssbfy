@@ -912,6 +912,82 @@ export const questionService = {
   },
 
   /**
+   * Bulk-append exam Post tags (`postIds`). Tags only — no hierarchy changes.
+   */
+  async bulkAddPostTags({ questionIds, postIds }) {
+    const qIds = [...new Set(questionIds.map(String))].filter((id) =>
+      mongoose.isValidObjectId(id)
+    );
+    const pIds = [...new Set(postIds.map(String))].filter((id) =>
+      mongoose.isValidObjectId(id)
+    );
+    if (!qIds.length) {
+      throw new AppError('questionIds must contain valid ids', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!pIds.length) {
+      throw new AppError('postIds must contain valid ids', HTTP_STATUS.BAD_REQUEST);
+    }
+    const postsOk = await postRepository.existsAllIds(
+      pIds.map((id) => new mongoose.Types.ObjectId(id))
+    );
+    if (!postsOk) {
+      throw new AppError(
+        'One or more post ids are invalid',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    const { matchedCount, modifiedCount } = await questionRepository.bulkAddPostTags(
+      qIds,
+      pIds
+    );
+    return {
+      requestedQuestions: qIds.length,
+      requestedPosts: pIds.length,
+      matchedQuestions: matchedCount,
+      modifiedQuestions: modifiedCount,
+      skippedQuestions: Math.max(0, qIds.length - matchedCount),
+    };
+  },
+
+  /**
+   * Bulk-remove exam Post tags from `postIds`. Removing absent tags is safe (no error).
+   */
+  async bulkRemovePostTags({ questionIds, postIds }) {
+    const qIds = [...new Set(questionIds.map(String))].filter((id) =>
+      mongoose.isValidObjectId(id)
+    );
+    const pIds = [...new Set(postIds.map(String))].filter((id) =>
+      mongoose.isValidObjectId(id)
+    );
+    if (!qIds.length) {
+      throw new AppError('questionIds must contain valid ids', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (!pIds.length) {
+      throw new AppError('postIds must contain valid ids', HTTP_STATUS.BAD_REQUEST);
+    }
+    const postsOk = await postRepository.existsAllIds(
+      pIds.map((id) => new mongoose.Types.ObjectId(id))
+    );
+    if (!postsOk) {
+      throw new AppError(
+        'One or more post ids are invalid',
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    const { matchedCount, modifiedCount } = await questionRepository.bulkRemovePostTags(
+      qIds,
+      pIds
+    );
+    return {
+      requestedQuestions: qIds.length,
+      requestedPosts: pIds.length,
+      matchedQuestions: matchedCount,
+      modifiedQuestions: modifiedCount,
+      skippedQuestions: Math.max(0, qIds.length - matchedCount),
+    };
+  },
+
+  /**
    * Soft "Possible duplicate?" lookup for the AddQuestion form. We do not
    * block submission on this — the admin can still save (some near-duplicates
    * are legitimate, e.g. retypes from different exam papers). We just expose

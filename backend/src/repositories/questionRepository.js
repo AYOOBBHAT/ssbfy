@@ -433,4 +433,50 @@ export const questionRepository = {
     ]);
     return rows;
   },
+
+  /**
+   * Bulk-append Post ids to `postIds` (exam tags). Per-document dedupe via `$addToSet`.
+   */
+  async bulkAddPostTags(questionIds, postIds) {
+    const qOids = [...new Set(questionIds.map(String))]
+      .filter((id) => mongoose.isValidObjectId(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    const pOids = [...new Set(postIds.map(String))]
+      .filter((id) => mongoose.isValidObjectId(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    if (!qOids.length || !pOids.length) {
+      return { matchedCount: 0, modifiedCount: 0 };
+    }
+    const res = await Question.updateMany(
+      { _id: { $in: qOids } },
+      { $addToSet: { postIds: { $each: pOids } } }
+    ).exec();
+    return {
+      matchedCount: res.matchedCount ?? 0,
+      modifiedCount: res.modifiedCount ?? 0,
+    };
+  },
+
+  /**
+   * Bulk-remove Post ids from `postIds`. No-op when a question lacks a tag.
+   */
+  async bulkRemovePostTags(questionIds, postIds) {
+    const qOids = [...new Set(questionIds.map(String))]
+      .filter((id) => mongoose.isValidObjectId(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    const pOids = [...new Set(postIds.map(String))]
+      .filter((id) => mongoose.isValidObjectId(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    if (!qOids.length || !pOids.length) {
+      return { matchedCount: 0, modifiedCount: 0 };
+    }
+    const res = await Question.updateMany(
+      { _id: { $in: qOids } },
+      { $pull: { postIds: { $in: pOids } } }
+    ).exec();
+    return {
+      matchedCount: res.matchedCount ?? 0,
+      modifiedCount: res.modifiedCount ?? 0,
+    };
+  },
 };

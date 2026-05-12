@@ -6,6 +6,7 @@ import { adminChain } from '../middlewares/adminGuard.js';
 import { handleCsvUpload } from '../middlewares/upload.js';
 import {
   adminListQuestionsQueryValidators,
+  bulkPostTagsBodyValidators,
   bulkStatusValidators,
   createQuestionValidators,
   importCommitBodyValidators,
@@ -45,7 +46,7 @@ router.get(
 
 // Admin polish endpoints. Order matters: every literal-segment route here
 // must precede the parametric `/admin/:id` route below or Express will
-// try to treat "import"/"similar"/"bulk-status" as a Mongo id.
+// try to treat "import"/"similar"/"bulk-status"/"bulk-*-post-tags" as a Mongo id.
 router.get(
   '/admin/import/template',
   ...adminChain,
@@ -74,6 +75,22 @@ router.post(
   bulkStatusValidators,
   validateRequest,
   questionController.bulkSetStatus
+);
+
+router.post(
+  '/admin/bulk-add-post-tags',
+  ...adminChain,
+  bulkPostTagsBodyValidators,
+  validateRequest,
+  questionController.bulkAddPostTags
+);
+
+router.post(
+  '/admin/bulk-remove-post-tags',
+  ...adminChain,
+  bulkPostTagsBodyValidators,
+  validateRequest,
+  questionController.bulkRemovePostTags
 );
 
 router.get(
