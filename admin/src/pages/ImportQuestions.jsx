@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   commitImportQuestions,
   downloadImportTemplate,
   dryRunImportQuestions,
   getApiErrorMessage,
+  getPosts,
 } from '../services/api';
 
 /**
@@ -51,8 +52,26 @@ export default function ImportQuestions() {
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
+  const [posts, setPosts] = useState([]);
+  const [tagPostId, setTagPostId] = useState('');
 
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getPosts();
+        const list = Array.isArray(data) ? data : data?.posts || [];
+        if (!cancelled) setPosts(list);
+      } catch {
+        if (!cancelled) setPosts([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const summary = analysis?.summary;
 
@@ -103,7 +122,9 @@ export default function ImportQuestions() {
     setStatusMsg('');
     setCommitResult(null);
     try {
-      const data = await dryRunImportQuestions(file);
+      const data = await dryRunImportQuestions(file, {
+        tagPostId: tagPostId || undefined,
+      });
       setAnalysis(data || { summary: null, rows: [] });
       setStep('preview');
     } catch (e) {
@@ -126,6 +147,7 @@ export default function ImportQuestions() {
     try {
       const data = await commitImportQuestions(file, {
         forceImportDuplicates,
+        tagPostId: tagPostId || undefined,
       });
       setCommitResult(data || null);
       setStep('done');
@@ -144,6 +166,7 @@ export default function ImportQuestions() {
     setCommitResult(null);
     setStep('pick');
     setForceImportDuplicates(false);
+    setTagPostId('');
     setStatusMsg('');
     setErrMsg('');
     if (fileInputRef.current) {
@@ -243,10 +266,36 @@ export default function ImportQuestions() {
                 defaults to medium), <strong>explanation</strong>,{' '}
                 <strong>year</strong>,{' '}
                 <strong>questionType</strong> (auto-inferred otherwise),{' '}
-                <strong>questionImage</strong> (http/https URL)
+                <strong>questionImage</strong> (http/https URL),{' '}
+                <strong>postIds</strong> — comma-separated Post ids (exam tags)
               </li>
             </ul>
           </details>
+
+          <div className="form-row">
+            <label className="label" htmlFor="import-tag-post">
+              Optional exam tag (all rows)
+            </label>
+            <select
+              id="import-tag-post"
+              className="input"
+              value={tagPostId}
+              onChange={(e) => setTagPostId(e.target.value)}
+              disabled={busy}
+            >
+              <option value="">None — questions may have empty post tags</option>
+              {posts.map((p) => (
+                <option key={String(p._id)} value={String(p._id)}>
+                  {p.name || String(p._id)}
+                </option>
+              ))}
+            </select>
+            <p className="helper">
+              If set, this Post id is merged into each row&apos;s{' '}
+              <code>postIds</code> (deduped). Subjects stay global; this is not
+              ownership. Per-row tags: use the <code>postIds</code> column.
+            </p>
+          </div>
 
           <div className="form-actions">
             <button

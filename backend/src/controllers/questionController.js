@@ -1,14 +1,30 @@
+import mongoose from 'mongoose';
 import { questionService } from '../services/questionService.js';
 import {
   parseCsvBuffer,
   analyzeRows,
   commitValidRows,
   CSV_TEMPLATE,
+  parseImportTagPostIds,
 } from '../services/questionImportService.js';
+import { postRepository } from '../repositories/postRepository.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
+
+async function validateImportTagPostsExist(tagPostIds) {
+  if (!tagPostIds?.length) return;
+  const ok = await postRepository.existsAllIds(
+    tagPostIds.map((id) => new mongoose.Types.ObjectId(id))
+  );
+  if (!ok) {
+    throw new AppError(
+      'One or more tag post ids were not found',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+}
 
 export const questionController = {
   adminList: asyncHandler(async (req, res) => {
@@ -112,7 +128,9 @@ export const questionController = {
       throw new AppError('CSV file is required', HTTP_STATUS.BAD_REQUEST);
     }
     const parsed = parseCsvBuffer(req.file.buffer);
-    const analysis = await analyzeRows(parsed);
+    const tagPostIds = parseImportTagPostIds(req.body);
+    await validateImportTagPostsExist(tagPostIds);
+    const analysis = await analyzeRows(parsed, { tagPostIds });
     // Strip per-row insert payloads from the wire response — the client doesn't
     // need them and they balloon the JSON for big imports. The commit endpoint
     // re-derives payloads from the same CSV.
@@ -136,7 +154,9 @@ export const questionController = {
     const force =
       String(req.body?.forceImportDuplicates || '').toLowerCase() === 'true';
     const parsed = parseCsvBuffer(req.file.buffer);
-    const analysis = await analyzeRows(parsed);
+    const tagPostIds = parseImportTagPostIds(req.body);
+    await validateImportTagPostsExist(tagPostIds);
+    const analysis = await analyzeRows(parsed, { tagPostIds });
 
     let rowsForCommit = analysis.rows;
     if (force) {

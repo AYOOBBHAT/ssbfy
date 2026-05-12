@@ -11,6 +11,7 @@ import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
 import { Subject } from '../models/Subject.js';
 import { Topic } from '../models/Topic.js';
+import { postRepository } from '../repositories/postRepository.js';
 import {
   QUESTION_TYPES,
   QUESTION_TYPE_VALUES,
@@ -24,6 +25,8 @@ import {
  * `subject` and `topic` accept either a name (case-insensitive) OR a Mongo
  * ObjectId. Names are convenient when filling 200 rows by hand; ids are
  * convenient when re-importing a CSV exported by another tool.
+ *
+ * Optional `postIds` column: comma-separated Post ObjectIds (exam tags only).
  */
 const REQUIRED_HEADERS = [
   'questionText',
@@ -41,6 +44,7 @@ const OPTIONAL_HEADERS = [
   'year',
   'questionType',
   'questionImage',
+  'postIds',
 ];
 const ALL_HEADERS = [...REQUIRED_HEADERS, ...OPTIONAL_HEADERS];
 
@@ -66,6 +70,7 @@ export const CSV_TEMPLATE = {
       '2024',
       'single_correct',
       '',
+      '',
     ]
       .map((cell) => csvEscape(cell))
       .join(',') +
@@ -79,6 +84,50 @@ function csvEscape(s) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
+}
+
+/**
+ * Optional multipart fields: tag every row from this upload with the same Post id(s).
+ * Exam tags only — not hierarchy ownership.
+ */
+export function parseImportTagPostIds(body) {
+  const out = [];
+  if (!body || typeof body !== 'object') return out;
+  const single = body.tagPostId;
+  if (single != null && String(single).trim() !== '') {
+    const s = String(single).trim();
+    if (!mongoose.isValidObjectId(s)) {
+      throw new AppError('tagPostId must be a valid post id', HTTP_STATUS.BAD_REQUEST);
+    }
+    out.push(s);
+  }
+  const multi = String(body.tagPostIds ?? '').trim();
+  if (multi) {
+    for (const t of multi.split(/[,;\s]+/)) {
+      const s = t.trim();
+      if (!s) continue;
+      if (!mongoose.isValidObjectId(s)) {
+        throw new AppError(`invalid post id in tagPostIds: ${s}`, HTTP_STATUS.BAD_REQUEST);
+      }
+      out.push(s);
+    }
+  }
+  return [...new Set(out)];
+}
+
+/** Dedupe. Legacy `subject.postId` is optional tagging tolerance only. */
+function mergeQuestionImportPostIds({ csvPostIds = [], tagPostIds = [], legacySubjectPostId }) {
+  const out = [];
+  const push = (id) => {
+    if (id == null || id === '') return;
+    const s = String(id).trim();
+    if (!s || !mongoose.isValidObjectId(s)) return;
+    out.push(s);
+  };
+  for (const id of csvPostIds) push(id);
+  for (const id of tagPostIds) push(id);
+  push(legacySubjectPostId);
+  return [...new Set(out)];
 }
 
 function parseCorrectAnswer(raw, optionsLen) {
@@ -190,15 +239,6 @@ async function resolveSubjectAndTopic({ subjectRaw, topicRaw, caches }) {
   if (subject && subject.isActive === false) {
     reasons.push(`subject is inactive: ${subject.name || subject._id}`);
   }
-  // Compatibility-only: this import path historically assumed each subject row
-  // carried `subject.postId` so questions could default-tag that exam.
-  // Global subjects (postId null) are valid elsewhere; CSV import still expects
-  // a linked subject OR resolve by id until the template gains explicit postIds.
-  // TODO(compatibility): Accept explicit exam/post column in CSV and drop this
-  // requirement once ops migrate — unsafe to remove before that.
-  if (subject && !subject.postId) {
-    reasons.push('subject is not linked to a post');
-  }
 
   const tRaw = String(topicRaw || '').trim();
   if (!tRaw) {
@@ -221,9 +261,7 @@ async function resolveSubjectAndTopic({ subjectRaw, topicRaw, caches }) {
     subject &&
     String(topic.subjectId) !== String(subject._id)
   ) {
-    reasons.push(
-      `topic does not belong to subject: ${topic.name || topic._id}`
-    );
+    reasons.push(`topic does not belong to subject: ${topic.name || topic._id}`);
   }
 
   return { subject, topic, reasons };
@@ -366,6 +404,20 @@ function validateRowShape(raw) {
     reasons.push('image_based rows require a questionImage URL');
   }
 
+  const csvPostIds = [];
+  const postIdsColumn = String(raw.postIds ?? '').trim();
+  if (postIdsColumn) {
+    for (const tok of postIdsColumn.split(/[,;]+/)) {
+      const t = tok.trim();
+      if (!t) continue;
+      if (!mongoose.isValidObjectId(t)) {
+        reasons.push(`invalid post id in postIds column: ${t}`);
+      } else {
+        csvPostIds.push(t);
+      }
+    }
+  }
+
   return {
     reasons,
     parsed: {
@@ -377,6 +429,7 @@ function validateRowShape(raw) {
       questionImage,
       questionType,
       explanation: String(raw.explanation || '').trim(),
+      csvPostIds: [...new Set(csvPostIds)],
     },
   };
 }
@@ -397,7 +450,7 @@ function validateRowShape(raw) {
  *
  * For commit we feed the `valid` rows' payloads into bulkInsertMany.
  */
-export async function analyzeRows(parsedRows) {
+export async function analyzeRows(parsedRows, { tagPostIds = [] } = {}) {
   const caches = await buildLookupCaches();
   const subjectIdsTouched = new Set();
   const seenInBatch = new Map(); // normalized text + subjectId → first row line
@@ -434,7 +487,24 @@ export async function analyzeRows(parsedRows) {
       resolveReasons = r.reasons;
     }
 
-    const reasons = [...shapeReasons, ...resolveReasons];
+    let reasons = [...shapeReasons, ...resolveReasons];
+
+    let mergedPostIdStrings = [];
+    if (!reasons.length && subject && topic) {
+      mergedPostIdStrings = mergeQuestionImportPostIds({
+        csvPostIds: parsed.csvPostIds || [],
+        tagPostIds,
+        legacySubjectPostId: subject.postId,
+      });
+      if (mergedPostIdStrings.length > 0) {
+        const ok = await postRepository.existsAllIds(
+          mergedPostIdStrings.map((id) => new mongoose.Types.ObjectId(id))
+        );
+        if (!ok) {
+          reasons = [...reasons, 'one or more post ids are invalid'];
+        }
+      }
+    }
 
     if (reasons.length) {
       rowsOut.push({
@@ -475,7 +545,12 @@ export async function analyzeRows(parsedRows) {
       // Attach payload here too so a `forceImportDuplicates` commit can
       // promote this row back to `valid` without re-running analysis.
       // The controller strips `payload` from the wire response.
-      const payload = buildInsertPayload({ parsed, subject, topic });
+      const payload = buildInsertPayload({
+        parsed,
+        subject,
+        topic,
+        mergedPostIdStrings,
+      });
       rowsOut.push({
         line,
         status: 'duplicate',
@@ -494,7 +569,12 @@ export async function analyzeRows(parsedRows) {
     seenInBatch.set(dedupKey, line);
     subjectIdsTouched.add(String(subject._id));
 
-    const payload = buildInsertPayload({ parsed, subject, topic });
+    const payload = buildInsertPayload({
+      parsed,
+      subject,
+      topic,
+      mergedPostIdStrings,
+    });
     rowsOut.push({
       line,
       status: 'valid',
@@ -518,13 +598,12 @@ export async function analyzeRows(parsedRows) {
   };
 }
 
-function buildInsertPayload({ parsed, subject, topic }) {
+function buildInsertPayload({ parsed, subject, topic, mergedPostIdStrings }) {
   const correctAnswers = parsed.correctIndexes;
   const primary = correctAnswers[0];
-  // Compatibility-only: import derives default postIds from legacy `subject.postId`.
-  // Canonical model: explicit postIds on each row when CSV supports it.
-  // TODO(compatibility): Thread explicit postIds from CSV; then relax
-  // resolveSubjectAndTopic's subject.postId requirement above.
+  const postIds = (mergedPostIdStrings || []).map(
+    (id) => new mongoose.Types.ObjectId(id)
+  );
   return {
     questionText: parsed.questionText,
     options: parsed.options,
@@ -536,7 +615,7 @@ function buildInsertPayload({ parsed, subject, topic }) {
     explanation: parsed.explanation || '',
     subjectId: subject._id,
     topicId: topic._id,
-    postIds: [subject.postId],
+    postIds,
     year: parsed.year,
     difficulty: parsed.difficulty,
     isActive: true,

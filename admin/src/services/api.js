@@ -315,10 +315,11 @@ export async function downloadImportTemplate() {
  * Dry-run an import: upload the CSV, get back row-by-row validation +
  * duplicate detection. NO writes happen on the server for this call.
  */
-export async function dryRunImportQuestions(file) {
+export async function dryRunImportQuestions(file, { tagPostId } = {}) {
   if (!file) throw new Error('dryRunImportQuestions requires a CSV file.');
   const fd = new FormData();
   fd.append('file', file);
+  if (tagPostId) fd.append('tagPostId', tagPostId);
   const res = await api.post('/questions/admin/import/dry-run', fd, {
     timeout: 120000,
   });
@@ -333,11 +334,15 @@ export async function dryRunImportQuestions(file) {
  * existing questions in the same subject are inserted anyway. In-batch
  * duplicates (same text appearing twice in one CSV) are NEVER force-imported.
  */
-export async function commitImportQuestions(file, { forceImportDuplicates = false } = {}) {
+export async function commitImportQuestions(
+  file,
+  { forceImportDuplicates = false, tagPostId } = {}
+) {
   if (!file) throw new Error('commitImportQuestions requires a CSV file.');
   const fd = new FormData();
   fd.append('file', file);
   fd.append('forceImportDuplicates', forceImportDuplicates ? 'true' : 'false');
+  if (tagPostId) fd.append('tagPostId', tagPostId);
   const res = await api.post('/questions/admin/import/commit', fd, {
     timeout: 180000,
   });
