@@ -101,16 +101,27 @@ export function parseImportTagPostIds(body) {
     }
     out.push(s);
   }
-  const multi = String(body.tagPostIds ?? '').trim();
-  if (multi) {
-    for (const t of multi.split(/[,;\s]+/)) {
-      const s = t.trim();
-      if (!s) continue;
-      if (!mongoose.isValidObjectId(s)) {
-        throw new AppError(`invalid post id in tagPostIds: ${s}`, HTTP_STATUS.BAD_REQUEST);
+  const raw = body.tagPostIds;
+  const tokens = [];
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (entry == null || entry === '') continue;
+      for (const t of String(entry).split(/[,;\s]+/)) {
+        const s = t.trim();
+        if (s) tokens.push(s);
       }
-      out.push(s);
     }
+  } else if (raw != null && String(raw).trim() !== '') {
+    for (const t of String(raw).split(/[,;\s]+/)) {
+      const s = t.trim();
+      if (s) tokens.push(s);
+    }
+  }
+  for (const s of tokens) {
+    if (!mongoose.isValidObjectId(s)) {
+      throw new AppError(`invalid post id in tagPostIds: ${s}`, HTTP_STATUS.BAD_REQUEST);
+    }
+    out.push(s);
   }
   return [...new Set(out)];
 }

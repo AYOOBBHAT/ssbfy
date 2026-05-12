@@ -32,6 +32,12 @@ const STEPS = [
 ];
 
 const MAX_ROWS_RENDERED = 500;
+/** Aligns with bulk tag caps — enough exams per import row merge. */
+const MAX_IMPORT_GLOBAL_TAGS = 64;
+
+function postLabel(p) {
+  return p?.name || p?.slug || String(p?._id ?? '');
+}
 
 function previewText(s, max = 80) {
   if (typeof s !== 'string' || !s.trim()) return '—';
@@ -53,7 +59,8 @@ export default function ImportQuestions() {
   const [errMsg, setErrMsg] = useState('');
   const [statusMsg, setStatusMsg] = useState('');
   const [posts, setPosts] = useState([]);
-  const [tagPostId, setTagPostId] = useState('');
+  const [selectedTagPostIds, setSelectedTagPostIds] = useState(() => new Set());
+  const [importTagSearch, setImportTagSearch] = useState('');
 
   const fileInputRef = useRef(null);
 
@@ -89,6 +96,22 @@ export default function ImportQuestions() {
   const rowsToRender = sortedRows.slice(0, MAX_ROWS_RENDERED);
   const hiddenRowCount = Math.max(0, sortedRows.length - MAX_ROWS_RENDERED);
 
+  const filteredPostsForImportTags = useMemo(() => {
+    const q = importTagSearch.trim().toLowerCase();
+    if (!q) return posts;
+    return posts.filter((p) => {
+      const name = String(p.name || '').toLowerCase();
+      const slug = String(p.slug || '').toLowerCase();
+      const id = String(p._id || '').toLowerCase();
+      return name.includes(q) || slug.includes(q) || id.includes(q);
+    });
+  }, [posts, importTagSearch]);
+
+  const selectedTagPosts = useMemo(() => {
+    const map = new Map(posts.map((p) => [String(p._id), p]));
+    return Array.from(selectedTagPostIds).map((id) => map.get(id) || { _id: id, name: id });
+  }, [posts, selectedTagPostIds]);
+
   function handleFileChange(e) {
     const f = e.target.files?.[0] || null;
     setErrMsg('');
@@ -123,7 +146,7 @@ export default function ImportQuestions() {
     setCommitResult(null);
     try {
       const data = await dryRunImportQuestions(file, {
-        tagPostId: tagPostId || undefined,
+        tagPostIds: Array.from(selectedTagPostIds),
       });
       setAnalysis(data || { summary: null, rows: [] });
       setStep('preview');
@@ -147,7 +170,7 @@ export default function ImportQuestions() {
     try {
       const data = await commitImportQuestions(file, {
         forceImportDuplicates,
-        tagPostId: tagPostId || undefined,
+        tagPostIds: Array.from(selectedTagPostIds),
       });
       setCommitResult(data || null);
       setStep('done');
@@ -166,7 +189,8 @@ export default function ImportQuestions() {
     setCommitResult(null);
     setStep('pick');
     setForceImportDuplicates(false);
-    setTagPostId('');
+    setSelectedTagPostIds(new Set());
+    setImportTagSearch('');
     setStatusMsg('');
     setErrMsg('');
     if (fileInputRef.current) {
@@ -273,28 +297,158 @@ export default function ImportQuestions() {
           </details>
 
           <div className="form-row">
-            <label className="label" htmlFor="import-tag-post">
-              Optional exam tag (all rows)
+            <label className="label" htmlFor="import-tag-search">
+              Optional exam tags (all rows)
             </label>
-            <select
-              id="import-tag-post"
-              className="input"
-              value={tagPostId}
-              onChange={(e) => setTagPostId(e.target.value)}
-              disabled={busy}
-            >
-              <option value="">None — questions may have empty post tags</option>
-              {posts.map((p) => (
-                <option key={String(p._id)} value={String(p._id)}>
-                  {p.name || String(p._id)}
-                </option>
-              ))}
-            </select>
-            <p className="helper">
-              If set, this Post id is merged into each row&apos;s{' '}
-              <code>postIds</code> (deduped). Subjects stay global; this is not
-              ownership. Per-row tags: use the <code>postIds</code> column.
+            <p className="helper" style={{ marginBottom: 8 }}>
+              These exam tags are merged into each row&apos;s{' '}
+              <code>postIds[]</code> (deduped with each other and with any{' '}
+              <code>postIds</code> in the CSV). Leave none selected for untagged
+              imports unless the CSV supplies tags or legacy subject links apply
+              on the server.
             </p>
+            <input
+              id="import-tag-search"
+              className="input"
+              value={importTagSearch}
+              onChange={(e) => setImportTagSearch(e.target.value)}
+              placeholder="Search exams by name, slug, or id…"
+              disabled={busy}
+              autoComplete="off"
+            />
+            <div
+              style={{
+                maxHeight: 220,
+                overflowY: 'auto',
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                padding: 8,
+                marginTop: 8,
+              }}
+            >
+              {filteredPostsForImportTags.length === 0 ? (
+                <p className="helper" style={{ margin: 0 }}>
+                  No exams match this filter.
+                </p>
+              ) : (
+                filteredPostsForImportTags.map((p) => {
+                  const pid = String(p._id);
+                  const checked = selectedTagPostIds.has(pid);
+                  const atCap =
+                    selectedTagPostIds.size >= MAX_IMPORT_GLOBAL_TAGS && !checked;
+                  return (
+                    <label
+                      key={pid}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 4px',
+                        cursor: atCap ? 'not-allowed' : 'pointer',
+                        opacity: atCap ? 0.55 : 1,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={busy || atCap}
+                        onChange={() => {
+                          setSelectedTagPostIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(pid)) next.delete(pid);
+                            else if (next.size < MAX_IMPORT_GLOBAL_TAGS) next.add(pid);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span>{postLabel(p)}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 10,
+              }}
+            >
+              <span className="helper" style={{ margin: 0 }}>
+                <strong>{selectedTagPostIds.size}</strong> exam
+                {selectedTagPostIds.size === 1 ? '' : 's'} selected
+                {selectedTagPostIds.size >= MAX_IMPORT_GLOBAL_TAGS ? (
+                  <span style={{ color: '#b45309' }}>
+                    {' '}
+                    (max {MAX_IMPORT_GLOBAL_TAGS})
+                  </span>
+                ) : null}
+              </span>
+              {selectedTagPostIds.size > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  onClick={() => setSelectedTagPostIds(new Set())}
+                  disabled={busy}
+                >
+                  Clear all
+                </button>
+              ) : null}
+            </div>
+            {selectedTagPosts.length > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 6,
+                  marginTop: 10,
+                }}
+              >
+                {selectedTagPosts.map((p) => {
+                  const pid = String(p._id);
+                  return (
+                    <span
+                      key={pid}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '4px 10px',
+                        background: '#eef2ff',
+                        borderRadius: 999,
+                        fontSize: 13,
+                      }}
+                    >
+                      {postLabel(p)}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${postLabel(p)}`}
+                        onClick={() =>
+                          setSelectedTagPostIds((prev) => {
+                            const next = new Set(prev);
+                            next.delete(pid);
+                            return next;
+                          })
+                        }
+                        disabled={busy}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          padding: 0,
+                          lineHeight: 1,
+                          fontSize: 16,
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
 
           <div className="form-actions">

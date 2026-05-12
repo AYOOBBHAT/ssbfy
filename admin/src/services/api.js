@@ -348,12 +348,22 @@ export async function downloadImportTemplate() {
 /**
  * Dry-run an import: upload the CSV, get back row-by-row validation +
  * duplicate detection. NO writes happen on the server for this call.
+ *
+ * Optional `tagPostIds`: array of Post ids merged into every row's postIds (deduped server-side).
+ * Optional `tagPostId`: single id (backward compatibility).
  */
-export async function dryRunImportQuestions(file, { tagPostId } = {}) {
+export async function dryRunImportQuestions(
+  file,
+  { tagPostId, tagPostIds } = {}
+) {
   if (!file) throw new Error('dryRunImportQuestions requires a CSV file.');
   const fd = new FormData();
   fd.append('file', file);
   if (tagPostId) fd.append('tagPostId', tagPostId);
+  const ids = Array.isArray(tagPostIds)
+    ? [...new Set(tagPostIds.map(String).filter(Boolean))]
+    : [];
+  if (ids.length) fd.append('tagPostIds', ids.join(','));
   const res = await api.post('/questions/admin/import/dry-run', fd, {
     timeout: 120000,
   });
@@ -370,13 +380,17 @@ export async function dryRunImportQuestions(file, { tagPostId } = {}) {
  */
 export async function commitImportQuestions(
   file,
-  { forceImportDuplicates = false, tagPostId } = {}
+  { forceImportDuplicates = false, tagPostId, tagPostIds } = {}
 ) {
   if (!file) throw new Error('commitImportQuestions requires a CSV file.');
   const fd = new FormData();
   fd.append('file', file);
   fd.append('forceImportDuplicates', forceImportDuplicates ? 'true' : 'false');
   if (tagPostId) fd.append('tagPostId', tagPostId);
+  const ids = Array.isArray(tagPostIds)
+    ? [...new Set(tagPostIds.map(String).filter(Boolean))]
+    : [];
+  if (ids.length) fd.append('tagPostIds', ids.join(','));
   const res = await api.post('/questions/admin/import/commit', fd, {
     timeout: 180000,
   });
