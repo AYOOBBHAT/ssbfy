@@ -1,4 +1,5 @@
 import api, { getApiErrorMessage } from './api.js';
+import { withSingleAuthNetworkRetry } from '../utils/authNetworkRetry.js';
 
 /**
  * @returns {Promise<{ user: object, token: string }>}
@@ -10,10 +11,20 @@ export async function signup({ name, email, password }) {
 
 /**
  * @returns {Promise<{ user: object, token: string }>}
+ * Optional `onRetrying` / `signal` — used by AuthContext for one transient retry on weak networks.
  */
-export async function login({ email, password }) {
-  const { data } = await api.post('/auth/login', { email, password });
-  return data?.data ?? {};
+export async function login({ email, password, onRetrying, signal } = {}) {
+  return withSingleAuthNetworkRetry(
+    async () => {
+      const { data } = await api.post(
+        '/auth/login',
+        { email, password },
+        signal ? { signal } : undefined
+      );
+      return data?.data ?? {};
+    },
+    { signal, onRetrying, label: 'login' }
+  );
 }
 
 /**

@@ -10,6 +10,7 @@ import {
 } from 'react';
 import * as authService from '../services/authService';
 import api, { setAuthToken, clearAuthToken, isRequestCancelled } from '../services/api';
+import { withSingleAuthNetworkRetry } from '../utils/authNetworkRetry.js';
 import { clearTopicsCache } from '../services/topicService';
 import { setMonitoringUser } from '../monitoring/sentry';
 
@@ -32,6 +33,7 @@ export function AuthProvider({ children }) {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const refreshUserAbortRef = useRef(null);
+  const loginAbortRef = useRef(null);
 
   const isAuthenticated = !!token;
 
@@ -58,7 +60,10 @@ export function AuthProvider({ children }) {
             setToken(t);
             setAuthToken(t);
             try {
-              const res = await api.get('/users/me', { signal: ac.signal });
+              const res = await withSingleAuthNetworkRetry(
+                () => api.get('/users/me', { signal: ac.signal }),
+                { signal: ac.signal, label: 'bootstrap_me' }
+              );
               const freshUser = res?.data?.data?.user;
               if (ac.signal.aborted) return;
               if (freshUser && typeof freshUser === 'object') {
@@ -85,14 +90,28 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const login = useCallback(async ({ email, password }) => {
+  const login = useCallback(async ({ email, password, onNetworkRetrying } = {}) => {
     if (submittingRef.current) {
       return;
     }
+    loginAbortRef.current?.abort();
+    const ac = new AbortController();
+    loginAbortRef.current = ac;
     submittingRef.current = true;
     setAuthSubmitting(true);
     try {
-      const res = (await authService.login({ email, password })) || {};
+      const res =
+        (await authService.login({
+          email,
+          password,
+          signal: ac.signal,
+          onRetrying: () => {
+            if (!ac.signal.aborted) onNetworkRetrying?.('retrying');
+          },
+        })) || {};
+      if (ac.signal.aborted) {
+        return;
+      }
       const u = res.user;
       const t = res.token;
       if (typeof t !== 'string' || !t || !u) {
@@ -104,8 +123,12 @@ export function AuthProvider({ children }) {
       await persistSession(t, u);
       return { user: u };
     } finally {
+      if (loginAbortRef.current === ac) {
+        loginAbortRef.current = null;
+      }
       submittingRef.current = false;
       setAuthSubmitting(false);
+      onNetworkRetrying?.('');
     }
   }, []);
 
@@ -159,6 +182,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    loginAbortRef.current?.abort();
     setUser(null);
     setToken(null);
     clearAuthToken();

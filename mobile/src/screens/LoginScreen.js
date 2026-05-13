@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage } from '../services/api';
+import { getAuthFlowMessageAfterRetry } from '../utils/authNetworkRetry.js';
 import AppButton from '../components/AppButton';
 import AuthField, { PasswordToggle } from '../components/AuthField';
 import { colors, brand } from '../theme/colors';
@@ -25,16 +26,26 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [connectionHint, setConnectionHint] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef(null);
 
   async function handleLogin() {
     if (authSubmitting) return;
     setError('');
+    setConnectionHint('');
     try {
-      await login({ email: email.trim(), password });
+      await login({
+        email: email.trim(),
+        password,
+        onNetworkRetrying: (phase) => {
+          setConnectionHint(phase === 'retrying' ? 'Retrying connection…' : '');
+        },
+      });
     } catch (e) {
-      setError(getApiErrorMessage(e));
+      setConnectionHint('');
+      const afterRetry = getAuthFlowMessageAfterRetry(e);
+      setError(afterRetry || getApiErrorMessage(e));
     }
   }
 
@@ -78,6 +89,11 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           <View style={styles.card}>
+            {connectionHint ? (
+              <View style={styles.hintBanner}>
+                <Text style={styles.hintText}>{connectionHint}</Text>
+              </View>
+            ) : null}
             {error ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorText}>{error}</Text>
@@ -141,7 +157,13 @@ export default function LoginScreen({ navigation }) {
             </Pressable>
 
             <AppButton
-              title={authSubmitting ? 'Logging in…' : 'Login'}
+              title={
+                authSubmitting
+                  ? connectionHint
+                    ? 'Retrying…'
+                    : 'Logging in…'
+                  : 'Login'
+              }
               onPress={handleLogin}
               disabled={!canSubmit}
               style={styles.primaryCta}
@@ -239,6 +261,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     shadowRadius: 24,
     elevation: 3,
+  },
+
+  hintBanner: {
+    backgroundColor: '#EEF2FF',
+    borderColor: 'rgba(79, 70, 229, 0.35)',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  hintText: {
+    color: '#4338CA',
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   errorBanner: {
