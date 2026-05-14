@@ -9,7 +9,7 @@ export { isRequestCancelled };
  * API base URL is env-configurable for release channels.
  * Must be HTTPS for production safety.
  */
-const PROD_API_FALLBACK = 'https://ssbfy-production.up.railway.app/api';
+const PROD_API_FALLBACK = 'https://api.jkssbfy.in/api';
 const API_BASE_URL = (() => {
   const raw = String(process.env.EXPO_PUBLIC_API_BASE_URL || PROD_API_FALLBACK).trim();
   const normalized = raw.replace(/\/+$/, '');

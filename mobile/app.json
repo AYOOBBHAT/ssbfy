@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "com.ayoobbhat.ssbfy",
-      "versionCode": 7,
+      "versionCode": 8,
       "permissions": [],
       "adaptiveIcon": {
         "foregroundImage": "./assets/new_icon.png",
