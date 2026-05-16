@@ -176,7 +176,8 @@ testAttemptSchema.index(
   { userId: 1, testId: 1, endTime: -1, createdAt: -1 },
   {
     name: 'idx_attempt_user_test_completed',
-    partialFilterExpression: { endTime: { $ne: null } },
+    // Atlas-compatible partial (no `$ne` in partial filters).
+    partialFilterExpression: { endTime: { $exists: true } },
   }
 );
 
@@ -188,7 +189,7 @@ testAttemptSchema.index(
   { userId: 1, endTime: -1, createdAt: -1 },
   {
     name: 'idx_attempt_user_completed_recent',
-    partialFilterExpression: { endTime: { $ne: null } },
+    partialFilterExpression: { endTime: { $exists: true } },
   }
 );
 

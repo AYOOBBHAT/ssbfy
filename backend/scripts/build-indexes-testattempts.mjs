@@ -30,12 +30,12 @@ const TARGET_INDEXES = [
   {
     name: 'idx_attempt_user_test_completed',
     key: { userId: 1, testId: 1, endTime: -1, createdAt: -1 },
-    partialFilterExpression: { endTime: { $ne: null } },
+    partialFilterExpression: { endTime: { $exists: true } },
   },
   {
     name: 'idx_attempt_user_completed_recent',
     key: { userId: 1, endTime: -1, createdAt: -1 },
-    partialFilterExpression: { endTime: { $ne: null } },
+    partialFilterExpression: { endTime: { $exists: true } },
   },
 ];
 
