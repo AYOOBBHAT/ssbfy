@@ -202,8 +202,8 @@ export const createQuestionValidators = [
  * never has to re-parse.
  */
 /**
- * POST /questions/smart-practice — authenticated custom mock generation.
- * At least one of postId, subjectId, topicId required (cross-field check).
+ * POST /questions/smart-practice — authenticated custom practice generation.
+ * All scope filters are optional; omit all for random active questions.
  */
 export const smartPracticeBodyValidators = [
   body('postId').optional({ checkFalsy: true }).isMongoId().withMessage('Invalid postId'),
@@ -221,19 +221,6 @@ export const smartPracticeBodyValidators = [
     .isInt({ min: 1, max: 50 })
     .withMessage('limit must be an integer from 1 to 50')
     .toInt(),
-  body().custom((val) => {
-    const p = val?.postId;
-    const s = val?.subjectId;
-    const t = val?.topicId;
-    const has =
-      (p != null && String(p).trim() !== '') ||
-      (s != null && String(s).trim() !== '') ||
-      (t != null && String(t).trim() !== '');
-    if (!has) {
-      throw new Error('At least one of postId, subjectId, or topicId is required');
-    }
-    return true;
-  }),
 ];
 
 export const weakPracticeValidators = [

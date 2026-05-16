@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { resolveResultBackTarget, MAIN_TABS } from '../navigation/testFlowNavigation';
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
 import { getAttemptResult } from '../services/resultService';
@@ -164,6 +166,7 @@ function mapAttemptResultToNavExtras(api) {
     historicalAttemptMode: true,
     historicalAttemptId: api.attemptId != null ? String(api.attemptId) : null,
     attemptNumber: api.attemptNumber ?? null,
+    returnMainTab: MAIN_TABS.PROFILE,
   };
 }
 
@@ -254,8 +257,24 @@ export default function ResultScreen() {
     retrySkippedUnavailableCount = 0,
     testAvailable = true,
     testTitle: _testTitle = null,
+    returnMainTab = null,
   } = params || {};
   const isHistoricalAttempt = viewingHistoricalAttempt || historicalAttemptMode;
+
+  const navigateBackFromResult = useCallback(() => {
+    const { route: mainRoute } = resolveResultBackTarget(params);
+    navigation.navigate(mainRoute.name, mainRoute.params);
+  }, [navigation, params]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        navigateBackFromResult();
+        return true;
+      });
+      return () => sub.remove();
+    }, [navigateBackFromResult])
+  );
   const isRetry = !!retry;
   const isMock = !!testId && !isRetry;
 
@@ -491,6 +510,9 @@ export default function ResultScreen() {
       questions: retryable,
       historicalAttemptMode: isHistoricalAttempt,
       sourceAttemptId: historicalAttemptId || undefined,
+      originMainTab:
+        returnMainTab ||
+        (isHistoricalAttempt ? MAIN_TABS.PROFILE : MAIN_TABS.HOME),
       // Do not pass testId in historical mode — retry must not touch live test APIs.
       ...(!isHistoricalAttempt && testId ? { testId } : {}),
     });
@@ -502,6 +524,7 @@ export default function ResultScreen() {
       mode: 'retry',
       questionIds: retryWrongQuestionIds,
       questions: retryWrongQuestions,
+      originMainTab: returnMainTab || MAIN_TABS.HOME,
     });
   };
 
@@ -700,6 +723,7 @@ export default function ResultScreen() {
         mode: 'practice',
         questions: fetched,
         questionIds,
+        originMainTab: returnMainTab || MAIN_TABS.HOME,
       });
     } catch (e) {
       setPracticeError(getApiErrorMessage(e));
@@ -726,6 +750,7 @@ export default function ResultScreen() {
         mode: 'practice',
         questionIds,
         questions: limited,
+        originMainTab: returnMainTab || MAIN_TABS.HOME,
       });
     } catch (e) {
       setPracticeError(getApiErrorMessage(e));
@@ -1081,19 +1106,8 @@ export default function ResultScreen() {
   };
 
   const renderFooter = () => {
-    const noWrongOriginal = !isRetry && wrongQuestionIds.length === 0;
-    const noWrongRetry = isRetry && retryWrongQuestionIds.length === 0;
-    const allCorrect = noWrongOriginal || noWrongRetry;
-
     return (
       <View style={styles.footer}>
-        {allCorrect ? (
-          <View style={styles.allCorrectCard}>
-            <Text style={styles.successText}>
-              🎉 All answers correct! No retry needed.
-            </Text>
-          </View>
-        ) : null}
         {!isRetry && wrongQuestionIds.length > 0 ? (
           <Pressable
             onPress={handleRetryWrong}
@@ -1117,18 +1131,14 @@ export default function ResultScreen() {
           </Pressable>
         ) : null}
         <Pressable
-          onPress={() =>
-            viewingHistoricalAttempt
-              ? navigation.navigate('Main', { screen: 'Profile' })
-              : navigation.navigate('Main', { screen: 'Home' })
-          }
+          onPress={navigateBackFromResult}
           style={({ pressed }) => [
             styles.secondaryBtn,
             pressed && styles.btnPressed,
           ]}
         >
           <Text style={styles.secondaryBtnText}>
-            {viewingHistoricalAttempt ? 'Back to Profile' : 'Back to Home'}
+            {resolveResultBackTarget(params).label}
           </Text>
         </Pressable>
       </View>
@@ -1531,20 +1541,6 @@ const styles = StyleSheet.create({
   },
 
   footer: { marginTop: 24 },
-  allCorrectCard: {
-    backgroundColor: colors.successSoft,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.success,
-    marginBottom: 16,
-  },
-  successText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.success,
-    textAlign: 'center',
-  },
 
   primaryBtn: {
     backgroundColor: PRIMARY,

@@ -31,6 +31,12 @@ import {
 } from '../utils/testAttemptDraft';
 import { setOpenAttempt, clearOpenAttempt } from '../utils/openTestAttempts';
 import { captureFlowException } from '../monitoring/sentry';
+import {
+  resetStackToResult,
+  MAIN_TABS,
+  buildMainReturnRoute,
+} from '../navigation/testFlowNavigation';
+import { clearTestSessionTimers } from '../utils/testSessionCleanup';
 
 const DRAFT_DEBOUNCE_MS = 450;
 const SERVER_SYNC_INTERVAL_MS = 25000;
@@ -127,6 +133,8 @@ export default function TestScreen() {
   const historicalAttemptMode = !!params.historicalAttemptMode;
   const sourceAttemptId =
     params.sourceAttemptId != null ? String(params.sourceAttemptId) : null;
+  /** Tab to restore on leave/finish (Practice | Home | Profile). */
+  const originMainTab = params.originMainTab || null;
   const isLocal = isRetry || isPractice || isDaily;
   const questionIds = isLocal
     ? (Array.isArray(params.questionIds) ? params.questionIds : [])
@@ -188,9 +196,17 @@ export default function TestScreen() {
 
   const submitLockRef = useRef(false);
   const submissionCompletedRef = useRef(false);
+  const navigationCommittedRef = useRef(false);
   const draftSaveTimerRef = useRef(null);
   const serverSyncTimerRef = useRef(null);
   const progressSeqRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      clearTestSessionTimers({ draftSaveTimerRef, serverSyncTimerRef });
+    },
+    []
+  );
 
   useEffect(() => {
     const ac = new AbortController();
@@ -479,6 +495,33 @@ export default function TestScreen() {
   ]);
 
   useEffect(() => {
+    if (!isLocal) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (submitting || submissionCompletedRef.current || navigationCommittedRef.current) {
+        return true;
+      }
+      const tab =
+        originMainTab ||
+        (isPractice ? MAIN_TABS.PRACTICE : isDaily ? MAIN_TABS.HOME : MAIN_TABS.HOME);
+      const mainRoute = buildMainReturnRoute(tab);
+      Alert.alert(
+        'Leave session?',
+        'Your answers in this session will not be saved.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          {
+            text: 'Leave',
+            style: 'destructive',
+            onPress: () => navigation.navigate(mainRoute.name, mainRoute.params),
+          },
+        ]
+      );
+      return true;
+    });
+    return () => sub.remove();
+  }, [isLocal, isPractice, isDaily, originMainTab, submitting, navigation]);
+
+  useEffect(() => {
     if (isLocal) return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (submitting || submissionCompletedRef.current) return true;
@@ -752,90 +795,158 @@ export default function TestScreen() {
     ]);
   }, [confirmManualSubmit, attemptedCount]);
 
-  const handleFinishLocal = useCallback(async () => {
-    if (isRetry) {
-      navigation.replace('Result', {
-        retry: true,
-        retryAnswers: answers,
-        retryQuestions: questions.filter((q) => q !== undefined),
-      });
+  const finishPracticeToResult = useCallback(() => {
+    if (navigationCommittedRef.current || submissionCompletedRef.current) return;
+
+    const validQuestions = questions.filter((q) => q !== undefined);
+    if (!validQuestions.length) {
+      setSubmitError('No questions in this practice session.');
       return;
     }
 
-    if (isDaily) {
-      if (submitLockRef.current) return;
+    const correctAnswers = validQuestions.map((q) => {
+      const correctSet = getQuestionCorrectSet(q);
+      return {
+        questionId: String(q._id),
+        correctAnswers: correctSet,
+        correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
+        questionType: q.questionType || 'single_correct',
+      };
+    });
+
+    let correctCount = 0;
+    const weakTopicsMap = new Map();
+    for (const q of validQuestions) {
+      const qid = String(q._id);
+      const userArr = Array.isArray(answers[qid]) ? answers[qid] : [];
+      const correctSet = getQuestionCorrectSet(q);
+      const isCorrect = correctSet.length > 0 && indexSetsEqual(userArr, correctSet);
+      if (isCorrect) {
+        correctCount += 1;
+      } else if (userArr.length > 0 && q.topicId) {
+        const tid = String(q.topicId);
+        weakTopicsMap.set(tid, (weakTopicsMap.get(tid) || 0) + 1);
+      }
+    }
+
+    const total = validQuestions.length;
+    const attemptedQuestions = Object.keys(answers).filter(
+      (k) => Array.isArray(answers[k]) && answers[k].length > 0
+    ).length;
+    const accuracy =
+      total === 0
+        ? 0
+        : Math.round(((correctCount / total) * 100 + Number.EPSILON) * 100) / 100;
+    const weakTopics = Array.from(weakTopicsMap.entries())
+      .map(([topicId, mistakeCount]) => ({ topicId, mistakeCount }))
+      .sort((a, b) => b.mistakeCount - a.mistakeCount)
+      .slice(0, 10);
+
+    const tab = originMainTab || (isPractice ? MAIN_TABS.PRACTICE : MAIN_TABS.HOME);
+    const committed = resetStackToResult(navigation, {
+      originMainTab: tab,
+      resultParams: {
+        score: correctCount,
+        accuracy,
+        timeTaken: 0,
+        weakTopics,
+        totalQuestions: total,
+        attemptedQuestions,
+        unansweredQuestions: Math.max(0, total - attemptedQuestions),
+        questions: validQuestions,
+        userAnswers: answers,
+        correctAnswers,
+      },
+      commitRef: navigationCommittedRef,
+    });
+    if (committed) submissionCompletedRef.current = true;
+  }, [navigation, answers, questions, originMainTab, isPractice]);
+
+  /**
+   * Local finish (practice / daily / retry).
+   * Uses navigation.reset [Main(origin tab), Result] — not replace — so Android/iOS back
+   * cannot resurrect a completed TestScreen (no timer/autosave leakage).
+   *
+   * Manual QA:
+   * - Android back after finish → origin tab, not Test.
+   * - iOS swipe on Test blocked for practice/daily/retry (AppNavigator).
+   * - Rapid Finish taps → single Result (navigationCommittedRef).
+   * - Finish → background → foreground → no duplicate Result.
+   * - Retry chain: Result → Test → Finish Retry → one Result on stack.
+   */
+  const handleFinishLocal = useCallback(async () => {
+    if (isRetry) {
+      if (submitLockRef.current || navigationCommittedRef.current) return;
       submitLockRef.current = true;
+      submissionCompletedRef.current = true;
       setSubmitting(true);
       setSubmitError(null);
       try {
-        const validQuestions = questions.filter((q) => q !== undefined);
-
-        // Build the same `correctAnswers` shape the backend's submit endpoint
-        // returns, so ResultScreen renders daily-practice and real-test
-        // results through identical code paths.
-        const correctAnswers = validQuestions.map((q) => {
-          const correctSet = getQuestionCorrectSet(q);
-          return {
-            questionId: String(q._id),
-            correctAnswers: correctSet,
-            correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
-            questionType: q.questionType || 'single_correct',
-          };
-        });
-
-        let correctCount = 0;
-        const weakTopicsMap = new Map();
-        for (const q of validQuestions) {
-          const qid = String(q._id);
-          const userArr = Array.isArray(answers[qid]) ? answers[qid] : [];
-          const correctSet = getQuestionCorrectSet(q);
-          const isCorrect =
-            correctSet.length > 0 && indexSetsEqual(userArr, correctSet);
-          if (isCorrect) {
-            correctCount += 1;
-          } else if (userArr.length > 0 && q.topicId) {
-            // Only count as a "weak topic mistake" if the user actually
-            // attempted it. Skipping a question doesn't make the topic
-            // weak — it makes the user lazy on that one question.
-            const tid = String(q.topicId);
-            weakTopicsMap.set(tid, (weakTopicsMap.get(tid) || 0) + 1);
-          }
-        }
-        const total = validQuestions.length;
-        const attemptedQuestions = Object.keys(answers).filter(
-          (k) => Array.isArray(answers[k]) && answers[k].length > 0
-        ).length;
-        const accuracy =
-          total === 0
-            ? 0
-            : Math.round(((correctCount / total) * 100 + Number.EPSILON) * 100) / 100;
-        const weakTopics = Array.from(weakTopicsMap.entries())
-          .map(([topicId, mistakeCount]) => ({ topicId, mistakeCount }))
-          .sort((a, b) => b.mistakeCount - a.mistakeCount)
-          .slice(0, 10);
-
-        try {
-          await completeDailyPractice();
-        } catch (e) {
-          logger.info('[DAILY] complete failed:', getApiErrorMessage(e));
-        }
-
-        navigation.replace('Result', {
-          score: correctCount,
-          accuracy,
-          timeTaken: 0,
-          weakTopics,
-          totalQuestions: total,
-          attemptedQuestions,
-          questions: validQuestions,
-          userAnswers: answers,
-          correctAnswers,
+        const tab =
+          originMainTab ||
+          (historicalAttemptMode ? MAIN_TABS.PROFILE : MAIN_TABS.HOME);
+        resetStackToResult(navigation, {
+          originMainTab: tab,
+          resultParams: {
+            retry: true,
+            retryAnswers: answers,
+            retryQuestions: questions.filter((q) => q !== undefined),
+          },
+          commitRef: navigationCommittedRef,
         });
       } catch (e) {
         setSubmitError(getApiErrorMessage(e));
       } finally {
         setSubmitting(false);
-        submitLockRef.current = false;
+        if (!navigationCommittedRef.current) {
+          submitLockRef.current = false;
+          submissionCompletedRef.current = false;
+        }
+      }
+      return;
+    }
+
+    if (isPractice) {
+      if (submitLockRef.current || navigationCommittedRef.current) return;
+      submitLockRef.current = true;
+      submissionCompletedRef.current = true;
+      setSubmitting(true);
+      setSubmitError(null);
+      try {
+        finishPracticeToResult();
+      } catch (e) {
+        setSubmitError(getApiErrorMessage(e));
+      } finally {
+        setSubmitting(false);
+        if (!navigationCommittedRef.current) {
+          submitLockRef.current = false;
+          submissionCompletedRef.current = false;
+        }
+      }
+      return;
+    }
+
+    if (isDaily) {
+      if (submitLockRef.current || navigationCommittedRef.current) return;
+      submitLockRef.current = true;
+      submissionCompletedRef.current = true;
+      setSubmitting(true);
+      setSubmitError(null);
+      try {
+        try {
+          await completeDailyPractice();
+        } catch (e) {
+          logger.info('[DAILY] complete failed:', getApiErrorMessage(e));
+        }
+        finishPracticeToResult();
+      } catch (e) {
+        setSubmitError(getApiErrorMessage(e));
+      } finally {
+        setSubmitting(false);
+        if (!navigationCommittedRef.current) {
+          submitLockRef.current = false;
+          submissionCompletedRef.current = false;
+        }
       }
       return;
     }
@@ -845,14 +956,26 @@ export default function TestScreen() {
     } else {
       navigation.navigate('Main', { screen: 'Home' });
     }
-  }, [navigation, answers, questions, isRetry, isDaily]);
+  }, [
+    navigation,
+    answers,
+    questions,
+    isRetry,
+    isDaily,
+    isPractice,
+    originMainTab,
+    historicalAttemptMode,
+    finishPracticeToResult,
+  ]);
 
   const countdownEnabled =
     !loading &&
     !error &&
     total > 0 &&
     (isLocal || resumeResolved) &&
-    !submitting;
+    !submitting &&
+    !navigationCommittedRef.current &&
+    !submissionCompletedRef.current;
 
   const attempted = Object.keys(answers).filter(
     (k) => Array.isArray(answers[k]) && answers[k].length > 0
@@ -939,9 +1062,9 @@ export default function TestScreen() {
         </View>
         {isLocal ? (
           <AppButton
-            title={isDaily && submitting ? 'Finishing…' : localFinishLabel}
+            title={(isDaily || isPractice || isRetry) && submitting ? 'Finishing…' : localFinishLabel}
             onPress={handleFinishLocal}
-            disabled={isDaily && submitting}
+            disabled={(isDaily || isPractice || isRetry) && submitting}
           />
         ) : (
           <AppButton
@@ -1055,9 +1178,9 @@ export default function TestScreen() {
       ) : null}
       {isLocal ? (
         <AppButton
-          title={isDaily && submitting ? 'Finishing…' : localFinishLabel}
+          title={(isDaily || isPractice || isRetry) && submitting ? 'Finishing…' : localFinishLabel}
           onPress={handleFinishLocal}
-          disabled={isDaily && submitting}
+          disabled={(isDaily || isPractice || isRetry) && submitting}
         />
       ) : (
         <AppButton

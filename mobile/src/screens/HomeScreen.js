@@ -59,6 +59,7 @@ export default function HomeScreen() {
         mode: 'daily',
         questionIds,
         questions,
+        originMainTab: 'Home',
       });
     } catch (e) {
       if (isRequestCancelled(e) || dailyAbortRef.current !== ac) return;

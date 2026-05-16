@@ -201,7 +201,19 @@ export default function AppNavigator() {
             component={MainTabs}
             options={{ headerShown: false }}
           />
-          <RootStack.Screen name="Test" component={TestScreen} options={{ title: 'Test' }} />
+          <RootStack.Screen
+            name="Test"
+            component={TestScreen}
+            options={({ route }) => {
+              const mode = route.params?.mode;
+              const blockSwipe =
+                mode === 'practice' || mode === 'daily' || mode === 'retry';
+              return {
+                title: 'Test',
+                gestureEnabled: !blockSwipe,
+              };
+            }}
+          />
           <RootStack.Screen name="Result" component={ResultScreen} options={{ title: 'Result' }} />
           <RootStack.Screen
             name="ReviewAnswers"

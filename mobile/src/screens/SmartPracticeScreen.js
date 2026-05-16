@@ -62,7 +62,6 @@ export default function SmartPracticeScreen() {
       if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
-      setSelectedPostId((prev) => prev || list[0]?._id || '');
     } catch (e) {
       if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
@@ -108,9 +107,17 @@ export default function SmartPracticeScreen() {
   }, []);
 
   useEffect(() => {
+    if (!selectedTopicId) return;
+    if (!topics.some((t) => String(t._id) === String(selectedTopicId))) {
+      setSelectedTopicId('');
+    }
+  }, [topics, selectedTopicId]);
+
+  useEffect(() => {
     const ac = new AbortController();
     if (!selectedSubjectId) {
       setTopics([]);
+      setSelectedTopicId('');
       return undefined;
     }
     (async () => {
@@ -132,7 +139,8 @@ export default function SmartPracticeScreen() {
   }, [selectedSubjectId]);
 
   function pickPost(id) {
-    setSelectedPostId(id);
+    const sid = String(id);
+    setSelectedPostId((prev) => (String(prev) === sid ? '' : sid));
   }
 
   function pickSubject(id) {
@@ -150,8 +158,7 @@ export default function SmartPracticeScreen() {
     return Math.min(MAX_Q, Math.max(MIN_Q, n));
   }, [questionCount]);
 
-  const canStart =
-    Boolean(selectedPostId || selectedSubjectId || selectedTopicId) && !starting;
+  const canStart = !starting;
 
   const handleAdjustCount = (delta) => {
     setQuestionCount(String(Math.min(MAX_Q, Math.max(MIN_Q, limitNum + delta))));
@@ -183,6 +190,7 @@ export default function SmartPracticeScreen() {
         mode: 'practice',
         questionIds,
         questions: list,
+        originMainTab: 'Practice',
       });
     } catch (e) {
       setStartError(getApiErrorMessage(e));
@@ -248,10 +256,17 @@ export default function SmartPracticeScreen() {
             );
           })}
         </ScrollView>
-        {label === 'Subject' && selectedPostId ? (
-          <Text style={styles.hint}>Tap again to clear — practice all subjects (still filtered by this post if set).</Text>
+        {label === 'Post (optional filter)' ? (
+          <Text style={styles.hint}>
+            {selectedId
+              ? 'Tap the selected post again to clear this filter.'
+              : 'Optional — tap a post to filter by exam tag only.'}
+          </Text>
         ) : null}
-        {label === 'Topic' && selectedSubjectId ? (
+        {label === 'Subject' && selectedId ? (
+          <Text style={styles.hint}>Tap again to clear — practice without a subject filter.</Text>
+        ) : null}
+        {label === 'Topic' && selectedId ? (
           <Text style={styles.hint}>Tap again to clear — practice the whole subject.</Text>
         ) : null}
       </View>
@@ -295,8 +310,8 @@ export default function SmartPracticeScreen() {
     >
       <Text style={styles.title}>Practice by Topic</Text>
       <Text style={styles.subtitle}>
-        Select a subject or topic and start targeted practice. Post is an optional filter (exam tag);
-        questions run with no timer.
+        Pick optional filters, then start practice. Subject and topic are optional; topics appear
+        after you choose a subject. Questions run with no timer.
       </Text>
 
       {renderChipRow(

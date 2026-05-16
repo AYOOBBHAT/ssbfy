@@ -691,10 +691,9 @@ export const questionService = {
   },
 
   /**
-   * Topic-wise (or broader) custom mock generation: random active questions
-   * matching optional post / subject / topic / difficulty. At least one of
-   * postId, subjectId, topicId must be present (validated upstream).
-   * `difficulty: 'all'` or omit → no difficulty filter.
+   * Topic-wise (or broader) custom practice: random active questions with optional
+   * post / subject / topic / difficulty filters. Omit all scope fields for the
+   * full active question pool. `difficulty: 'all'` or omit → no difficulty filter.
    */
   async smartPractice({ postId, subjectId, topicId, difficulty, limit = 10 } = {}) {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 10, 50));

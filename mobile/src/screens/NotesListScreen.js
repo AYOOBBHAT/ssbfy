@@ -141,9 +141,17 @@ export default function NotesListScreen() {
 
   // ---- Load topics whenever subject changes ---------------------------
   useEffect(() => {
+    if (!selectedTopicId) return;
+    if (!topics.some((t) => String(t._id) === String(selectedTopicId))) {
+      setSelectedTopicId('');
+    }
+  }, [topics, selectedTopicId]);
+
+  useEffect(() => {
     const ac = new AbortController();
     if (!selectedSubjectId) {
       setTopics([]);
+      setSelectedTopicId('');
       return undefined;
     }
     (async () => {
@@ -238,7 +246,8 @@ export default function NotesListScreen() {
   );
 
   function pickPost(id) {
-    setSelectedPostId(id);
+    const sid = String(id);
+    setSelectedPostId((prev) => (String(prev) === sid ? '' : sid));
   }
 
   function pickSubject(id) {
