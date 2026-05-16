@@ -13,6 +13,7 @@
     "audit:users": "node scripts/audit-user-integrity.mjs",
     "audit:pdfs": "node scripts/audit-pdf-integrity.mjs",
     "audit:indexes": "node scripts/audit-indexes.mjs",
+    "build:indexes": "node scripts/build-indexes.mjs",
     "audit:all": "node scripts/audit-duplicate-topics.mjs && node scripts/audit-question-integrity.mjs && node scripts/audit-test-integrity.mjs && node scripts/audit-user-integrity.mjs && node scripts/audit-pdf-integrity.mjs && node scripts/audit-indexes.mjs",
     "fix:question-postids": "node scripts/fix-question-postids-dedupe.mjs",
     "fix:pdf-fileurl": "node scripts/fix-clear-pdf-fileurl.mjs",
