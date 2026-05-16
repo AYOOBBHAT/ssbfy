@@ -17,7 +17,9 @@
     "fix:question-postids": "node scripts/fix-question-postids-dedupe.mjs",
     "fix:pdf-fileurl": "node scripts/fix-clear-pdf-fileurl.mjs",
     "fix:topic-names-trim": "node scripts/fix-trim-topic-names.mjs",
-    "migrate:global-subjects": "node scripts/migrate-global-subjects.mjs"
+    "migrate:global-subjects": "node scripts/migrate-global-subjects.mjs",
+    "backfill:attempt-snapshots": "node scripts/backfill-attempt-result-snapshots.mjs --dry-run",
+    "backfill:attempt-snapshots:apply": "node scripts/backfill-attempt-result-snapshots.mjs --apply"
   },
   "engines": {
     "node": ">=20"

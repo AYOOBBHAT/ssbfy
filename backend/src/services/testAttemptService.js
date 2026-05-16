@@ -6,105 +6,17 @@ import { testAttemptRepository } from '../repositories/testAttemptRepository.js'
 import { questionRepository } from '../repositories/questionRepository.js';
 import { resultRepository } from '../repositories/resultRepository.js';
 import { testService } from './testService.js';
-
-const WEAK_TOPIC_LIMIT = 10;
-
-/**
- * Coerce one answer payload into the canonical shape used inside the
- * scoring loop. Accepts either the new array form (`selectedOptionIndexes`)
- * or the legacy scalar (`selectedOptionIndex`); the array always wins when
- * both are present.
- *
- * Returns:
- *   {
- *     questionId,
- *     selectedOptionIndexes: number[]  // sorted, deduped, possibly empty
- *     selectedOptionIndex:    number|null  // legacy mirror; arr[0] or null
- *   }
- *
- * Empty array means "unanswered" — explicitly preserved (not coerced into
- * an arbitrary index) so the scorer can treat it as wrong / missing rather
- * than guessing the user picked option A.
- */
-function normalizeOneAnswer(a) {
-  const out = {
-    questionId: new mongoose.Types.ObjectId(a.questionId),
-    selectedOptionIndexes: [],
-    selectedOptionIndex: null,
-  };
-
-  let arr = null;
-  if (Array.isArray(a.selectedOptionIndexes) && a.selectedOptionIndexes.length > 0) {
-    arr = a.selectedOptionIndexes;
-  } else if (
-    a.selectedOptionIndex !== null &&
-    a.selectedOptionIndex !== undefined &&
-    a.selectedOptionIndex !== ''
-  ) {
-    const n = Number(a.selectedOptionIndex);
-    if (Number.isInteger(n) && n >= 0) {
-      arr = [n];
-    }
-  }
-
-  if (!arr) return out;
-
-  const cleaned = [];
-  for (const raw of arr) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n >= 0) cleaned.push(n);
-  }
-  if (cleaned.length === 0) return out;
-
-  const dedupSorted = Array.from(new Set(cleaned)).sort((a, b) => a - b);
-  out.selectedOptionIndexes = dedupSorted;
-  out.selectedOptionIndex = dedupSorted[0];
-  return out;
-}
-
-function normalizeAnswers(answers) {
-  if (!Array.isArray(answers)) return [];
-  return answers.map(normalizeOneAnswer);
-}
-
-/**
- * Read a question's canonical correct-answer set, transparently handling
- * legacy docs that only have `correctAnswerIndex`. Returns a deduped sorted
- * array (possibly empty for malformed docs — caller should treat empty as
- * "no question can be scored correct").
- */
-function getCorrectIndexSet(q) {
-  if (Array.isArray(q?.correctAnswers) && q.correctAnswers.length > 0) {
-    return Array.from(new Set(q.correctAnswers.map(Number))).sort((a, b) => a - b);
-  }
-  if (typeof q?.correctAnswerIndex === 'number' && Number.isInteger(q.correctAnswerIndex)) {
-    return [q.correctAnswerIndex];
-  }
-  return [];
-}
-
-/**
- * Order-independent set equality on already-sorted-deduped index arrays.
- *
- * Multi-correct scoring rule (from the spec):
- *   correctAnswers = [0, 2]
- *     [0,2]   → correct
- *     [2,0]   → correct (sorted before compare)
- *     [0]     → wrong  (length differs)
- *     [0,1,2] → wrong  (length differs)
- *     [1,2]   → wrong  (same length, different members)
- *
- * Both inputs MUST already be sorted+deduped (callers do this above), so
- * this is a tight O(n) walk with no allocation.
- */
-function indexSetsEqual(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b)) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
+import {
+  WEAK_TOPIC_LIMIT,
+  buildResultSnapshotAtSubmit,
+  computeIsCorrect,
+  computeRetryListsFromResult,
+  filterSelectedOptionIndexes,
+  getCorrectIndexSet,
+  hasImmutableSnapshot,
+  indexSetsEqual,
+  normalizeAnswers,
+} from '../utils/attemptResultSnapshot.js';
 
 function dedupeQuestionIds(ids) {
   const seen = new Set();
@@ -228,67 +140,6 @@ async function buildRecoverPayloadForSubmitConflict(userId, testId) {
   };
 }
 
-function hasImmutableSnapshot(attempt) {
-  return (
-    attempt?.resultSnapshot?.version === 1 &&
-    Array.isArray(attempt.resultSnapshot.items) &&
-    attempt.resultSnapshot.items.length > 0
-  );
-}
-
-/**
- * Build frozen evaluation snapshot at submit time (immutable attempt record).
- * Never read live Question docs for historical review after this is stored.
- */
-function buildResultSnapshotAtSubmit(attemptQuestionIds, qMap, answerByQ, weakTopics) {
-  const items = [];
-  const wrongQuestionIds = [];
-
-  for (const qid of attemptQuestionIds) {
-    const q = qMap.get(qid.toString());
-    if (!q) continue;
-
-    const ans = answerByQ.get(qid.toString());
-    const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
-    const maxIdx = optionsLen - 1;
-    const selectedSet = (ans?.selectedOptionIndexes || []).filter(
-      (i) => Number.isInteger(i) && i >= 0 && i <= maxIdx
-    );
-    const correctSet = getCorrectIndexSet(q);
-    const isCorrect = correctSet.length > 0 && indexSetsEqual(selectedSet, correctSet);
-
-    if (!isCorrect && selectedSet.length > 0) {
-      wrongQuestionIds.push(q._id);
-    }
-
-    items.push({
-      questionId: q._id,
-      questionText: q.questionText ?? '',
-      options: Array.isArray(q.options) ? [...q.options] : [],
-      questionType: q.questionType || 'single_correct',
-      questionImage: q.questionImage ?? '',
-      explanation: q.explanation ?? '',
-      topicId: q.topicId ?? null,
-      subjectId: q.subjectId ?? null,
-      postIds: Array.isArray(q.postIds) ? [...q.postIds] : [],
-      correctAnswers: correctSet,
-      correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
-      selectedOptionIndexes: selectedSet,
-      isCorrect,
-    });
-  }
-
-  return {
-    version: 1,
-    items,
-    weakTopics: (Array.isArray(weakTopics) ? weakTopics : []).map((w) => ({
-      topicId: w.topicId,
-      mistakeCount: w.mistakeCount ?? 1,
-    })),
-    wrongQuestionIds,
-  };
-}
-
 function questionDocFromSnapshotItem(item) {
   return {
     _id: item.questionId,
@@ -305,14 +156,10 @@ function questionDocFromSnapshotItem(item) {
   };
 }
 
-function isRetryableSnapshotQuestion(item) {
-  const opts = Array.isArray(item?.options) ? item.options : [];
-  return opts.length > 0;
-}
-
 /**
  * Historical Result payload from immutable `resultSnapshot` only.
  * Does not load live Test or Question correctness.
+ * Retry lists are derived from frozen snapshot items (not legacy wrongQuestionIds).
  */
 async function buildHistoricalPayloadFromImmutableSnapshot(attempt) {
   const snap = attempt.resultSnapshot;
@@ -322,19 +169,11 @@ async function buildHistoricalPayloadFromImmutableSnapshot(attempt) {
   const questions = [];
   const userAnswers = {};
   const correctAnswers = [];
-  const wrongQuestionIds = [];
-  const wrongQuestions = [];
-  let retrySkippedUnavailableCount = 0;
-
-  const wrongSet = new Set((snap.wrongQuestionIds || []).map((id) => id.toString()));
 
   for (const qid of attempt.questionIds || []) {
     const sid = qid.toString();
     const item = itemById.get(sid);
-    if (!item) {
-      if (wrongSet.has(sid)) retrySkippedUnavailableCount += 1;
-      continue;
-    }
+    if (!item) continue;
 
     questions.push(questionDocFromSnapshotItem(item));
 
@@ -348,16 +187,19 @@ async function buildHistoricalPayloadFromImmutableSnapshot(attempt) {
       correctAnswers: Array.isArray(item.correctAnswers) ? item.correctAnswers : [],
       questionType: item.questionType || 'single_correct',
     });
-
-    if (wrongSet.has(sid)) {
-      wrongQuestionIds.push(sid);
-      if (isRetryableSnapshotQuestion(item)) {
-        wrongQuestions.push(questionDocFromSnapshotItem(item));
-      } else {
-        retrySkippedUnavailableCount += 1;
-      }
-    }
   }
+
+  const correctByQid = new Map(correctAnswers.map((c) => [String(c.questionId), c]));
+  const { wrongQuestionIds, wrongQuestions, retrySkippedUnavailableCount } =
+    computeRetryListsFromResult({
+      questionsOrdered: questions,
+      userAnswersByQid: userAnswers,
+      getCorrectSetForQuestion: (qid) => {
+        const centry = correctByQid.get(qid);
+        const arr = Array.isArray(centry?.correctAnswers) ? centry.correctAnswers : [];
+        return arr.map(Number).filter((n) => Number.isInteger(n)).sort((a, b) => a - b);
+      },
+    });
 
   const weakTopics = (snap.weakTopics || []).map((w) => ({
     topicId: w.topicId,
@@ -400,6 +242,7 @@ async function buildHistoricalPayloadFromImmutableSnapshot(attempt) {
  * - Test deleted/inactive: review still loads; banner when test gone; retry uses snapshot only.
  * - Rapid Profile taps between attempts: no stale answers (client abort + gen counter).
  * - Retry wrong from historical attempt #1 vs #4: disjoint wrong sets, no shared cache.
+ * - Blank submission → retry includes all questions; partial attempt → incorrect + skipped.
  */
 
 /**
@@ -477,12 +320,9 @@ async function buildHistoricalResultViewPayload(attempt) {
 
     const ans = answerByQ.get(qid.toString());
     const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
-    const maxIdx = optionsLen - 1;
-    const selectedSet = (ans?.selectedOptionIndexes || []).filter(
-      (i) => Number.isInteger(i) && i >= 0 && i <= maxIdx
-    );
+    const selectedSet = filterSelectedOptionIndexes(ans?.selectedOptionIndexes, optionsLen);
 
-    const isCorrect = correctSet.length > 0 && indexSetsEqual(selectedSet, correctSet);
+    const isCorrect = computeIsCorrect(correctSet, selectedSet);
     if (!isCorrect && selectedSet.length > 0 && q.topicId) {
       const tid = q.topicId.toString();
       topicMistakes.set(tid, (topicMistakes.get(tid) || 0) + 1);
@@ -506,26 +346,16 @@ async function buildHistoricalResultViewPayload(attempt) {
   const correctByQid = new Map(
     correctAnswers.map((c) => [String(c.questionId), c])
   );
-  const wrongQuestionIds = [];
-  const wrongQuestions = [];
-  let retrySkippedUnavailableCount = 0;
-
-  for (const q of questionsOrdered) {
-    const qid = String(q._id);
-    const userArr = userAnswers[qid];
-    if (!Array.isArray(userArr) || userArr.length === 0) continue;
-    const centry = correctByQid.get(qid);
-    const correctArr = Array.isArray(centry?.correctAnswers) ? centry.correctAnswers : [];
-    if (correctArr.length === 0) continue;
-    if (indexSetsEqual(userArr, correctArr)) continue;
-    wrongQuestionIds.push(qid);
-    const opts = Array.isArray(q.options) ? q.options : [];
-    if (opts.length > 0) {
-      wrongQuestions.push(q);
-    } else {
-      retrySkippedUnavailableCount += 1;
-    }
-  }
+  const { wrongQuestionIds, wrongQuestions, retrySkippedUnavailableCount } =
+    computeRetryListsFromResult({
+      questionsOrdered,
+      userAnswersByQid: userAnswers,
+      getCorrectSetForQuestion: (qid) => {
+        const centry = correctByQid.get(qid);
+        const arr = Array.isArray(centry?.correctAnswers) ? centry.correctAnswers : [];
+        return arr.map(Number).filter((n) => Number.isInteger(n)).sort((a, b) => a - b);
+      },
+    });
 
   return {
     attemptId: String(attempt._id),

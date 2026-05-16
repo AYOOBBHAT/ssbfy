@@ -22,6 +22,10 @@ import {
   openPdfInAppBrowser,
 } from '../services/pdfService';
 import { getApiErrorCode, getApiErrorMessage, isRequestCancelled } from '../services/api';
+import {
+  computeRetryListsFromResult,
+  isQuestionDocRetryable as isQuestionRetryable,
+} from '../utils/retryWorthy';
 import logger from '../utils/logger';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
@@ -33,6 +37,7 @@ import { colors } from '../theme/colors';
  * - Admin changed answers after submit → review colors unchanged when immutableAttemptSnapshot true.
  * - Deleted question → banner skip count; retry skips unavailable rows.
  * - Rapid attempt switching → loading gate + abort; no flash of prior attempt.
+ * - Blank submission → retry all questions; partial → incorrect + unanswered in retry.
  */
 
 // Cap for both recommendation lists — keeps the Result screen readable
@@ -117,12 +122,6 @@ function formatIndexList(indexes, options) {
       return `${String.fromCharCode(65 + i)}. ${options[i] ?? ''}`;
     })
     .join('  •  ');
-}
-
-/** Retry requires non-empty options (deleted/placeholder questions are skipped). */
-function isQuestionRetryable(q) {
-  const opts = Array.isArray(q?.options) ? q.options : [];
-  return opts.length > 0;
 }
 
 function partitionRetryableQuestions(questions) {
@@ -252,8 +251,6 @@ export default function ResultScreen() {
     historicalAttemptMode = false,
     immutableAttemptSnapshot = false,
     historicalAttemptId = null,
-    wrongQuestions: serverWrongQuestions = null,
-    wrongQuestionIds: serverWrongQuestionIds = null,
     retrySkippedUnavailableCount = 0,
     testAvailable = true,
     testTitle: _testTitle = null,
@@ -362,34 +359,19 @@ export default function ResultScreen() {
     );
   }
 
-  const wrongQuestions = useMemo(() => {
-    if (isHistoricalAttempt && Array.isArray(serverWrongQuestions)) {
-      return serverWrongQuestions;
-    }
-    return (Array.isArray(questions) ? questions : []).filter((q) => {
-      const qid = String(q?._id ?? '');
-      const userArr = toIndexArray(userAnswers ? userAnswers[qid] : undefined);
-      const correctArr = getCorrectSetFor(qid, q);
-      if (userArr.length === 0) return false;
-      if (correctArr.length === 0) return false;
-      return !indexSetsEqual(userArr, correctArr);
+  const retryLists = useMemo(() => {
+    const qs = Array.isArray(questions) ? questions : [];
+    return computeRetryListsFromResult({
+      questionsOrdered: qs,
+      userAnswers: userAnswers && typeof userAnswers === 'object' ? userAnswers : {},
+      getCorrectSetFor,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    isHistoricalAttempt,
-    serverWrongQuestions,
-    questions,
-    userAnswers,
-    correctAnswerMap,
-    immutableAttemptSnapshot,
-  ]);
+  }, [questions, userAnswers, correctAnswerMap, immutableAttemptSnapshot, isHistoricalAttempt]);
 
-  const wrongQuestionIds = useMemo(() => {
-    if (isHistoricalAttempt && Array.isArray(serverWrongQuestionIds)) {
-      return serverWrongQuestionIds.map((id) => String(id));
-    }
-    return wrongQuestions.map((q) => String(q._id));
-  }, [isHistoricalAttempt, serverWrongQuestionIds, wrongQuestions]);
+  const wrongQuestions = retryLists.wrongQuestions;
+  const wrongQuestionIds = retryLists.wrongQuestionIds;
+  const retrySkippedFromSelection = retryLists.retrySkippedUnavailableCount;
 
   const mockAttemptStats = useMemo(() => {
     if (isRetry) return null;
@@ -467,14 +449,12 @@ export default function ResultScreen() {
 
   const retryWrongQuestions = useMemo(() => {
     if (!isRetry) return [];
-    return (Array.isArray(retryQuestions) ? retryQuestions : []).filter((q) => {
-      const qid = String(q?._id ?? '');
-      const userArr = toIndexArray(retryAnswers ? retryAnswers[qid] : undefined);
-      const correctArr = getCorrectSetFor(qid, q);
-      if (userArr.length === 0) return false;
-      if (correctArr.length === 0) return false;
-      return !indexSetsEqual(userArr, correctArr);
+    const lists = computeRetryListsFromResult({
+      questionsOrdered: Array.isArray(retryQuestions) ? retryQuestions : [],
+      userAnswers: retryAnswers && typeof retryAnswers === 'object' ? retryAnswers : {},
+      getCorrectSetFor,
     });
+    return lists.wrongQuestions;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRetry, retryQuestions, retryAnswers, correctAnswerMap]);
 
@@ -487,7 +467,9 @@ export default function ResultScreen() {
     if (!wrongQuestionIds.length) return;
     const { retryable, skipped: skippedLocal } = partitionRetryableQuestions(wrongQuestions);
     const skippedTotal =
-      (Number(retrySkippedUnavailableCount) || 0) + skippedLocal;
+      (Number(retrySkippedUnavailableCount) || 0) +
+      retrySkippedFromSelection +
+      skippedLocal;
     if (!retryable.length) {
       Alert.alert(
         'Cannot retry',
