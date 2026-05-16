@@ -87,6 +87,10 @@ export default function ProfileScreen({ navigation }) {
         loading={analyticsLoading}
         error={analyticsError}
         onStart={goToTests}
+        onOpenMockAttempt={(attemptId) => {
+          const rootNav = navigation.getParent()?.getParent();
+          rootNav?.navigate('Result', { attemptId });
+        }}
       />
 
       <Text style={styles.sectionLabel}>Account</Text>
@@ -351,7 +355,7 @@ function visualForStatus(status) {
   }
 }
 
-function ProgressSection({ analytics, loading, error, onStart }) {
+function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt }) {
   if (loading && !analytics) {
     return (
       <View style={[styles.progressCard, styles.progressLoading]}>
@@ -482,7 +486,18 @@ function ProgressSection({ analytics, loading, error, onStart }) {
                 ? ` • ${formatMmSs(Number(att.timeTaken))}`
                 : '';
             return (
-              <View key={att?.id || `${idx}`} style={styles.recentAttemptRow}>
+              <Pressable
+                key={att?.id || `${idx}`}
+                onPress={() => {
+                  if (att?.id) onOpenMockAttempt?.(att.id);
+                }}
+                disabled={!att?.id || !onOpenMockAttempt}
+                style={({ pressed }) => [
+                  styles.recentAttemptRow,
+                  pressed && styles.pressed,
+                  (!att?.id || !onOpenMockAttempt) && styles.recentAttemptRowDisabled,
+                ]}
+              >
                 <View style={styles.recentAttemptLeft}>
                   <Text style={styles.recentAttemptName} numberOfLines={1}>
                     {title}
@@ -494,8 +509,9 @@ function ProgressSection({ analytics, loading, error, onStart }) {
                 </View>
                 <View style={styles.recentAttemptRight}>
                   <Text style={styles.recentAttemptScore}>{accuracy}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -829,10 +845,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
   },
+  recentAttemptRowDisabled: {
+    opacity: 0.55,
+  },
   recentAttemptLeft: { flex: 1, paddingRight: 12, minWidth: 0 },
   recentAttemptName: { fontSize: 14, fontWeight: '700', color: colors.text },
   recentAttemptMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
-  recentAttemptRight: { alignItems: 'flex-end' },
+  recentAttemptRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   recentAttemptScore: { fontSize: 14, fontWeight: '800', color: colors.text },
 
   sectionLabel: {

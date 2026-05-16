@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   ScrollView,
   FlatList,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
+import { getAttemptResult } from '../services/resultService';
 import { getTopics } from '../services/topicService';
 import { getNotes, previewOf } from '../services/noteService';
 import {
@@ -19,10 +21,19 @@ import {
   getPdfOpenUserMessage,
   openPdfInAppBrowser,
 } from '../services/pdfService';
-import { getApiErrorMessage, isRequestCancelled } from '../services/api';
+import { getApiErrorCode, getApiErrorMessage, isRequestCancelled } from '../services/api';
 import logger from '../utils/logger';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
+
+/*
+ * Manual QA — historical attempt integrity (mobile):
+ * - Profile: tap Attempt #1 vs #4 of same test → distinct scores/answers (check resultScreenKey).
+ * - Retry wrong from historical view → only that attempt's wrong set; no live test fetch.
+ * - Admin changed answers after submit → review colors unchanged when immutableAttemptSnapshot true.
+ * - Deleted question → banner skip count; retry skips unavailable rows.
+ * - Rapid attempt switching → loading gate + abort; no flash of prior attempt.
+ */
 
 // Cap for both recommendation lists — keeps the Result screen readable
 // when the user has many weak topics / a large PDF catalog.
@@ -108,10 +119,116 @@ function formatIndexList(indexes, options) {
     .join('  •  ');
 }
 
+/** Retry requires non-empty options (deleted/placeholder questions are skipped). */
+function isQuestionRetryable(q) {
+  const opts = Array.isArray(q?.options) ? q.options : [];
+  return opts.length > 0;
+}
+
+function partitionRetryableQuestions(questions) {
+  const retryable = [];
+  let skipped = 0;
+  for (const q of questions) {
+    if (isQuestionRetryable(q)) retryable.push(q);
+    else skipped += 1;
+  }
+  return { retryable, skipped };
+}
+
+/**
+ * Maps GET /results/attempt/:id into ResultScreen params.
+ * Historical mode: wrong sets + correctness come from the server snapshot only.
+ */
+function mapAttemptResultToNavExtras(api) {
+  if (!api || typeof api !== 'object') return null;
+  return {
+    testId: api.testId,
+    score: api.score,
+    accuracy: api.accuracy,
+    timeTaken: api.timeTaken,
+    weakTopics: Array.isArray(api.weakTopics) ? api.weakTopics : [],
+    totalQuestions: api.totalQuestions,
+    attemptedQuestions: api.attemptedQuestions,
+    unansweredQuestions: api.unansweredQuestions,
+    skippedQuestions: api.skippedQuestions,
+    markedForReviewCount: api.markedForReviewCount,
+    questions: Array.isArray(api.questions) ? api.questions : [],
+    userAnswers: api.userAnswers && typeof api.userAnswers === 'object' ? api.userAnswers : {},
+    correctAnswers: Array.isArray(api.correctAnswers) ? api.correctAnswers : [],
+    wrongQuestionIds: Array.isArray(api.wrongQuestionIds) ? api.wrongQuestionIds : [],
+    wrongQuestions: Array.isArray(api.wrongQuestions) ? api.wrongQuestions : [],
+    immutableAttemptSnapshot: api.immutableAttemptSnapshot === true,
+    retrySkippedUnavailableCount: Number(api.retrySkippedUnavailableCount) || 0,
+    testAvailable: api.testAvailable !== false,
+    testTitle: api.testTitle ?? null,
+    viewingHistoricalAttempt: true,
+    historicalAttemptMode: true,
+    historicalAttemptId: api.attemptId != null ? String(api.attemptId) : null,
+    attemptNumber: api.attemptNumber ?? null,
+  };
+}
+
 export default function ResultScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const params = route.params;
+  const routeAttemptId = useMemo(() => {
+    const p = route.params;
+    if (!p || typeof p !== 'object' || p.attemptId == null) return null;
+    const s = String(p.attemptId).trim();
+    return s || null;
+  }, [route.params]);
+
+  const loadGenRef = useRef(0);
+  const [historicalExtras, setHistoricalExtras] = useState(null);
+  const [histLoading, setHistLoading] = useState(() => !!routeAttemptId);
+  const [histError, setHistError] = useState(null);
+  const [retryTick, setRetryTick] = useState(0);
+
+  useEffect(() => {
+    if (!routeAttemptId) {
+      setHistLoading(false);
+      setHistoricalExtras(null);
+      setHistError(null);
+      return undefined;
+    }
+    const gen = ++loadGenRef.current;
+    const ac = new AbortController();
+    setHistLoading(true);
+    setHistError(null);
+    setHistoricalExtras(null);
+    (async () => {
+      try {
+        const raw = await getAttemptResult(routeAttemptId, { signal: ac.signal });
+        if (gen !== loadGenRef.current) return;
+        const mapped = mapAttemptResultToNavExtras(raw);
+        if (!mapped?.testId) {
+          setHistError(new Error('Invalid result payload'));
+          setHistoricalExtras(null);
+          return;
+        }
+        setHistoricalExtras(mapped);
+        setHistError(null);
+      } catch (e) {
+        if (isRequestCancelled(e)) return;
+        if (gen !== loadGenRef.current) return;
+        setHistoricalExtras(null);
+        setHistError(e);
+      } finally {
+        if (gen === loadGenRef.current) setHistLoading(false);
+      }
+    })();
+    return () => {
+      ac.abort();
+    };
+  }, [routeAttemptId, retryTick]);
+
+  const params = useMemo(() => {
+    const base = route.params && typeof route.params === 'object' ? route.params : {};
+    if (!routeAttemptId || !historicalExtras) return base;
+    const { attemptId: _omit, ...rest } = base;
+    return { ...rest, ...historicalExtras };
+  }, [route.params, routeAttemptId, historicalExtras]);
+
   const hasParams = !!params && typeof params === 'object';
   const {
     testId,
@@ -131,7 +248,17 @@ export default function ResultScreen() {
     retryAnswers = {},
     retryQuestions = [],
     recoveredSubmit = false,
+    viewingHistoricalAttempt = false,
+    historicalAttemptMode = false,
+    immutableAttemptSnapshot = false,
+    historicalAttemptId = null,
+    wrongQuestions: serverWrongQuestions = null,
+    wrongQuestionIds: serverWrongQuestionIds = null,
+    retrySkippedUnavailableCount = 0,
+    testAvailable = true,
+    testTitle: _testTitle = null,
   } = params || {};
+  const isHistoricalAttempt = viewingHistoricalAttempt || historicalAttemptMode;
   const isRetry = !!retry;
   const isMock = !!testId && !isRetry;
 
@@ -142,7 +269,7 @@ export default function ResultScreen() {
   useEffect(() => {
     const ac = new AbortController();
     const loadAttempts = async () => {
-      if (!isMock) {
+      if (!isMock || viewingHistoricalAttempt) {
         setAttemptsLoading(false);
         return;
       }
@@ -167,7 +294,7 @@ export default function ResultScreen() {
     return () => {
       ac.abort();
     };
-  }, [isMock, testId]);
+  }, [isMock, testId, viewingHistoricalAttempt]);
 
   const bestAttempt = useMemo(() => {
     if (!Array.isArray(attempts) || attempts.length === 0) return null;
@@ -223,6 +350,10 @@ export default function ResultScreen() {
 
   function getCorrectSetFor(questionId, questionDoc) {
     const fromMap = correctAnswerMap.get(String(questionId));
+    // Historical / immutable snapshot: never fall back to live Question docs.
+    if (isHistoricalAttempt || immutableAttemptSnapshot) {
+      return Array.isArray(fromMap) ? fromMap : [];
+    }
     if (Array.isArray(fromMap) && fromMap.length > 0) return fromMap;
     return toIndexArray(
       Array.isArray(questionDoc?.correctAnswers) && questionDoc.correctAnswers.length > 0
@@ -232,23 +363,33 @@ export default function ResultScreen() {
   }
 
   const wrongQuestions = useMemo(() => {
+    if (isHistoricalAttempt && Array.isArray(serverWrongQuestions)) {
+      return serverWrongQuestions;
+    }
     return (Array.isArray(questions) ? questions : []).filter((q) => {
       const qid = String(q?._id ?? '');
       const userArr = toIndexArray(userAnswers ? userAnswers[qid] : undefined);
       const correctArr = getCorrectSetFor(qid, q);
-      // Treat unattempted as not-eligible-for-retry so the retry batch only
-      // contains questions where the user actually tried and got it wrong.
       if (userArr.length === 0) return false;
       if (correctArr.length === 0) return false;
       return !indexSetsEqual(userArr, correctArr);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, userAnswers, correctAnswerMap]);
+  }, [
+    isHistoricalAttempt,
+    serverWrongQuestions,
+    questions,
+    userAnswers,
+    correctAnswerMap,
+    immutableAttemptSnapshot,
+  ]);
 
-  const wrongQuestionIds = useMemo(
-    () => wrongQuestions.map((q) => String(q._id)),
-    [wrongQuestions]
-  );
+  const wrongQuestionIds = useMemo(() => {
+    if (isHistoricalAttempt && Array.isArray(serverWrongQuestionIds)) {
+      return serverWrongQuestionIds.map((id) => String(id));
+    }
+    return wrongQuestions.map((q) => String(q._id));
+  }, [isHistoricalAttempt, serverWrongQuestionIds, wrongQuestions]);
 
   const mockAttemptStats = useMemo(() => {
     if (isRetry) return null;
@@ -344,10 +485,32 @@ export default function ResultScreen() {
 
   const handleRetryWrong = () => {
     if (!wrongQuestionIds.length) return;
+    const { retryable, skipped: skippedLocal } = partitionRetryableQuestions(wrongQuestions);
+    const skippedTotal =
+      (Number(retrySkippedUnavailableCount) || 0) + skippedLocal;
+    if (!retryable.length) {
+      Alert.alert(
+        'Cannot retry',
+        skippedTotal > 0
+          ? `${skippedTotal} unavailable question${skippedTotal === 1 ? '' : 's'} could not be retried.`
+          : 'No retryable questions from this attempt.'
+      );
+      return;
+    }
+    if (skippedTotal > 0) {
+      Alert.alert(
+        'Retry started',
+        `${skippedTotal} unavailable question${skippedTotal === 1 ? '' : 's'} ${skippedTotal === 1 ? 'was' : 'were'} skipped.`
+      );
+    }
     navigation.navigate('Test', {
       mode: 'retry',
-      questionIds: wrongQuestionIds,
-      questions: wrongQuestions,
+      questionIds: retryable.map((q) => String(q._id)),
+      questions: retryable,
+      historicalAttemptMode: isHistoricalAttempt,
+      sourceAttemptId: historicalAttemptId || undefined,
+      // Do not pass testId in historical mode — retry must not touch live test APIs.
+      ...(!isHistoricalAttempt && testId ? { testId } : {}),
     });
   };
 
@@ -619,7 +782,22 @@ export default function ResultScreen() {
         </View>
       ) : null}
 
-      {isMock ? (
+      {isHistoricalAttempt && testAvailable === false ? (
+        <View style={styles.unavailableBanner}>
+          <Text style={styles.unavailableBannerText}>This test is no longer available.</Text>
+        </View>
+      ) : null}
+
+      {isHistoricalAttempt && retrySkippedUnavailableCount > 0 ? (
+        <View style={styles.unavailableBanner}>
+          <Text style={styles.unavailableBannerText}>
+            {retrySkippedUnavailableCount} unavailable question
+            {retrySkippedUnavailableCount === 1 ? '' : 's'} cannot be retried from this attempt.
+          </Text>
+        </View>
+      ) : null}
+
+      {isMock && !viewingHistoricalAttempt ? (
         <View style={styles.attemptsBlock}>
           <View style={styles.attemptsHeaderRow}>
             <Text style={styles.sectionTitle}>Previous Attempts</Text>
@@ -957,17 +1135,53 @@ export default function ResultScreen() {
           </Pressable>
         ) : null}
         <Pressable
-          onPress={() => navigation.navigate('Main', { screen: 'Home' })}
+          onPress={() =>
+            viewingHistoricalAttempt
+              ? navigation.navigate('Main', { screen: 'Profile' })
+              : navigation.navigate('Main', { screen: 'Home' })
+          }
           style={({ pressed }) => [
             styles.secondaryBtn,
             pressed && styles.btnPressed,
           ]}
         >
-          <Text style={styles.secondaryBtnText}>Back to Home</Text>
+          <Text style={styles.secondaryBtnText}>
+            {viewingHistoricalAttempt ? 'Back to Profile' : 'Back to Home'}
+          </Text>
         </Pressable>
       </View>
     );
   };
+
+  if (routeAttemptId) {
+    if (histLoading) {
+      return (
+        <View style={styles.histGate}>
+          <ActivityIndicator size="large" color={PRIMARY} />
+          <Text style={styles.histGateText}>Loading results…</Text>
+        </View>
+      );
+    }
+    if (histError || !historicalExtras) {
+      const code = getApiErrorCode(histError);
+      const msg =
+        code === 'ATTEMPT_RESULTS_PENDING'
+          ? 'Results are still being prepared.'
+          : getApiErrorMessage(histError) || 'Could not load results.';
+      return (
+        <View style={styles.histGate}>
+          <Text style={styles.histGateTitle}>Could not open results</Text>
+          <Text style={styles.histGateText}>{msg}</Text>
+          <Pressable
+            onPress={() => setRetryTick((t) => t + 1)}
+            style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed, styles.histRetryBtn]}
+          >
+            <Text style={styles.primaryBtnText}>Try again</Text>
+          </Pressable>
+        </View>
+      );
+    }
+  }
 
   if (!hasParams) {
     return (
@@ -979,8 +1193,11 @@ export default function ResultScreen() {
     );
   }
 
+  const resultScreenKey = `result-${historicalAttemptId || testId || 'session'}-${isRetry ? 'retry' : 'mock'}`;
+
   return (
     <ScrollView
+      key={resultScreenKey}
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
@@ -1027,6 +1244,48 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+
+  unavailableBanner: {
+    backgroundColor: colors.warningSoft,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 14,
+  },
+  unavailableBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+  },
+
+  histGate: {
+    flex: 1,
+    backgroundColor: BG,
+    padding: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 14,
+  },
+  histGateTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: TEXT,
+    textAlign: 'center',
+  },
+  histGateText: {
+    fontSize: 14,
+    color: MUTED,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  histRetryBtn: {
+    marginTop: 8,
+    minWidth: 200,
+    alignSelf: 'center',
   },
 
   statsBlock: {

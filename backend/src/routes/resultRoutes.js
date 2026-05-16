@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', resultController.listMine);
+router.get('/attempt/:attemptId', resultController.getAttemptResult);
 router.get('/:id', resultController.getById);
 
 export default router;

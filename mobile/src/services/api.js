@@ -109,6 +109,12 @@ api.interceptors.response.use(
 export { API_BASE_URL };
 export default api;
 
+/** Backend `AppError.meta.code` when present (e.g. ATTEMPT_RESULTS_PENDING). */
+export function getApiErrorCode(error) {
+  const c = error?.response?.data?.code;
+  return typeof c === 'string' && c.trim() ? c : null;
+}
+
 /** Safe user-facing copy — never echoes tokens or stack traces. */
 export function getApiErrorMessage(error) {
   if (isRequestCancelled(error)) {

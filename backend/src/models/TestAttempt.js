@@ -73,6 +73,54 @@ answerItemSchema.pre('validate', function syncAnswerForms(next) {
   next();
 });
 
+/**
+ * Immutable evaluation + display snapshot written once at submit.
+ * Historical review/retry MUST read this — never re-derive correctness from
+ * live Question docs (admin edits must not change past attempts).
+ */
+const resultSnapshotQuestionSchema = new mongoose.Schema(
+  {
+    questionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Question',
+      required: true,
+    },
+    questionText: { type: String, default: '' },
+    options: { type: [String], default: [] },
+    questionType: { type: String, default: 'single_correct' },
+    questionImage: { type: String, default: '' },
+    explanation: { type: String, default: '' },
+    topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', default: null },
+    subjectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Subject', default: null },
+    postIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
+    correctAnswers: { type: [Number], default: [] },
+    correctAnswerIndex: { type: Number, default: null },
+    selectedOptionIndexes: { type: [Number], default: [] },
+    isCorrect: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const resultSnapshotWeakTopicSchema = new mongoose.Schema(
+  {
+    topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', required: true },
+    mistakeCount: { type: Number, default: 1, min: 1 },
+  },
+  { _id: false }
+);
+
+const resultSnapshotSchema = new mongoose.Schema(
+  {
+    version: { type: Number, default: 1 },
+    /** Frozen question rows in attempt.questionIds order */
+    items: { type: [resultSnapshotQuestionSchema], default: [] },
+    weakTopics: { type: [resultSnapshotWeakTopicSchema], default: [] },
+    /** Subset of questionIds (attempted + wrong), stored in attempt order */
+    wrongQuestionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Question' }],
+  },
+  { _id: false }
+);
+
 const testAttemptSchema = new mongoose.Schema(
   {
     userId: {
@@ -99,6 +147,8 @@ const testAttemptSchema = new mongoose.Schema(
     score: { type: Number, default: null },
     accuracy: { type: Number, default: null },
     timeTaken: { type: Number, default: null },
+    /** Populated on submit; source of truth for historical review/retry */
+    resultSnapshot: { type: resultSnapshotSchema, default: null },
   },
   { timestamps: true }
 );

@@ -229,6 +229,7 @@ export const testAttemptRepository = {
           score: payload.score,
           accuracy: payload.accuracy,
           timeTaken: payload.timeTaken,
+          ...(payload.resultSnapshot != null ? { resultSnapshot: payload.resultSnapshot } : {}),
         },
       },
       { new: true, runValidators: true }

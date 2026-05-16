@@ -198,6 +198,26 @@ async function buildRecoverPayloadForSubmitConflict(userId, testId) {
       mistakeCount: count,
     }));
 
+  if (hasImmutableSnapshot(latest)) {
+    const snap = latest.resultSnapshot;
+    return {
+      attempt: latest,
+      score: latest.score ?? 0,
+      accuracy: latest.accuracy ?? 0,
+      timeTaken: latest.timeTaken ?? 0,
+      weakTopics: (snap.weakTopics || []).map((w) => ({
+        topicId: w.topicId,
+        mistakeCount: w.mistakeCount ?? 1,
+      })),
+      correctAnswers: (snap.items || []).map((item) => ({
+        questionId: item.questionId,
+        correctAnswerIndex: item.correctAnswerIndex ?? null,
+        correctAnswers: Array.isArray(item.correctAnswers) ? item.correctAnswers : [],
+        questionType: item.questionType || 'single_correct',
+      })),
+    };
+  }
+
   return {
     attempt: latest,
     score: latest.score ?? 0,
@@ -205,6 +225,330 @@ async function buildRecoverPayloadForSubmitConflict(userId, testId) {
     timeTaken: latest.timeTaken ?? 0,
     weakTopics,
     correctAnswers,
+  };
+}
+
+function hasImmutableSnapshot(attempt) {
+  return (
+    attempt?.resultSnapshot?.version === 1 &&
+    Array.isArray(attempt.resultSnapshot.items) &&
+    attempt.resultSnapshot.items.length > 0
+  );
+}
+
+/**
+ * Build frozen evaluation snapshot at submit time (immutable attempt record).
+ * Never read live Question docs for historical review after this is stored.
+ */
+function buildResultSnapshotAtSubmit(attemptQuestionIds, qMap, answerByQ, weakTopics) {
+  const items = [];
+  const wrongQuestionIds = [];
+
+  for (const qid of attemptQuestionIds) {
+    const q = qMap.get(qid.toString());
+    if (!q) continue;
+
+    const ans = answerByQ.get(qid.toString());
+    const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
+    const maxIdx = optionsLen - 1;
+    const selectedSet = (ans?.selectedOptionIndexes || []).filter(
+      (i) => Number.isInteger(i) && i >= 0 && i <= maxIdx
+    );
+    const correctSet = getCorrectIndexSet(q);
+    const isCorrect = correctSet.length > 0 && indexSetsEqual(selectedSet, correctSet);
+
+    if (!isCorrect && selectedSet.length > 0) {
+      wrongQuestionIds.push(q._id);
+    }
+
+    items.push({
+      questionId: q._id,
+      questionText: q.questionText ?? '',
+      options: Array.isArray(q.options) ? [...q.options] : [],
+      questionType: q.questionType || 'single_correct',
+      questionImage: q.questionImage ?? '',
+      explanation: q.explanation ?? '',
+      topicId: q.topicId ?? null,
+      subjectId: q.subjectId ?? null,
+      postIds: Array.isArray(q.postIds) ? [...q.postIds] : [],
+      correctAnswers: correctSet,
+      correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
+      selectedOptionIndexes: selectedSet,
+      isCorrect,
+    });
+  }
+
+  return {
+    version: 1,
+    items,
+    weakTopics: (Array.isArray(weakTopics) ? weakTopics : []).map((w) => ({
+      topicId: w.topicId,
+      mistakeCount: w.mistakeCount ?? 1,
+    })),
+    wrongQuestionIds,
+  };
+}
+
+function questionDocFromSnapshotItem(item) {
+  return {
+    _id: item.questionId,
+    questionText: item.questionText ?? '',
+    options: Array.isArray(item.options) ? item.options : [],
+    questionType: item.questionType || 'single_correct',
+    questionImage: item.questionImage ?? '',
+    explanation: item.explanation ?? '',
+    topicId: item.topicId ?? null,
+    subjectId: item.subjectId ?? null,
+    postIds: Array.isArray(item.postIds) ? item.postIds : [],
+    correctAnswers: Array.isArray(item.correctAnswers) ? item.correctAnswers : [],
+    correctAnswerIndex: item.correctAnswerIndex ?? null,
+  };
+}
+
+function isRetryableSnapshotQuestion(item) {
+  const opts = Array.isArray(item?.options) ? item.options : [];
+  return opts.length > 0;
+}
+
+/**
+ * Historical Result payload from immutable `resultSnapshot` only.
+ * Does not load live Test or Question correctness.
+ */
+async function buildHistoricalPayloadFromImmutableSnapshot(attempt) {
+  const snap = attempt.resultSnapshot;
+  const test = await testRepository.findById(attempt.testId);
+  const itemById = new Map(snap.items.map((it) => [it.questionId.toString(), it]));
+
+  const questions = [];
+  const userAnswers = {};
+  const correctAnswers = [];
+  const wrongQuestionIds = [];
+  const wrongQuestions = [];
+  let retrySkippedUnavailableCount = 0;
+
+  const wrongSet = new Set((snap.wrongQuestionIds || []).map((id) => id.toString()));
+
+  for (const qid of attempt.questionIds || []) {
+    const sid = qid.toString();
+    const item = itemById.get(sid);
+    if (!item) {
+      if (wrongSet.has(sid)) retrySkippedUnavailableCount += 1;
+      continue;
+    }
+
+    questions.push(questionDocFromSnapshotItem(item));
+
+    if (Array.isArray(item.selectedOptionIndexes) && item.selectedOptionIndexes.length > 0) {
+      userAnswers[sid] = [...item.selectedOptionIndexes];
+    }
+
+    correctAnswers.push({
+      questionId: item.questionId,
+      correctAnswerIndex: item.correctAnswerIndex ?? null,
+      correctAnswers: Array.isArray(item.correctAnswers) ? item.correctAnswers : [],
+      questionType: item.questionType || 'single_correct',
+    });
+
+    if (wrongSet.has(sid)) {
+      wrongQuestionIds.push(sid);
+      if (isRetryableSnapshotQuestion(item)) {
+        wrongQuestions.push(questionDocFromSnapshotItem(item));
+      } else {
+        retrySkippedUnavailableCount += 1;
+      }
+    }
+  }
+
+  const weakTopics = (snap.weakTopics || []).map((w) => ({
+    topicId: w.topicId,
+    mistakeCount: w.mistakeCount ?? 1,
+  }));
+
+  const totalQ = (attempt.questionIds || []).length;
+  const attemptedQs = Object.keys(userAnswers).length;
+
+  return {
+    attemptId: String(attempt._id),
+    attemptNumber: attempt.attemptNumber ?? null,
+    testId: String(attempt.testId),
+    testTitle: test?.title ?? null,
+    testAvailable: !!test,
+    immutableAttemptSnapshot: true,
+    score: attempt.score ?? 0,
+    accuracy: attempt.accuracy ?? 0,
+    timeTaken: attempt.timeTaken ?? 0,
+    weakTopics,
+    correctAnswers,
+    questions,
+    userAnswers,
+    wrongQuestionIds,
+    wrongQuestions,
+    retrySkippedUnavailableCount,
+    totalQuestions: totalQ,
+    attemptedQuestions: attemptedQs,
+    unansweredQuestions: Math.max(0, totalQ - attemptedQs),
+    skippedQuestions: 0,
+    markedForReviewCount: 0,
+  };
+}
+
+/*
+ * Manual QA — historical attempt integrity (run after changes):
+ * - Same mock attempted 3+ times: each Profile row opens its own attemptId result.
+ * - Admin changes correct answers after submit: old attempt score/review unchanged (snapshot).
+ * - Admin deletes a question: historical review shows snapshot text; retry skips missing options.
+ * - Test deleted/inactive: review still loads; banner when test gone; retry uses snapshot only.
+ * - Rapid Profile taps between attempts: no stale answers (client abort + gen counter).
+ * - Retry wrong from historical attempt #1 vs #4: disjoint wrong sets, no shared cache.
+ */
+
+/**
+ * Full Result-screen payload for one completed attempt (historical review).
+ * Prefers immutable `resultSnapshot` when present; legacy attempts may
+ * rehydrate from live Question docs (best-effort, may drift if bank edited).
+ */
+async function buildHistoricalResultViewPayload(attempt) {
+  if (hasImmutableSnapshot(attempt)) {
+    return buildHistoricalPayloadFromImmutableSnapshot(attempt);
+  }
+  const test = await testRepository.findById(attempt.testId);
+  const testAvailable = !!test;
+  const testTitle = test?.title ?? null;
+
+  const rawQuestions = await questionRepository.findByIdsForScoring(attempt.questionIds || []);
+  const qById = new Map(rawQuestions.map((q) => [q._id.toString(), q]));
+
+  const questionsOrdered = [];
+  for (const qid of attempt.questionIds || []) {
+    const q = qById.get(qid.toString());
+    if (q) {
+      questionsOrdered.push(q);
+    } else {
+      questionsOrdered.push({
+        _id: qid,
+        questionText: 'This question is no longer available.',
+        options: [],
+        topicId: null,
+        subjectId: null,
+        postIds: [],
+        questionType: 'single_correct',
+        correctAnswers: [],
+        explanation: '',
+        questionImage: '',
+      });
+    }
+  }
+
+  const normalizedAnswers = normalizeAnswers(attempt.answers || []);
+  const answerByQ = new Map(normalizedAnswers.map((a) => [a.questionId.toString(), a]));
+
+  const userAnswers = {};
+  for (const qid of attempt.questionIds || []) {
+    const sid = qid.toString();
+    const ans = answerByQ.get(sid);
+    const arr = Array.isArray(ans?.selectedOptionIndexes) ? [...ans.selectedOptionIndexes] : [];
+    if (arr.length > 0) {
+      userAnswers[sid] = arr;
+    }
+  }
+
+  const correctAnswers = [];
+  const topicMistakes = new Map();
+
+  for (const qid of attempt.questionIds || []) {
+    const q = qById.get(qid.toString());
+    if (!q) {
+      correctAnswers.push({
+        questionId: qid,
+        correctAnswerIndex: null,
+        correctAnswers: [],
+        questionType: 'single_correct',
+      });
+      continue;
+    }
+
+    const correctSet = getCorrectIndexSet(q);
+    correctAnswers.push({
+      questionId: q._id,
+      correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
+      correctAnswers: correctSet,
+      questionType: q.questionType || 'single_correct',
+    });
+
+    const ans = answerByQ.get(qid.toString());
+    const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
+    const maxIdx = optionsLen - 1;
+    const selectedSet = (ans?.selectedOptionIndexes || []).filter(
+      (i) => Number.isInteger(i) && i >= 0 && i <= maxIdx
+    );
+
+    const isCorrect = correctSet.length > 0 && indexSetsEqual(selectedSet, correctSet);
+    if (!isCorrect && selectedSet.length > 0 && q.topicId) {
+      const tid = q.topicId.toString();
+      topicMistakes.set(tid, (topicMistakes.get(tid) || 0) + 1);
+    }
+  }
+
+  const weakTopics = [...topicMistakes.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, WEAK_TOPIC_LIMIT)
+    .map(([topicIdStr, count]) => ({
+      topicId: new mongoose.Types.ObjectId(topicIdStr),
+      mistakeCount: count,
+    }));
+
+  const totalQ = (attempt.questionIds || []).length;
+  const attemptedQs = (attempt.questionIds || []).filter((qid) => {
+    const v = userAnswers[qid.toString()];
+    return Array.isArray(v) && v.length > 0;
+  }).length;
+
+  const correctByQid = new Map(
+    correctAnswers.map((c) => [String(c.questionId), c])
+  );
+  const wrongQuestionIds = [];
+  const wrongQuestions = [];
+  let retrySkippedUnavailableCount = 0;
+
+  for (const q of questionsOrdered) {
+    const qid = String(q._id);
+    const userArr = userAnswers[qid];
+    if (!Array.isArray(userArr) || userArr.length === 0) continue;
+    const centry = correctByQid.get(qid);
+    const correctArr = Array.isArray(centry?.correctAnswers) ? centry.correctAnswers : [];
+    if (correctArr.length === 0) continue;
+    if (indexSetsEqual(userArr, correctArr)) continue;
+    wrongQuestionIds.push(qid);
+    const opts = Array.isArray(q.options) ? q.options : [];
+    if (opts.length > 0) {
+      wrongQuestions.push(q);
+    } else {
+      retrySkippedUnavailableCount += 1;
+    }
+  }
+
+  return {
+    attemptId: String(attempt._id),
+    attemptNumber: attempt.attemptNumber ?? null,
+    testId: String(attempt.testId),
+    testTitle,
+    testAvailable,
+    immutableAttemptSnapshot: false,
+    score: attempt.score ?? 0,
+    accuracy: attempt.accuracy ?? 0,
+    timeTaken: attempt.timeTaken ?? 0,
+    weakTopics,
+    correctAnswers,
+    questions: questionsOrdered,
+    userAnswers,
+    wrongQuestionIds,
+    wrongQuestions,
+    retrySkippedUnavailableCount,
+    totalQuestions: totalQ,
+    attemptedQuestions: attemptedQs,
+    unansweredQuestions: Math.max(0, totalQ - attemptedQs),
+    skippedQuestions: 0,
+    markedForReviewCount: 0,
   };
 }
 
@@ -463,12 +807,20 @@ export const testAttemptService = {
 
     const weakTopicIds = weakTopics.map((w) => w.topicId);
 
+    const resultSnapshot = buildResultSnapshotAtSubmit(
+      attempt.questionIds,
+      qMap,
+      answerByQ,
+      weakTopics
+    );
+
     const updated = await testAttemptRepository.finalizeAttempt(attempt._id, userId, testId, {
       answers,
       endTime,
       score,
       accuracy,
       timeTaken,
+      resultSnapshot,
     });
 
     if (!updated) {
@@ -496,6 +848,32 @@ export const testAttemptService = {
       weakTopics,
       correctAnswers,
     };
+  },
+
+  /**
+   * Full Result/review payload for one completed attempt (Profile history).
+   * Keyed only by attempt id — never inferred from testId alone.
+   */
+  async getResultViewByAttemptId(userId, attemptIdRaw) {
+    const attemptId = String(attemptIdRaw ?? '').trim();
+    if (!mongoose.Types.ObjectId.isValid(attemptId)) {
+      throw new AppError('Invalid attempt id', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const attempt = await testAttemptRepository.findById(attemptId);
+    if (!attempt) {
+      throw new AppError('Attempt not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (attempt.userId.toString() !== String(userId)) {
+      throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+    }
+    if (!attempt.endTime) {
+      throw new AppError('Results are still being prepared.', HTTP_STATUS.BAD_REQUEST, null, {
+        code: 'ATTEMPT_RESULTS_PENDING',
+      });
+    }
+
+    return buildHistoricalResultViewPayload(attempt);
   },
 
   /**

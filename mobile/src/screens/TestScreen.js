@@ -123,6 +123,10 @@ export default function TestScreen() {
   const isRetry = params.mode === 'retry';
   const isPractice = params.mode === 'practice';
   const isDaily = params.mode === 'daily';
+  /** Retry from Profile historical attempt — must use preloaded snapshot only. */
+  const historicalAttemptMode = !!params.historicalAttemptMode;
+  const sourceAttemptId =
+    params.sourceAttemptId != null ? String(params.sourceAttemptId) : null;
   const isLocal = isRetry || isPractice || isDaily;
   const questionIds = isLocal
     ? (Array.isArray(params.questionIds) ? params.questionIds : [])
@@ -204,6 +208,28 @@ export default function TestScreen() {
         return;
       }
 
+      if (isRetry && historicalAttemptMode) {
+        if (!preloadedQuestions?.length) {
+          setError('Questions from this attempt are no longer available for retry.');
+          setLoading(false);
+          return;
+        }
+        const order = questionIds.map((id) => String(id));
+        const byId = new Map(preloadedQuestions.map((q) => [String(q._id), q]));
+        const ordered = order
+          .map((id) => byId.get(id))
+          .filter((q) => q && Array.isArray(q.options) && q.options.length > 0);
+        if (!ordered.length) {
+          setError('No retryable questions remain from this attempt.');
+          setLoading(false);
+          return;
+        }
+        setError(null);
+        setQuestions(ordered);
+        setLoading(false);
+        return;
+      }
+
       if (preloadedQuestions && preloadedQuestions.length) {
         const order = questionIds.map((id) => String(id));
         const byId = new Map(preloadedQuestions.map((q) => [String(q._id), q]));
@@ -238,7 +264,7 @@ export default function TestScreen() {
     return () => {
       ac.abort();
     };
-  }, [idsKey, isLocal, isRetry, isPractice, isDaily, preloadedQuestions]);
+  }, [idsKey, isLocal, isRetry, isPractice, isDaily, preloadedQuestions, historicalAttemptMode]);
 
   useEffect(() => {
     if (isLocal) return;
@@ -937,8 +963,10 @@ export default function TestScreen() {
     ? 'Image-based question — pick the correct option.'
     : null;
 
+  const screenKey = sourceAttemptId ? `test-retry-${sourceAttemptId}` : `test-${idsKey}`;
+
   return (
-    <View style={styles.container}>
+    <View key={screenKey} style={styles.container}>
       {localHeaderLabel ? <Text style={styles.retryHeader}>{localHeaderLabel}</Text> : null}
       {countdownEl}
       <Text style={styles.attemptSummary}>{attemptSummaryLabel}</Text>
