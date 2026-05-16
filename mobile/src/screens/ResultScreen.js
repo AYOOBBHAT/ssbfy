@@ -11,7 +11,11 @@ import {
   BackHandler,
 } from 'react-native';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
-import { resolveResultBackTarget, MAIN_TABS } from '../navigation/testFlowNavigation';
+import {
+  resolveResultBackTarget,
+  resolveRetryOriginMainTab,
+  MAIN_TABS,
+} from '../navigation/testFlowNavigation';
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
 import { getAttemptResult } from '../services/resultService';
@@ -33,13 +37,12 @@ import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
 
 /*
- * Manual QA — historical attempt integrity (mobile):
- * - Profile: tap Attempt #1 vs #4 of same test → distinct scores/answers (check resultScreenKey).
- * - Retry wrong from historical view → only that attempt's wrong set; no live test fetch.
- * - Admin changed answers after submit → review colors unchanged when immutableAttemptSnapshot true.
- * - Deleted question → banner skip count; retry skips unavailable rows.
- * - Rapid attempt switching → loading gate + abort; no flash of prior attempt.
- * - Blank submission → retry all questions; partial → incorrect + unanswered in retry.
+ * Manual QA — Result screen (mobile):
+ * - Historical: Profile attempts → distinct payloads; back → Profile.
+ * - Mock result: footer + Android back → Tests tab (returnMainTab: Tests).
+ * - Practice result: back → Practice; daily → Home.
+ * - Retry chain preserves returnMainTab; finish retry → single Result on stack.
+ * - Spam Android back during upstream “Finishing…” handled on TestScreen.
  */
 
 // Cap for both recommendation lists — keeps the Result screen readable
@@ -510,9 +513,11 @@ export default function ResultScreen() {
       questions: retryable,
       historicalAttemptMode: isHistoricalAttempt,
       sourceAttemptId: historicalAttemptId || undefined,
-      originMainTab:
-        returnMainTab ||
-        (isHistoricalAttempt ? MAIN_TABS.PROFILE : MAIN_TABS.HOME),
+      originMainTab: resolveRetryOriginMainTab({
+        returnMainTab,
+        isHistoricalAttempt,
+        testId,
+      }),
       // Do not pass testId in historical mode — retry must not touch live test APIs.
       ...(!isHistoricalAttempt && testId ? { testId } : {}),
     });
@@ -524,7 +529,11 @@ export default function ResultScreen() {
       mode: 'retry',
       questionIds: retryWrongQuestionIds,
       questions: retryWrongQuestions,
-      originMainTab: returnMainTab || MAIN_TABS.HOME,
+      originMainTab: resolveRetryOriginMainTab({
+        returnMainTab,
+        isHistoricalAttempt,
+        testId,
+      }),
     });
   };
 
@@ -723,7 +732,11 @@ export default function ResultScreen() {
         mode: 'practice',
         questions: fetched,
         questionIds,
-        originMainTab: returnMainTab || MAIN_TABS.HOME,
+        originMainTab: resolveRetryOriginMainTab({
+          returnMainTab,
+          isHistoricalAttempt,
+          testId,
+        }),
       });
     } catch (e) {
       setPracticeError(getApiErrorMessage(e));
@@ -750,7 +763,11 @@ export default function ResultScreen() {
         mode: 'practice',
         questionIds,
         questions: limited,
-        originMainTab: returnMainTab || MAIN_TABS.HOME,
+        originMainTab: resolveRetryOriginMainTab({
+          returnMainTab,
+          isHistoricalAttempt,
+          testId,
+        }),
       });
     } catch (e) {
       setPracticeError(getApiErrorMessage(e));

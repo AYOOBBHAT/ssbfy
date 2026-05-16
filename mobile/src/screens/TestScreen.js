@@ -9,7 +9,7 @@ import {
   AppState,
   BackHandler,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
   getApiErrorMessage,
   isAttemptAlreadySubmittedError,
@@ -35,11 +35,25 @@ import {
   resetStackToResult,
   MAIN_TABS,
   buildMainReturnRoute,
+  consumeHardwareBackDuringTransition,
 } from '../navigation/testFlowNavigation';
 import { clearTestSessionTimers } from '../utils/testSessionCleanup';
+import {
+  markTransitionStarted,
+  releaseIncompleteTransition,
+  recoverStalledTransitionOnForeground,
+  nextTransitionGeneration,
+  isStaleTransitionGeneration,
+} from '../utils/testTransitionLifecycle';
 
 const DRAFT_DEBOUNCE_MS = 450;
 const SERVER_SYNC_INTERVAL_MS = 25000;
+
+/*
+ * Finish/submit lifecycle: transition guards live in testTransitionLifecycle.js
+ * (refs: submitLock, transitionInFlight, submissionCompleted, navigationCommitted, transitionGen).
+ * AppState foreground → stall recovery after TRANSITION_STALL_MS if reset never committed.
+ */
 
 /**
  * Coerce whatever shape we got (legacy scalar, new array, undefined) into a
@@ -197,15 +211,51 @@ export default function TestScreen() {
   const submitLockRef = useRef(false);
   const submissionCompletedRef = useRef(false);
   const navigationCommittedRef = useRef(false);
+  const transitionInFlightRef = useRef(false);
+  const transitionStartedAtRef = useRef(0);
+  const transitionGenRef = useRef(0);
+  const mountedRef = useRef(true);
   const draftSaveTimerRef = useRef(null);
   const serverSyncTimerRef = useRef(null);
   const progressSeqRef = useRef(0);
 
-  useEffect(
-    () => () => {
-      clearTestSessionTimers({ draftSaveTimerRef, serverSyncTimerRef });
-    },
+  const transitionRefs = useMemo(
+    () => ({
+      submitLockRef,
+      submissionCompletedRef,
+      navigationCommittedRef,
+      transitionInFlightRef,
+      transitionStartedAtRef,
+    }),
     []
+  );
+
+  const releaseTransition = useCallback(() => {
+    releaseIncompleteTransition(transitionRefs, { setSubmitting });
+  }, [transitionRefs]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      nextTransitionGeneration(transitionGenRef);
+      if (!navigationCommittedRef.current) {
+        transitionInFlightRef.current = false;
+        submitLockRef.current = false;
+        submissionCompletedRef.current = false;
+        transitionStartedAtRef.current = 0;
+      }
+      clearTestSessionTimers({ draftSaveTimerRef, serverSyncTimerRef });
+    };
+  }, []);
+
+  const transitionBackCtx = useCallback(
+    () => ({
+      submitting,
+      submitLockRef,
+      transitionInFlightRef,
+    }),
+    [submitting]
   );
 
   useEffect(() => {
@@ -407,7 +457,15 @@ export default function TestScreen() {
   ]);
 
   const syncProgressToServer = useCallback(async () => {
-    if (isLocal || !testId || submissionCompletedRef.current || submitLockRef.current) return;
+    if (
+      isLocal ||
+      !testId ||
+      submissionCompletedRef.current ||
+      submitLockRef.current ||
+      transitionInFlightRef.current
+    ) {
+      return;
+    }
     const seq = ++progressSeqRef.current;
     try {
       const payload = questionIds.map((qid) => {
@@ -452,9 +510,19 @@ export default function TestScreen() {
   }, [isLocal, resumeResolved, syncProgressToServer]);
 
   useEffect(() => {
+    let appState = AppState.currentState;
     const sub = AppState.addEventListener('change', (next) => {
+      const prev = appState;
+      appState = next;
+
       if (next === 'background' || next === 'inactive') {
-        if (!isLocal && testId && attempt?._id && !submissionCompletedRef.current) {
+        if (
+          !isLocal &&
+          testId &&
+          attempt?._id &&
+          !submissionCompletedRef.current &&
+          !transitionInFlightRef.current
+        ) {
           void (async () => {
             try {
               await saveDraft(testId, {
@@ -479,6 +547,15 @@ export default function TestScreen() {
           })();
         }
       }
+
+      if (prev.match(/inactive|background/) && next === 'active') {
+        recoverStalledTransitionOnForeground({
+          mountedRef,
+          refs: transitionRefs,
+          setSubmitError,
+          setSubmitting,
+        });
+      }
     });
     return () => sub.remove();
   }, [
@@ -492,55 +569,63 @@ export default function TestScreen() {
     markedForReviewIds,
     durationMinutes,
     syncProgressToServer,
+    transitionRefs,
   ]);
 
-  useEffect(() => {
-    if (!isLocal) return undefined;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (submitting || submissionCompletedRef.current || navigationCommittedRef.current) {
-        return true;
-      }
-      const tab =
-        originMainTab ||
-        (isPractice ? MAIN_TABS.PRACTICE : isDaily ? MAIN_TABS.HOME : MAIN_TABS.HOME);
-      const mainRoute = buildMainReturnRoute(tab);
-      Alert.alert(
-        'Leave session?',
-        'Your answers in this session will not be saved.',
-        [
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (consumeHardwareBackDuringTransition(transitionBackCtx())) {
+          return true;
+        }
+        if (isLocal) {
+          const tab =
+            originMainTab ||
+            (isPractice ? MAIN_TABS.PRACTICE : isDaily ? MAIN_TABS.HOME : MAIN_TABS.HOME);
+          const mainRoute = buildMainReturnRoute(tab);
+          Alert.alert(
+            'Leave session?',
+            'Your answers in this session will not be saved.',
+            [
+              { text: 'Stay', style: 'cancel' },
+              {
+                text: 'Leave',
+                style: 'destructive',
+                onPress: () => navigation.navigate(mainRoute.name, mainRoute.params),
+              },
+            ]
+          );
+          return true;
+        }
+        Alert.alert('Leave test?', 'Your progress is saved — you can resume later from Mock tests.', [
           { text: 'Stay', style: 'cancel' },
           {
             text: 'Leave',
             style: 'destructive',
-            onPress: () => navigation.navigate(mainRoute.name, mainRoute.params),
+            onPress: () => {
+              void flushDraftSoon();
+              void syncProgressToServer();
+              navigation.navigate('Main', {
+                screen: MAIN_TABS.TESTS,
+                params: { screen: 'TestsMain' },
+              });
+            },
           },
-        ]
-      );
-      return true;
-    });
-    return () => sub.remove();
-  }, [isLocal, isPractice, isDaily, originMainTab, submitting, navigation]);
-
-  useEffect(() => {
-    if (isLocal) return undefined;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (submitting || submissionCompletedRef.current) return true;
-      Alert.alert('Leave test?', 'Your progress is saved — you can resume later from Mock tests.', [
-        { text: 'Stay', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: () => {
-            void flushDraftSoon();
-            void syncProgressToServer();
-            navigation.navigate('Main', { screen: 'Tests', params: { screen: 'TestsMain' } });
-          },
-        },
-      ]);
-      return true;
-    });
-    return () => sub.remove();
-  }, [isLocal, submitting, navigation, flushDraftSoon, syncProgressToServer]);
+        ]);
+        return true;
+      });
+      return () => sub.remove();
+    }, [
+      isLocal,
+      isPractice,
+      isDaily,
+      originMainTab,
+      navigation,
+      transitionBackCtx,
+      flushDraftSoon,
+      syncProgressToServer,
+    ])
+  );
 
   const total = questions.length;
   const question = questions[index];
@@ -614,7 +699,16 @@ export default function TestScreen() {
   const executeSubmitRef = useRef(async () => {});
 
   const navigateToResult = useCallback(
-    (data, navOptions = {}) => {
+    (data, navOptions = {}, transitionGen) => {
+      if (
+        !mountedRef.current ||
+        navigationCommittedRef.current ||
+        (transitionGen != null &&
+          isStaleTransitionGeneration(transitionGenRef, transitionGen))
+      ) {
+        return;
+      }
+
       const payload = data || {};
       const ua =
         navOptions.userAnswers != null ? navOptions.userAnswers : answers;
@@ -633,33 +727,33 @@ export default function TestScreen() {
         return !(Array.isArray(v) && v.length > 0);
       }).length;
 
-      navigation.reset({
-        index: 1,
-        routes: [
-          { name: 'Main' },
-          {
-            name: 'Result',
-            params: {
-              testId,
-              score: payload.score ?? 0,
-              accuracy: payload.accuracy ?? 0,
-              timeTaken: payload.timeTaken ?? 0,
-              weakTopics: Array.isArray(payload.weakTopics) ? payload.weakTopics : [],
-              totalQuestions: questionIds.length,
-              attemptedQuestions: attemptedQs,
-              unansweredQuestions: unansweredQs,
-              skippedQuestions: skippedQs,
-              markedForReviewCount: mr.length,
-              questions: questions.filter((q) => q !== undefined),
-              userAnswers: ua,
-              correctAnswers: Array.isArray(payload.correctAnswers)
-                ? payload.correctAnswers
-                : [],
-              recoveredSubmit: !!navOptions.recoveredSubmit,
-            },
-          },
-        ],
+      const committed = resetStackToResult(navigation, {
+        originMainTab: MAIN_TABS.TESTS,
+        resultParams: {
+          testId,
+          score: payload.score ?? 0,
+          accuracy: payload.accuracy ?? 0,
+          timeTaken: payload.timeTaken ?? 0,
+          weakTopics: Array.isArray(payload.weakTopics) ? payload.weakTopics : [],
+          totalQuestions: questionIds.length,
+          attemptedQuestions: attemptedQs,
+          unansweredQuestions: unansweredQs,
+          skippedQuestions: skippedQs,
+          markedForReviewCount: mr.length,
+          questions: questions.filter((q) => q !== undefined),
+          userAnswers: ua,
+          correctAnswers: Array.isArray(payload.correctAnswers)
+            ? payload.correctAnswers
+            : [],
+          recoveredSubmit: !!navOptions.recoveredSubmit,
+        },
+        commitRef: navigationCommittedRef,
       });
+      if (committed) {
+        submissionCompletedRef.current = true;
+        transitionInFlightRef.current = false;
+        transitionStartedAtRef.current = 0;
+      }
     },
     [
       navigation,
@@ -674,8 +768,17 @@ export default function TestScreen() {
 
   const executeSubmit = useCallback(
     async ({ autoSubmit = false } = {}) => {
-      if (submitLockRef.current) return;
+      if (
+        submitLockRef.current ||
+        navigationCommittedRef.current ||
+        submissionCompletedRef.current ||
+        transitionInFlightRef.current
+      ) {
+        return;
+      }
+      const gen = nextTransitionGeneration(transitionGenRef);
       submitLockRef.current = true;
+      markTransitionStarted(transitionRefs);
       setSubmitting(true);
       setSubmitError(null);
 
@@ -715,6 +818,13 @@ export default function TestScreen() {
         payload = questionIds.map(buildAnswerEntry);
 
         const data = await submitTest(testId, payload);
+        if (
+          !mountedRef.current ||
+          navigationCommittedRef.current ||
+          isStaleTransitionGeneration(transitionGenRef, gen)
+        ) {
+          return;
+        }
         submissionCompletedRef.current = true;
         try {
           await clearDraft(testId);
@@ -722,10 +832,27 @@ export default function TestScreen() {
         } catch (_) {
           /* ignore storage errors */
         }
-        navigateToResult(data);
+        if (
+          !mountedRef.current ||
+          navigationCommittedRef.current ||
+          isStaleTransitionGeneration(transitionGenRef, gen)
+        ) {
+          return;
+        }
+        navigateToResult(data, {}, gen);
       } catch (e) {
+        if (isRequestCancelled(e)) {
+          return;
+        }
         if (isAttemptAlreadySubmittedError(e)) {
           const recovery = getSubmitConflictRecoveryResult(e);
+          if (
+            !mountedRef.current ||
+            navigationCommittedRef.current ||
+            isStaleTransitionGeneration(transitionGenRef, gen)
+          ) {
+            return;
+          }
           submissionCompletedRef.current = true;
           try {
             await clearDraft(testId);
@@ -736,12 +863,23 @@ export default function TestScreen() {
           if (recovery && recovery.attempt) {
             const ua = userAnswersRecordFromAttempt(recovery.attempt, questionIds);
             logger.debug('[submit] 409 recovered — opening Result');
-            navigateToResult(recovery, {
-              userAnswers: ua,
-              skippedQuestionIds: [],
-              markedForReviewIds: [],
-              recoveredSubmit: true,
-            });
+            if (
+              !mountedRef.current ||
+              navigationCommittedRef.current ||
+              isStaleTransitionGeneration(transitionGenRef, gen)
+            ) {
+              return;
+            }
+            navigateToResult(
+              recovery,
+              {
+                userAnswers: ua,
+                skippedQuestionIds: [],
+                markedForReviewIds: [],
+                recoveredSubmit: true,
+              },
+              gen
+            );
           } else {
             submissionCompletedRef.current = false;
             setSubmitError(
@@ -759,13 +897,15 @@ export default function TestScreen() {
           setSubmitError(getApiErrorMessage(e));
         }
       } finally {
+        if (isStaleTransitionGeneration(transitionGenRef, gen)) return;
+        if (!mountedRef.current) return;
         setSubmitting(false);
-        if (!submissionCompletedRef.current) {
-          submitLockRef.current = false;
+        if (!navigationCommittedRef.current) {
+          releaseIncompleteTransition(transitionRefs);
         }
       }
     },
-    [testId, questionIds, questions, answers, navigateToResult]
+    [testId, questionIds, questions, answers, navigateToResult, transitionRefs]
   );
 
   useEffect(() => {
@@ -773,7 +913,14 @@ export default function TestScreen() {
   }, [executeSubmit]);
 
   const handleTimerExpired = useCallback(() => {
-    if (submitLockRef.current) return;
+    if (
+      submitLockRef.current ||
+      navigationCommittedRef.current ||
+      submissionCompletedRef.current ||
+      transitionInFlightRef.current
+    ) {
+      return;
+    }
     void executeSubmitRef.current({ autoSubmit: true });
   }, []);
 
@@ -796,7 +943,13 @@ export default function TestScreen() {
   }, [confirmManualSubmit, attemptedCount]);
 
   const finishPracticeToResult = useCallback(() => {
-    if (navigationCommittedRef.current || submissionCompletedRef.current) return;
+    if (
+      !mountedRef.current ||
+      navigationCommittedRef.current ||
+      submissionCompletedRef.current
+    ) {
+      return;
+    }
 
     const validQuestions = questions.filter((q) => q !== undefined);
     if (!validQuestions.length) {
@@ -859,7 +1012,11 @@ export default function TestScreen() {
       },
       commitRef: navigationCommittedRef,
     });
-    if (committed) submissionCompletedRef.current = true;
+    if (committed) {
+      submissionCompletedRef.current = true;
+      transitionInFlightRef.current = false;
+      transitionStartedAtRef.current = 0;
+    }
   }, [navigation, answers, questions, originMainTab, isPractice]);
 
   /**
@@ -867,25 +1024,31 @@ export default function TestScreen() {
    * Uses navigation.reset [Main(origin tab), Result] — not replace — so Android/iOS back
    * cannot resurrect a completed TestScreen (no timer/autosave leakage).
    *
-   * Manual QA:
-   * - Android back after finish → origin tab, not Test.
-   * - iOS swipe on Test blocked for practice/daily/retry (AppNavigator).
-   * - Rapid Finish taps → single Result (navigationCommittedRef).
-   * - Finish → background → foreground → no duplicate Result.
-   * - Retry chain: Result → Test → Finish Retry → one Result on stack.
+   * Lifecycle QA (see testTransitionLifecycle.js):
+   * - Finish → Home / lock screen / notification → no duplicate Result or submit.
+   * - Resume during “Finishing…” → completes or timeout error (not infinite spinner).
+   * - Stale async after unmount cannot call navigation.reset.
    */
   const handleFinishLocal = useCallback(async () => {
     if (isRetry) {
-      if (submitLockRef.current || navigationCommittedRef.current) return;
+      if (
+        submitLockRef.current ||
+        navigationCommittedRef.current ||
+        transitionInFlightRef.current
+      ) {
+        return;
+      }
+      const gen = nextTransitionGeneration(transitionGenRef);
       submitLockRef.current = true;
-      submissionCompletedRef.current = true;
+      markTransitionStarted(transitionRefs);
       setSubmitting(true);
       setSubmitError(null);
       try {
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
         const tab =
           originMainTab ||
           (historicalAttemptMode ? MAIN_TABS.PROFILE : MAIN_TABS.HOME);
-        resetStackToResult(navigation, {
+        const committed = resetStackToResult(navigation, {
           originMainTab: tab,
           resultParams: {
             retry: true,
@@ -894,59 +1057,77 @@ export default function TestScreen() {
           },
           commitRef: navigationCommittedRef,
         });
-      } catch (e) {
-        setSubmitError(getApiErrorMessage(e));
-      } finally {
-        setSubmitting(false);
-        if (!navigationCommittedRef.current) {
-          submitLockRef.current = false;
-          submissionCompletedRef.current = false;
+        if (committed) {
+          submissionCompletedRef.current = true;
+          transitionInFlightRef.current = false;
+          transitionStartedAtRef.current = 0;
         }
+      } catch (e) {
+        if (mountedRef.current) setSubmitError(getApiErrorMessage(e));
+      } finally {
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
+        setSubmitting(false);
+        if (!navigationCommittedRef.current) releaseTransition();
       }
       return;
     }
 
     if (isPractice) {
-      if (submitLockRef.current || navigationCommittedRef.current) return;
+      if (
+        submitLockRef.current ||
+        navigationCommittedRef.current ||
+        transitionInFlightRef.current
+      ) {
+        return;
+      }
+      const gen = nextTransitionGeneration(transitionGenRef);
       submitLockRef.current = true;
-      submissionCompletedRef.current = true;
+      markTransitionStarted(transitionRefs);
       setSubmitting(true);
       setSubmitError(null);
       try {
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
         finishPracticeToResult();
       } catch (e) {
-        setSubmitError(getApiErrorMessage(e));
+        if (mountedRef.current) setSubmitError(getApiErrorMessage(e));
       } finally {
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
         setSubmitting(false);
-        if (!navigationCommittedRef.current) {
-          submitLockRef.current = false;
-          submissionCompletedRef.current = false;
-        }
+        if (!navigationCommittedRef.current) releaseTransition();
       }
       return;
     }
 
     if (isDaily) {
-      if (submitLockRef.current || navigationCommittedRef.current) return;
+      if (
+        submitLockRef.current ||
+        navigationCommittedRef.current ||
+        transitionInFlightRef.current
+      ) {
+        return;
+      }
+      const gen = nextTransitionGeneration(transitionGenRef);
       submitLockRef.current = true;
-      submissionCompletedRef.current = true;
+      markTransitionStarted(transitionRefs);
       setSubmitting(true);
       setSubmitError(null);
       try {
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
         try {
           await completeDailyPractice();
         } catch (e) {
-          logger.info('[DAILY] complete failed:', getApiErrorMessage(e));
+          if (!isRequestCancelled(e)) {
+            logger.info('[DAILY] complete failed:', getApiErrorMessage(e));
+          }
         }
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
         finishPracticeToResult();
       } catch (e) {
-        setSubmitError(getApiErrorMessage(e));
+        if (mountedRef.current) setSubmitError(getApiErrorMessage(e));
       } finally {
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
         setSubmitting(false);
-        if (!navigationCommittedRef.current) {
-          submitLockRef.current = false;
-          submissionCompletedRef.current = false;
-        }
+        if (!navigationCommittedRef.current) releaseTransition();
       }
       return;
     }
@@ -966,6 +1147,8 @@ export default function TestScreen() {
     originMainTab,
     historicalAttemptMode,
     finishPracticeToResult,
+    releaseTransition,
+    transitionRefs,
   ]);
 
   const countdownEnabled =
@@ -974,8 +1157,8 @@ export default function TestScreen() {
     total > 0 &&
     (isLocal || resumeResolved) &&
     !submitting &&
-    !navigationCommittedRef.current &&
-    !submissionCompletedRef.current;
+    !transitionInFlightRef.current &&
+    !navigationCommittedRef.current;
 
   const attempted = Object.keys(answers).filter(
     (k) => Array.isArray(answers[k]) && answers[k].length > 0

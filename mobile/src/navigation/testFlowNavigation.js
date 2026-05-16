@@ -1,27 +1,51 @@
 /**
- * Local test / practice session navigation helpers.
+ * Test / practice / mock navigation helpers.
  *
- * Manual QA — navigation stack (after changes):
+ * Manual QA — navigation stack & transitions:
  * - Practice → Finish → Result → Android back → Practice tab (not stale Test).
- * - Practice → Finish → iOS swipe back from Result → same as Android back.
- * - Rapid double-tap Finish Practice → single Result screen only.
- * - Finish Practice → background app → foreground → no duplicate Result / timers.
- * - Result → Retry wrong → Finish Retry → Result (no Test under stack).
- * - Profile historical Result → back → Profile; isolated from practice stacks.
- * - Mock submit still uses TestScreen.navigateToResult reset [Main, Result].
+ * - Daily → Finish → Result → Android back → Home tab.
+ * - Mock submit → Result → Android back / footer → Tests tab (not Home).
+ * - Spam Android back during “Finishing…” / Submitting → back consumed, single Result.
+ * - Retry chain: Result → Test → Finish Retry → one Result; returnMainTab preserved.
+ * - Finish while app backgrounds → no duplicate reset / orphaned Test (see testTransitionLifecycle.js).
+ * - Profile historical Result → back → Profile.
+ * - Low-network delayed mock submit → one navigation commit only.
  */
 
 export const MAIN_TABS = {
   PRACTICE: 'Practice',
   HOME: 'Home',
+  TESTS: 'Tests',
   PROFILE: 'Profile',
 };
 
 const NESTED_MAIN = {
   [MAIN_TABS.PRACTICE]: 'PracticeMain',
   [MAIN_TABS.HOME]: 'HomeMain',
+  [MAIN_TABS.TESTS]: 'TestsMain',
   [MAIN_TABS.PROFILE]: 'ProfileMain',
 };
+
+/**
+ * True while finish/submit/navigation-reset is in flight.
+ * Hardware back must be consumed during this window (not permanently).
+ */
+export function isNavigationTransitionActive({
+  submitting = false,
+  submitLockRef,
+  transitionInFlightRef,
+} = {}) {
+  return !!(
+    submitting ||
+    submitLockRef?.current ||
+    transitionInFlightRef?.current
+  );
+}
+
+/** @returns {boolean} true if the back press was consumed (caller should return true). */
+export function consumeHardwareBackDuringTransition(ctx) {
+  return isNavigationTransitionActive(ctx);
+}
 
 /** Route object for `navigation.reset` bottom of stack (tab + nested screen). */
 export function buildMainReturnRoute(mainTab = MAIN_TABS.HOME) {
@@ -67,8 +91,19 @@ export function resolveResultBackTarget(params) {
   if (tab === MAIN_TABS.PRACTICE) {
     return { label: 'Back to Practice', route: buildMainReturnRoute(MAIN_TABS.PRACTICE) };
   }
+  if (tab === MAIN_TABS.TESTS) {
+    return { label: 'Back to Tests', route: buildMainReturnRoute(MAIN_TABS.TESTS) };
+  }
   if (tab === MAIN_TABS.PROFILE || params?.viewingHistoricalAttempt || params?.historicalAttemptMode) {
     return { label: 'Back to Profile', route: buildMainReturnRoute(MAIN_TABS.PROFILE) };
   }
   return { label: 'Back to Home', route: buildMainReturnRoute(MAIN_TABS.HOME) };
+}
+
+/** Default return tab for retry Test sessions launched from a Result screen. */
+export function resolveRetryOriginMainTab({ returnMainTab, isHistoricalAttempt, testId }) {
+  if (returnMainTab) return returnMainTab;
+  if (isHistoricalAttempt) return MAIN_TABS.PROFILE;
+  if (testId) return MAIN_TABS.TESTS;
+  return MAIN_TABS.HOME;
 }

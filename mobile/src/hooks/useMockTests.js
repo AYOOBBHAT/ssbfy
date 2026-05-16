@@ -65,6 +65,7 @@ export function useMockTests() {
         testId,
         attempt: data.attempt,
         durationMinutes: item?.duration,
+        originMainTab: 'Tests',
       });
     } catch (e) {
       if (isRequestCancelled(e)) return;
