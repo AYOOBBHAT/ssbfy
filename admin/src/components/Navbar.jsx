@@ -11,6 +11,7 @@ const links = [
   { to: '/upload-pdf', label: 'Upload PDF' },
   { to: '/manage-pdfs', label: 'Manage PDFs' },
   { to: '/create-test', label: 'Create Test' },
+  { to: '/manage-tests', label: 'Manage Tests' },
   { to: '/topics', label: 'Subjects & Topics' },
   { to: '/subscription-plans', label: 'Subscription Plans' },
   { to: '/payments', label: 'Payments' },

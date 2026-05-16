@@ -46,6 +46,7 @@ export function MockTestCard({
   const duration = Number(item?.duration) || 0;
   const qCount = Array.isArray(item?.questionIds) ? item.questionIds.length : 0;
   const badge = typeBadgeLabel(item?.type);
+  const isRetired = item?.status === 'disabled';
   const state = typeof ctaState === 'string' ? ctaState : 'start';
   const isCompleted = state === 'completed';
   const isResume = state === 'resume';
@@ -73,6 +74,9 @@ export function MockTestCard({
                   <View style={[styles.skelPill, styles.skelPillNarrow, styles.skelPillPremium]} />
                 ) : null}
               </>
+            ) : null}
+            {!isLoading && isRetired && isResume ? (
+              <Text style={[styles.statePill, styles.pillRetired]}>Retired — resume only</Text>
             ) : null}
             {!isLoading && isResume ? (
               <Text style={[styles.statePill, styles.pillResume]}>In progress</Text>
@@ -194,6 +198,12 @@ const styles = StyleSheet.create({
   pillUnknown: {
     color: colors.muted,
     backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pillRetired: {
+    color: colors.muted,
+    backgroundColor: '#f1f5f9',
     borderWidth: 1,
     borderColor: colors.border,
   },

@@ -42,6 +42,11 @@ const cards = [
     description: 'Bundle questions into a timed mock test.',
   },
   {
+    to: '/manage-tests',
+    title: 'Manage Tests',
+    description: 'Enable or disable mock tests without deleting attempt history.',
+  },
+  {
     to: '/topics',
     title: 'Subjects & Topics',
     description: 'Create subjects and add topics under them.',

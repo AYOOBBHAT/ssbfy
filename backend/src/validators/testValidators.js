@@ -1,5 +1,6 @@
 import { body } from 'express-validator';
 import { TEST_TYPE_VALUES } from '../constants/testType.js';
+import { TEST_STATUS_VALUES } from '../constants/testStatus.js';
 
 export const createTestValidators = [
   body('title').trim().notEmpty().withMessage('title is required'),
@@ -20,4 +21,10 @@ export const createTestValidators = [
     .isFloat({ min: 0 })
     .withMessage('negativeMarking must be a non-negative number')
     .toFloat(),
+];
+
+export const setTestStatusValidators = [
+  body('status')
+    .isIn(TEST_STATUS_VALUES)
+    .withMessage(`status must be one of: ${TEST_STATUS_VALUES.join(', ')}`),
 ];

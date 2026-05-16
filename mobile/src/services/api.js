@@ -115,6 +115,10 @@ export function getApiErrorCode(error) {
   return typeof c === 'string' && c.trim() ? c : null;
 }
 
+export function isTestDisabledError(error) {
+  return getApiErrorCode(error) === 'TEST_DISABLED';
+}
+
 /** Safe user-facing copy — never echoes tokens or stack traces. */
 export function getApiErrorMessage(error) {
   if (isRequestCancelled(error)) {

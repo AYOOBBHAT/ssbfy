@@ -12,6 +12,7 @@ import ManageNotes from './pages/ManageNotes.jsx';
 import UploadPdfNote from './pages/UploadPdfNote.jsx';
 import ManagePdfNotes from './pages/ManagePdfNotes.jsx';
 import CreateTest from './pages/CreateTest.jsx';
+import ManageTests from './pages/ManageTests.jsx';
 import ManageTopics from './pages/ManageTopics.jsx';
 import ManageSubscriptionPlans from './pages/ManageSubscriptionPlans.jsx';
 import ManagePayments from './pages/ManagePayments.jsx';
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="/upload-pdf" element={<UploadPdfNote />} />
               <Route path="/manage-pdfs" element={<ManagePdfNotes />} />
               <Route path="/create-test" element={<CreateTest />} />
+              <Route path="/manage-tests" element={<ManageTests />} />
               <Route path="/topics" element={<ManageTopics />} />
               <Route
                 path="/subscription-plans"

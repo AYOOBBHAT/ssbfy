@@ -164,6 +164,7 @@ function mapAttemptResultToNavExtras(api) {
     immutableAttemptSnapshot: api.immutableAttemptSnapshot === true,
     retrySkippedUnavailableCount: Number(api.retrySkippedUnavailableCount) || 0,
     testAvailable: api.testAvailable !== false,
+    testRetired: api.testRetired === true,
     testTitle: api.testTitle ?? null,
     viewingHistoricalAttempt: true,
     historicalAttemptMode: true,
@@ -259,6 +260,7 @@ export default function ResultScreen() {
     historicalAttemptId = null,
     retrySkippedUnavailableCount = 0,
     testAvailable = true,
+    testRetired = false,
     testTitle: _testTitle = null,
     returnMainTab = null,
   } = params || {};
@@ -808,7 +810,18 @@ export default function ResultScreen() {
 
       {isHistoricalAttempt && testAvailable === false ? (
         <View style={styles.unavailableBanner}>
-          <Text style={styles.unavailableBannerText}>This test is no longer available.</Text>
+          <Text style={styles.unavailableBannerText}>
+            This test record was removed. Your attempt results are preserved below.
+          </Text>
+        </View>
+      ) : null}
+
+      {isHistoricalAttempt && testRetired && testAvailable !== false ? (
+        <View style={styles.unavailableBanner}>
+          <Text style={styles.unavailableBannerText}>
+            This mock test is no longer offered for new attempts. Your historical review is
+            unchanged.
+          </Text>
         </View>
       ) : null}
 

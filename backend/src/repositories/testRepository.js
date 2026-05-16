@@ -13,4 +13,15 @@ export const testRepository = {
   async findById(id) {
     return Test.findById(id).lean().exec();
   },
+
+  async updateStatus(id, { status, disabledAt }) {
+    const doc = await Test.findByIdAndUpdate(
+      id,
+      { status, disabledAt },
+      { new: true, runValidators: true }
+    )
+      .lean()
+      .exec();
+    return doc;
+  },
 };

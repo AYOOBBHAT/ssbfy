@@ -13,8 +13,19 @@ import { logger } from '../utils/logger.js';
 
 export const testController = {
   list: asyncHandler(async (req, res) => {
-    const tests = await testService.list();
+    const userId = req.user?.id ?? null;
+    const tests = await testService.listForDiscovery(userId);
     return sendSuccess(res, { tests }, 'Tests');
+  }),
+
+  listAdmin: asyncHandler(async (req, res) => {
+    const tests = await testService.listAdmin();
+    return sendSuccess(res, { tests }, 'Tests (admin)');
+  }),
+
+  setStatus: asyncHandler(async (req, res) => {
+    const test = await testService.setStatus(req.params.id, req.body.status);
+    return sendSuccess(res, { test }, 'Test status updated');
   }),
 
   create: asyncHandler(async (req, res) => {

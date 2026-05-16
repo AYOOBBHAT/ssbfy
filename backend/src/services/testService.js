@@ -1,5 +1,7 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { TEST_TYPE } from '../constants/testType.js';
+import { TEST_STATUS, isTestDisabled } from '../constants/testStatus.js';
+import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
 import { AppError } from '../utils/AppError.js';
 import { testRepository } from '../repositories/testRepository.js';
 import { questionRepository } from '../repositories/questionRepository.js';
@@ -146,27 +148,56 @@ async function withFilteredQuestionIds(test) {
   return { ...test, questionIds: filtered };
 }
 
+async function mapTestsWithFilteredQuestions(tests) {
+  if (!tests.length) return tests;
+
+  const allIds = [...new Set(tests.flatMap((t) => (t.questionIds || []).map(String)))];
+  const { valid } = await classifyQuestions(allIds);
+  const validSet = new Set(valid);
+
+  return tests.map((t) => ({
+    ...t,
+    status: t.status || TEST_STATUS.ACTIVE,
+    questionIds: (t.questionIds || []).filter((id) => validSet.has(String(id))),
+  }));
+}
+
 export const testService = {
   /**
-   * List all tests with questionIds filtered down to active-only. We don't
-   * remove tests that have zero valid questions — admins still need to see
-   * them so they can re-populate or retire them. The client can decide.
+   * Mock test lifecycle (status: active | disabled):
+   * - Discovery lists exclude disabled tests (except open-attempt resume for authed users).
+   * - start() blocks new attempts on disabled tests; in-progress attempts may finish.
+   * - submit/progress/historical results never require test.status === active.
+   *
+   * Manual QA:
+   * - Disable test → hidden from catalog; Profile history + GET /results/attempt/:id unchanged.
+   * - Mid-attempt disable → resume + submit succeed.
+   * - Re-enable → new starts allowed again.
    */
+  async listForDiscovery(userId = null) {
+    const mapped = await mapTestsWithFilteredQuestions(await testRepository.findAll({}));
+    let openTestIds = new Set();
+    if (userId) {
+      const ids = await testAttemptRepository.distinctOpenTestIdsByUser(userId);
+      openTestIds = new Set(ids.map(String));
+    }
+
+    return mapped.filter((t) => {
+      const hasQuestions = (t.questionIds || []).length > 0;
+      if (!hasQuestions) return false;
+      if (!isTestDisabled(t)) return true;
+      return userId && openTestIds.has(String(t._id));
+    });
+  },
+
+  /** Admin catalog: all tests including disabled and empty question sets. */
+  async listAdmin() {
+    return mapTestsWithFilteredQuestions(await testRepository.findAll({}));
+  },
+
+  /** @deprecated alias — use listForDiscovery */
   async list() {
-    const tests = await testRepository.findAll({});
-    if (!tests.length) return tests;
-
-    // Aggregate all ids across all tests and classify once; then rebuild
-    // each test's questionIds against the shared valid set. O(1) Mongo
-    // round-trips regardless of how many tests are listed.
-    const allIds = [...new Set(tests.flatMap((t) => (t.questionIds || []).map(String)))];
-    const { valid } = await classifyQuestions(allIds);
-    const validSet = new Set(valid);
-
-    return tests.map((t) => ({
-      ...t,
-      questionIds: (t.questionIds || []).filter((id) => validSet.has(String(id))),
-    }));
+    return this.listForDiscovery(null);
   },
 
   async getById(id) {
@@ -174,7 +205,38 @@ export const testService = {
     if (!test) {
       throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
     }
-    return withFilteredQuestionIds(test);
+    const filtered = await withFilteredQuestionIds(test);
+    return { ...filtered, status: filtered.status || TEST_STATUS.ACTIVE };
+  },
+
+  async assertAvailableForNewStart(testId) {
+    const test = await testRepository.findById(testId);
+    if (!test) {
+      throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (isTestDisabled(test)) {
+      throw new AppError('This test is no longer available.', HTTP_STATUS.GONE, null, {
+        code: 'TEST_DISABLED',
+      });
+    }
+    return test;
+  },
+
+  async setStatus(id, status) {
+    const test = await testRepository.findById(id);
+    if (!test) {
+      throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (!Object.values(TEST_STATUS).includes(status)) {
+      throw new AppError('Invalid test status', HTTP_STATUS.BAD_REQUEST);
+    }
+    const disabledAt = status === TEST_STATUS.DISABLED ? new Date() : null;
+    const updated = await testRepository.updateStatus(id, { status, disabledAt });
+    logger.info('[test.status] mock test lifecycle updated', {
+      testId: String(id),
+      status,
+    });
+    return withFilteredQuestionIds(updated);
   },
 
   async create(data) {
@@ -224,6 +286,8 @@ export const testService = {
       questionIds: uniqueIds,
       duration,
       negativeMarking: negativeMarking ?? 0,
+      status: TEST_STATUS.ACTIVE,
+      disabledAt: null,
     });
   },
 };

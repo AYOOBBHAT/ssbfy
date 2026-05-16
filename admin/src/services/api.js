@@ -412,6 +412,18 @@ export async function createTest(payload) {
   return unwrap(res);
 }
 
+/** Admin catalog — includes disabled tests and empty question sets. */
+export async function listTestsAdmin() {
+  const res = await api.get('/tests/admin/list');
+  return unwrap(res);
+}
+
+/** Soft-disable or re-enable a mock test (`status`: active | disabled). */
+export async function setTestStatus(testId, status) {
+  const res = await api.patch(`/tests/${testId}/status`, { status });
+  return unwrap(res);
+}
+
 /* ---------------- Notes ---------------- */
 
 /**

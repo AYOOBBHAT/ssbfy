@@ -6,6 +6,7 @@ import { testAttemptRepository } from '../repositories/testAttemptRepository.js'
 import { questionRepository } from '../repositories/questionRepository.js';
 import { resultRepository } from '../repositories/resultRepository.js';
 import { testService } from './testService.js';
+import { isTestDisabled } from '../constants/testStatus.js';
 import {
   WEAK_TOPIC_LIMIT,
   buildResultSnapshotAtSubmit,
@@ -215,6 +216,8 @@ async function buildHistoricalPayloadFromImmutableSnapshot(attempt) {
     testId: String(attempt.testId),
     testTitle: test?.title ?? null,
     testAvailable: !!test,
+    testStatus: test?.status ?? 'active',
+    testRetired: isTestDisabled(test),
     immutableAttemptSnapshot: true,
     score: attempt.score ?? 0,
     accuracy: attempt.accuracy ?? 0,
@@ -257,6 +260,8 @@ async function buildHistoricalResultViewPayload(attempt) {
   const test = await testRepository.findById(attempt.testId);
   const testAvailable = !!test;
   const testTitle = test?.title ?? null;
+  const testStatus = test?.status ?? 'active';
+  const testRetired = isTestDisabled(test);
 
   const rawQuestions = await questionRepository.findByIdsForScoring(attempt.questionIds || []);
   const qById = new Map(rawQuestions.map((q) => [q._id.toString(), q]));
@@ -363,6 +368,8 @@ async function buildHistoricalResultViewPayload(attempt) {
     testId: String(attempt.testId),
     testTitle,
     testAvailable,
+    testStatus,
+    testRetired,
     immutableAttemptSnapshot: false,
     score: attempt.score ?? 0,
     accuracy: attempt.accuracy ?? 0,
@@ -393,10 +400,19 @@ function throwAlreadySubmittedConflict(recovery) {
 
 export const testAttemptService = {
   async start(userId, testId, { isPremium = false } = {}) {
+    const existing = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
+    if (existing) {
+      // Mid-attempt disable must not block resume/submit for this open attempt.
+      return {
+        attempt: existing,
+        resumed: true,
+      };
+    }
+
+    await testService.assertAvailableForNewStart(testId);
+
     // Use the service view so inactive / orphaned questions are already
-    // stripped out before we build the attempt snapshot. This prevents a
-    // user from ever being assigned a question whose subject or topic has
-    // since been disabled by an admin.
+    // stripped out before we build the attempt snapshot.
     const test = await testService.getById(testId);
     if (!test.questionIds?.length) {
       throw new AppError('Test has no active questions available', HTTP_STATUS.BAD_REQUEST);
@@ -407,14 +423,6 @@ export const testAttemptService = {
       if (submitted) {
         throw new AppError('Test already completed', HTTP_STATUS.CONFLICT);
       }
-    }
-
-    const existing = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
-    if (existing) {
-      return {
-        attempt: existing,
-        resumed: true,
-      };
     }
 
     const questionIds = dedupeQuestionIds(test.questionIds);
@@ -502,6 +510,7 @@ export const testAttemptService = {
     if (!test) {
       throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
     }
+    // Disabled tests: submit still allowed for open attempts started while active.
 
     const attempt = await testAttemptRepository.findInProgressByUserAndTest(userId, testId);
     if (!attempt) {

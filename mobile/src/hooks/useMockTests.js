@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import {
   getApiErrorMessage,
   isFreeTestLimitError,
+  isTestDisabledError,
   FREE_TEST_LIMIT_MESSAGE,
   isRequestCancelled,
 } from '../services/api';
@@ -70,7 +71,9 @@ export function useMockTests() {
     } catch (e) {
       if (isRequestCancelled(e)) return;
       setMockStartError(
-        isFreeTestLimitError(e)
+        isTestDisabledError(e)
+          ? 'This test is no longer available.'
+          : isFreeTestLimitError(e)
           ? FREE_TEST_LIMIT_MESSAGE
           : getApiErrorMessage(e)
       );
