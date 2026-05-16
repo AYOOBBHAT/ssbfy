@@ -63,4 +63,10 @@ const userSchema = new mongoose.Schema(
 
 // Unique email index comes from `unique: true` on the path — do not add a second `schema.index({ email })`.
 
+/**
+ * GET /leaderboard — `userRepository.findLeaderboard` sorts by streak DESC, _id ASC.
+ * Compound order matches the sort so Mongo avoids in-memory sorts as user count grows.
+ */
+userSchema.index({ streakCount: -1, _id: 1 }, { name: 'idx_leaderboard_streak' });
+
 export const User = mongoose.model('User', userSchema);

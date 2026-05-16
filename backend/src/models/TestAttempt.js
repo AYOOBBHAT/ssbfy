@@ -153,23 +153,78 @@ const testAttemptSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-testAttemptSchema.index({ userId: 1, testId: 1 });
-// Note: do not add a second non-partial { userId, testId, endTime } index — it duplicates
-// the partial unique index below (same key pattern).
-testAttemptSchema.index({ userId: 1, endTime: 1, testId: 1 });
-// Optimizes completed-attempt history scans sorted by recency.
+/*
+ * Query map (do not drop partial/uniques without a migration plan):
+ * - Open attempt lookup: findInProgressByUserAndTest → partial unique open index.
+ * - Per-test submitted history: listSubmittedByUserAndTest → idx_attempt_user_test_completed.
+ * - Profile analytics / recent / latest: aggregateProfileStats, findRecentCompletedByUser
+ *   → idx_attempt_user_completed_recent (no testId in $match).
+ * - Status flags: getStatusFlagsByUser → userId prefix on compounds below.
+ * - Max attempt number: getMaxAttemptNumber sort → idx_attempt_user_test_attempt_num_desc.
+ * - Open attempts for user: listInProgressByUser, distinctOpenTestIds → idx_attempt_user_open_recent.
+ * - Admin usage: questionIds count → idx_attempt_question_ids.
+ */
+
+/** General (userId, testId) equality — resume checks, submit guards. */
+testAttemptSchema.index({ userId: 1, testId: 1 }, { name: 'idx_attempt_user_test' });
+
+/**
+ * findSubmittedByUserAndTest / countCompleted — completed rows per test.
+ * Partial avoids indexing in-progress docs that use the open-attempt unique index.
+ */
 testAttemptSchema.index(
   { userId: 1, testId: 1, endTime: -1, createdAt: -1 },
-  { partialFilterExpression: { endTime: { $ne: null } } }
+  {
+    name: 'idx_attempt_user_test_completed',
+    partialFilterExpression: { endTime: { $ne: null } },
+  }
+);
+
+/**
+ * Profile analytics + global recent list (no testId filter).
+ * Matches sort `{ endTime: -1, createdAt: -1 }` on completed attempts only.
+ */
+testAttemptSchema.index(
+  { userId: 1, endTime: -1, createdAt: -1 },
+  {
+    name: 'idx_attempt_user_completed_recent',
+    partialFilterExpression: { endTime: { $ne: null } },
+  }
+);
+
+/**
+ * All open attempts for a user — listInProgressByUser, distinctOpenTestIdsByUser.
+ */
+testAttemptSchema.index(
+  { userId: 1, createdAt: -1 },
+  {
+    name: 'idx_attempt_user_open_recent',
+    partialFilterExpression: { endTime: null },
+  }
+);
+
+/**
+ * getMaxAttemptNumber — sort attemptNumber DESC within (userId, testId).
+ */
+testAttemptSchema.index(
+  { userId: 1, testId: 1, attemptNumber: -1 },
+  {
+    name: 'idx_attempt_user_test_attempt_num_desc',
+    partialFilterExpression: { attemptNumber: { $type: 'number' } },
+  }
 );
 
 /**
  * Prevent duplicate open attempts for the same user+test, regardless of tier.
- * This is a partial unique index: only docs with endTime == null participate.
+ * Partial unique: only docs with endTime == null participate.
  */
 testAttemptSchema.index(
   { userId: 1, testId: 1, endTime: 1 },
-  { unique: true, partialFilterExpression: { endTime: null } }
+  {
+    name: 'uniq_attempt_user_test_open',
+    unique: true,
+    partialFilterExpression: { endTime: null },
+  }
 );
 
 /**
@@ -178,7 +233,14 @@ testAttemptSchema.index(
  */
 testAttemptSchema.index(
   { userId: 1, testId: 1, attemptNumber: 1 },
-  { unique: true, partialFilterExpression: { attemptNumber: { $type: 'number' } } }
+  {
+    name: 'uniq_attempt_user_test_attempt_num',
+    unique: true,
+    partialFilterExpression: { attemptNumber: { $type: 'number' } },
+  }
 );
+
+/** Admin blast-radius — count attempts that include a question id. */
+testAttemptSchema.index({ questionIds: 1 }, { name: 'idx_attempt_question_ids' });
 
 export const TestAttempt = mongoose.model('TestAttempt', testAttemptSchema);

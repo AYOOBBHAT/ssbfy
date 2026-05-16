@@ -29,7 +29,18 @@ const testSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-testSchema.index({ type: 1 });
-testSchema.index({ status: 1, createdAt: -1 });
+/** Admin / analytics filters by test type. */
+testSchema.index({ type: 1 }, { name: 'idx_test_type' });
+
+/**
+ * Discovery + admin list — `testRepository.findAll` sorts `{ createdAt: -1 }`;
+ * `listForDiscovery` filters active tests (status is post-filter in app code).
+ */
+testSchema.index({ status: 1, createdAt: -1 }, { name: 'idx_test_status_created' });
+
+/**
+ * Admin question usage — `questionRepository.getUsageCounts` counts tests referencing a question.
+ */
+testSchema.index({ questionIds: 1 }, { name: 'idx_test_question_ids' });
 
 export const Test = mongoose.model('Test', testSchema);

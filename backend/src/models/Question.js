@@ -80,14 +80,38 @@ const questionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-questionSchema.index({ subjectId: 1 });
-questionSchema.index({ topicId: 1 });
-questionSchema.index({ postIds: 1 });
-questionSchema.index({ year: 1 });
-questionSchema.index({ isActive: 1, subjectId: 1, topicId: 1 });
-questionSchema.index({ isActive: 1, subjectId: 1, topicId: 1, difficulty: 1 });
-questionSchema.index({ isActive: 1, postIds: 1 });
-questionSchema.index({ isActive: 1, difficulty: 1, year: 1 });
+/*
+ * Index strategy (see scripts/audit-indexes.mjs):
+ * - Compounds leading with `isActive` also satisfy `{ isActive: true }` via prefix.
+ * - `isActive` field index (path) is kept for simple active-only counts; overlaps compounds.
+ * - `{ topicId, isActive }` optimizes weak-practice `$match` before `$sample`.
+ */
+
+questionSchema.index({ subjectId: 1 }, { name: 'idx_question_subject' });
+questionSchema.index({ topicId: 1 }, { name: 'idx_question_topic' });
+questionSchema.index({ postIds: 1 }, { name: 'idx_question_post_ids' });
+questionSchema.index({ year: 1 }, { name: 'idx_question_year' });
+questionSchema.index(
+  { topicId: 1, isActive: 1 },
+  { name: 'idx_question_topic_active' }
+);
+questionSchema.index(
+  { isActive: 1, subjectId: 1, topicId: 1 },
+  { name: 'idx_question_active_subject_topic' }
+);
+questionSchema.index(
+  { isActive: 1, subjectId: 1, topicId: 1, difficulty: 1 },
+  { name: 'idx_question_smart_scope' }
+);
+questionSchema.index({ isActive: 1, postIds: 1 }, { name: 'idx_question_active_post' });
+questionSchema.index(
+  { isActive: 1, difficulty: 1, year: 1 },
+  { name: 'idx_question_active_difficulty_year' }
+);
+questionSchema.index(
+  { isActive: 1, createdAt: -1 },
+  { name: 'idx_question_admin_recent' }
+);
 
 function isValidHttpUrl(s) {
   if (typeof s !== 'string' || s.trim() === '') return false;

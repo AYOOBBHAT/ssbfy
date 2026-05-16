@@ -22,6 +22,13 @@ const resultSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-resultSchema.index({ userId: 1, testId: 1, createdAt: -1 });
+/**
+ * Legacy Result list — `resultRepository.findByUser` filters userId, sorts createdAt DESC.
+ * Leading userId + descending createdAt avoids scanning the wider userId+testId compound.
+ */
+resultSchema.index({ userId: 1, createdAt: -1 }, { name: 'idx_result_user_recent' });
+
+/** Per-test history when testId is present in the filter. */
+resultSchema.index({ userId: 1, testId: 1, createdAt: -1 }, { name: 'idx_result_user_test_recent' });
 
 export const Result = mongoose.model('Result', resultSchema);
