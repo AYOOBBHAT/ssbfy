@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   skelPillWide: { width: 118 },
   skelPillNarrow: { width: 84 },
   skelPillPremium: {
-    backgroundColor: '#e0e7ff',
+    backgroundColor: colors.accentSoft,
   },
   badge: {
     paddingHorizontal: 10,

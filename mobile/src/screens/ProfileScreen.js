@@ -195,7 +195,12 @@ function PlanCard({ plan, onPress, mockQuotaLine = null }) {
     <View
       style={[
         styles.planCard,
-        { backgroundColor: visual.surface, borderColor: visual.border },
+        {
+          backgroundColor: visual.surface,
+          borderColor: visual.border,
+          borderLeftColor: visual.accentStripe || visual.border,
+          borderLeftWidth: visual.accentStripe ? 3 : 1,
+        },
       ]}
     >
       <View style={styles.planHeaderRow}>
@@ -316,7 +321,7 @@ function visualForStatus(status) {
   switch (status) {
     case 'lifetime':
       return {
-        title: 'Lifetime Premium 👑',
+        title: 'Lifetime Premium',
         icon: 'star',
         iconColor: colors.accent,
         iconBg: colors.accentSoft,
@@ -324,21 +329,21 @@ function visualForStatus(status) {
         border: colors.accentBorder,
         titleColor: colors.text,
         ctaBg: colors.accent,
-        ctaText: '#ffffff',
+        ctaText: colors.textOnPrimary,
       };
     case 'active':
       return {
         title: 'Premium Active',
         icon: 'checkmark-circle',
-        iconColor: '#4F46E5',
-        iconBg: '#E0E7FF',
-        surface: '#EEF2FF',
-        border: '#6366F1',
-        titleColor: '#4338CA',
+        iconColor: colors.primary,
+        iconBg: colors.primarySoft,
+        surface: colors.card,
+        border: colors.border,
+        titleColor: colors.text,
         titleFontWeight: '700',
-        subtitleColor: '#4B5563',
-        ctaBg: '#4F46E5',
-        ctaText: '#FFFFFF',
+        subtitleColor: colors.muted,
+        ctaBg: colors.primary,
+        ctaText: colors.textOnPrimary,
       };
     case 'expired':
       return {
@@ -357,16 +362,17 @@ function visualForStatus(status) {
       return {
         title: 'Free Plan',
         icon: 'star-outline',
-        iconColor: '#4F46E5',
-        iconBg: '#E0E7FF',
+        iconColor: colors.accent,
+        iconBg: colors.accentSoft,
         iconWrapRadius: 12,
-        surface: '#F8FAFF',
-        border: '#E0E7FF',
-        titleColor: '#1F2937',
+        surface: colors.card,
+        border: colors.border,
+        accentStripe: colors.accent,
+        titleColor: colors.text,
         titleFontWeight: '700',
-        subtitleColor: '#6B7280',
-        ctaBg: '#4F46E5',
-        ctaText: '#FFFFFF',
+        subtitleColor: colors.muted,
+        ctaBg: colors.primary,
+        ctaText: colors.textOnPrimary,
       };
   }
 }
@@ -763,8 +769,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   heroStatBest: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#6366F1',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.border,
   },
   heroStatStreak: {
     backgroundColor: colors.accentSoft,
@@ -782,7 +788,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   heroStatLabelBest: {
-    color: '#4338CA',
+    color: colors.primaryText,
   },
   heroStatValue: {
     fontSize: 26,

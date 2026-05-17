@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
+import { premiumStyles } from '../theme/premiumUi';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import {
   createPremiumOrder,
@@ -183,10 +185,12 @@ export default function PremiumScreen() {
 
   if (isPremium) {
     return (
-      <View style={styles.centerWrap}>
-        <Text style={styles.premiumActiveEmoji}>✅</Text>
-        <Text style={styles.premiumActiveTitle}>Premium Active</Text>
-        <Text style={styles.premiumActiveSub}>{PREMIUM_ACTIVE_SUB}</Text>
+      <View style={premiumStyles.statusWrap}>
+        <View style={[premiumStyles.statusIconRing, premiumStyles.statusIconRingGold]}>
+          <Ionicons name="star" size={32} color={colors.accent} />
+        </View>
+        <Text style={premiumStyles.statusTitle}>Premium Active</Text>
+        <Text style={premiumStyles.statusSub}>{PREMIUM_ACTIVE_SUB}</Text>
         <Pressable
           onPress={goHome}
           style={({ pressed }) => [styles.primaryBtn, pressFeedbackStyle(pressed)]}
@@ -199,10 +203,12 @@ export default function PremiumScreen() {
 
   if (success) {
     return (
-      <View style={styles.centerWrap}>
-        <Text style={styles.successEmoji}>🎉</Text>
-        <Text style={styles.successTitle}>Premium Activated</Text>
-        <Text style={styles.successSub}>{PREMIUM_SUCCESS_SUB}</Text>
+      <View style={premiumStyles.statusWrap}>
+        <View style={premiumStyles.statusIconRing}>
+          <Ionicons name="checkmark-circle" size={36} color={colors.primary} />
+        </View>
+        <Text style={premiumStyles.statusTitle}>Premium Activated</Text>
+        <Text style={premiumStyles.statusSub}>{PREMIUM_SUCCESS_SUB}</Text>
         <Pressable
           onPress={goHome}
           style={({ pressed }) => [styles.primaryBtn, pressFeedbackStyle(pressed)]}
@@ -222,14 +228,16 @@ export default function PremiumScreen() {
     >
       <Text style={styles.heroTitle}>{PREMIUM_HERO_TITLE}</Text>
       <Text style={styles.heroSub}>{PREMIUM_HERO_SUB}</Text>
-      <Text style={styles.context}>{contextLine}</Text>
+      <Text style={premiumStyles.contextBanner}>{contextLine}</Text>
 
-      <View style={styles.benefitsCard}>
-        <Text style={styles.benefitsHeading}>What you get</Text>
+      <View style={premiumStyles.benefitsCard}>
+        <Text style={premiumStyles.benefitsHeading}>What you get</Text>
         {PREMIUM_BENEFITS.map((line) => (
-          <View key={line} style={styles.benefitRow}>
-            <Text style={styles.benefitCheck}>✔</Text>
-            <Text style={styles.benefitText}>{line}</Text>
+          <View key={line} style={premiumStyles.benefitRow}>
+            <View style={premiumStyles.benefitIcon}>
+              <Ionicons name="checkmark" size={13} color={colors.accent} />
+            </View>
+            <Text style={premiumStyles.benefitText}>{line}</Text>
           </View>
         ))}
       </View>
@@ -269,8 +277,8 @@ export default function PremiumScreen() {
             ]}
           >
             {recommended ? (
-              <View style={styles.recBadge}>
-                <Text style={styles.recBadgeText}>Recommended</Text>
+              <View style={premiumStyles.recBadge}>
+                <Text style={premiumStyles.recBadgeText}>Recommended</Text>
               </View>
             ) : null}
             <View style={styles.planRow}>
@@ -350,52 +358,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 10,
   },
-  context: {
-    fontSize: 14,
-    color: colors.primaryText,
-    backgroundColor: colors.primarySoft,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-
-  benefitsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 22,
-  },
-  benefitsHeading: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 14,
-  },
-  benefitRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  benefitCheck: {
-    fontSize: 16,
-    color: colors.success,
-    fontWeight: '800',
-    marginRight: 10,
-    marginTop: 1,
-  },
-  benefitText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    lineHeight: 22,
-  },
-
   sectionLabel: {
     fontSize: 13,
     fontWeight: '700',
@@ -418,20 +380,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
   },
   planCardRecommended: {},
-  recBadge: {
-    position: 'absolute',
-    top: -10,
-    right: 12,
-    backgroundColor: colors.accent,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  recBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
-  },
   planRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -537,39 +485,4 @@ const styles = StyleSheet.create({
   },
   inlineLoadingText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
 
-  centerWrap: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    padding: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  premiumActiveEmoji: { fontSize: 48, marginBottom: 12 },
-  premiumActiveTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  premiumActiveSub: {
-    fontSize: 15,
-    color: colors.muted,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  successEmoji: { fontSize: 56, marginBottom: 12 },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: colors.success,
-    marginBottom: 8,
-  },
-  successSub: {
-    fontSize: 15,
-    color: colors.muted,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 28,
-  },
 });

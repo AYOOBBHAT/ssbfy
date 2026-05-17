@@ -19,6 +19,7 @@ import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getDailyPractice } from '../services/dailyPracticeService';
 import { useMockQuota } from '../hooks/useMockQuota';
 import { MockQuotaBanner } from '../components/MockQuotaBanner';
+import { PremiumHomeBanner } from '../components/PremiumHomeBanner';
 import {
   HOME_NOTES_SUB,
   HOME_PDF_SUB,
@@ -106,24 +107,12 @@ export default function HomeScreen() {
       </View>
 
       {showPremiumBanner ? (
-        <View style={styles.premiumCta}>
-          <View style={styles.premiumCtaIconWrap}>
-            <Ionicons name="star-outline" size={28} color="#4F46E5" />
-          </View>
-          <View style={styles.premiumCtaBody}>
-            <Text style={styles.premiumCtaTitle}>{HOME_PREMIUM_TITLE}</Text>
-            <Text style={styles.premiumCtaSub}>{HOME_PREMIUM_SUB}</Text>
-            <Pressable
-              onPress={() => navigation.navigate('Premium', { from: 'home' })}
-              style={({ pressed }) => [
-                styles.premiumCtaButton,
-                pressFeedbackStyle(pressed),
-              ]}
-            >
-              <Text style={styles.premiumCtaButtonText}>{HOME_PREMIUM_BUTTON}</Text>
-            </Pressable>
-          </View>
-        </View>
+        <PremiumHomeBanner
+          title={HOME_PREMIUM_TITLE}
+          subtitle={HOME_PREMIUM_SUB}
+          buttonLabel={HOME_PREMIUM_BUTTON}
+          onPress={() => navigation.navigate('Premium', { from: 'home' })}
+        />
       ) : null}
 
       <View style={styles.heroCard}>
@@ -262,61 +251,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 8,
     lineHeight: 22,
-  },
-
-  premiumCta: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#EEF2FF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1.2,
-    borderColor: '#6366F1',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#312E81',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 10,
-      },
-      android: { elevation: 7 },
-    }),
-  },
-  premiumCtaIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: '#E0E7FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  premiumCtaBody: { flex: 1 },
-  premiumCtaTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#4338CA',
-    letterSpacing: -0.3,
-    marginBottom: 8,
-  },
-  premiumCtaSub: {
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 22,
-  },
-  premiumCtaButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#4F46E5',
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    borderRadius: 10,
-    marginTop: 14,
-  },
-  premiumCtaButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
   },
 
   heroCard: {

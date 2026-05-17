@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../theme/colors';
+import { View, Text } from 'react-native';
+import { premiumStyles } from '../theme/premiumUi';
 import { getQuotaStatusLine } from '../utils/mockQuotaCopy';
 
 /**
@@ -9,8 +9,8 @@ import { getQuotaStatusLine } from '../utils/mockQuotaCopy';
 export function MockQuotaBanner({ quota, loading = false }) {
   if (loading) {
     return (
-      <View style={[styles.wrap, styles.wrapNeutral]}>
-        <Text style={styles.textMuted}>Checking mock quota…</Text>
+      <View style={[premiumStyles.quotaWrap, premiumStyles.quotaNeutral]}>
+        <Text style={premiumStyles.quotaTextNeutral}>Checking mock quota…</Text>
       </View>
     );
   }
@@ -20,66 +20,19 @@ export function MockQuotaBanner({ quota, loading = false }) {
 
   const wrapStyle =
     status.tone === 'exhausted'
-      ? styles.wrapExhausted
+      ? premiumStyles.quotaExhausted
       : status.tone === 'emphasis'
-      ? styles.wrapEmphasis
-      : styles.wrapNeutral;
+      ? premiumStyles.quotaEmphasis
+      : premiumStyles.quotaNeutral;
 
   const textStyle =
-    status.tone === 'exhausted'
-      ? styles.textExhausted
-      : status.tone === 'emphasis'
-      ? styles.textEmphasis
-      : styles.textNeutral;
+    status.tone === 'emphasis'
+      ? premiumStyles.quotaTextEmphasis
+      : premiumStyles.quotaTextNeutral;
 
   return (
-    <View style={[styles.wrap, wrapStyle]}>
+    <View style={[premiumStyles.quotaWrap, wrapStyle]}>
       <Text style={textStyle}>{status.line}</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-  },
-  wrapNeutral: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-  },
-  wrapEmphasis: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  wrapExhausted: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
-  },
-  textNeutral: {
-    fontSize: 13,
-    color: colors.muted,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  textEmphasis: {
-    fontSize: 13,
-    color: colors.primaryText,
-    lineHeight: 18,
-    fontWeight: '600',
-  },
-  textExhausted: {
-    fontSize: 13,
-    color: colors.muted,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  textMuted: {
-    fontSize: 13,
-    color: colors.muted,
-    lineHeight: 18,
-  },
-});

@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '../theme/colors';
+import { premiumStyles } from '../theme/premiumUi';
 import { pressFeedbackStyle } from '../utils/pressFeedback';
 import {
   MOCK_EXHAUSTED_LEAD,
@@ -13,12 +14,6 @@ import {
 
 /**
  * Supportive exhausted-quota card with free-loop recovery + Premium CTA.
- * @param {{
- *   onSeePlans: () => void,
- *   onDailyPractice?: () => void,
- *   onTopicPractice?: () => void,
- *   compact?: boolean,
- * }} props
  */
 export function MockQuotaExhaustedCard({
   onSeePlans,
@@ -27,14 +22,19 @@ export function MockQuotaExhaustedCard({
   compact = false,
 }) {
   return (
-    <View style={[styles.card, compact && styles.cardCompact]}>
+    <View
+      style={[
+        premiumStyles.exhaustedCard,
+        compact && premiumStyles.exhaustedCardCompact,
+      ]}
+    >
       <Text style={styles.title}>{MOCK_EXHAUSTED_TITLE}</Text>
       <Text style={styles.lead}>{MOCK_EXHAUSTED_LEAD}</Text>
 
       <Text style={styles.sectionLabel}>{MOCK_STILL_FREE_TITLE}</Text>
       {MOCK_STILL_FREE_ITEMS.map((item) => (
         <View key={item} style={styles.bulletRow}>
-          <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+          <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
           <Text style={styles.bulletText}>{item}</Text>
         </View>
       ))}
@@ -61,26 +61,15 @@ export function MockQuotaExhaustedCard({
       <Text style={styles.premiumLine}>{MOCK_EXHAUSTED_PREMIUM_LINE}</Text>
       <Pressable
         onPress={onSeePlans}
-        style={({ pressed }) => [styles.primaryBtn, pressFeedbackStyle(pressed)]}
+        style={({ pressed }) => [premiumStyles.ctaButton, pressFeedbackStyle(pressed)]}
       >
-        <Text style={styles.primaryBtnText}>{MOCK_LIMIT_CTA}</Text>
+        <Text style={premiumStyles.ctaButtonText}>{MOCK_LIMIT_CTA}</Text>
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  cardCompact: {
-    marginBottom: 12,
-  },
   title: {
     fontSize: 16,
     fontWeight: '700',
@@ -126,7 +115,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.border,
   },
   recoveryBtnText: {
     fontSize: 13,
@@ -138,17 +127,5 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 18,
     marginBottom: 12,
-  },
-  primaryBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-  },
-  primaryBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: 14,
-    fontWeight: '700',
   },
 });

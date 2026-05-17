@@ -18,6 +18,7 @@ import {
   SAVE_ALERT_MESSAGE,
   SAVE_ALERT_TITLE,
 } from '../constants/upgradeCopy';
+import { PremiumUpsellCard } from '../components/PremiumUpsellCard';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getPosts } from '../services/pdfService';
 import {
@@ -482,13 +483,12 @@ export default function NotesListScreen() {
       showsVerticalScrollIndicator={false}
     >
       {showPremiumUpsell ? (
-        <Pressable
+        <PremiumUpsellCard
+          title={NOTES_UPSELL_TITLE}
+          subtitle={NOTES_UPSELL_SUB}
+          icon="bookmark-outline"
           onPress={() => navigation.navigate('Premium', { from: 'notes' })}
-          style={({ pressed }) => [styles.premiumUpsell, pressFeedbackStyle(pressed)]}
-        >
-          <Text style={styles.premiumUpsellTitle}>{NOTES_UPSELL_TITLE}</Text>
-          <Text style={styles.premiumUpsellSub}>{NOTES_UPSELL_SUB}</Text>
-        </Pressable>
+        />
       ) : null}
       {renderPostRow()}
 
@@ -521,27 +521,6 @@ export default function NotesListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
-
-  premiumUpsell: {
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-  },
-  premiumUpsellTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: colors.primaryText,
-  },
-  premiumUpsellSub: {
-    fontSize: 13,
-    color: colors.primaryText,
-    marginTop: 4,
-    lineHeight: 18,
-    opacity: 0.9,
-  },
 
   sectionBlock: { marginBottom: 12 },
   sectionTitle: {
