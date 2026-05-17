@@ -1,14 +1,16 @@
-import { Pressable, Text, StyleSheet } from 'react-native';
+import { Pressable, Text, StyleSheet, View } from 'react-native';
 import { colors } from '../theme/colors';
+import AuthBusyIndicator from './auth/AuthBusyIndicator';
 
 /**
- * Lightweight pressable button with consistent opacity feedback.
- * variant: "primary" | "secondary" | "ghost"
+ * Pressable button with a clear busy state: full contrast, animated spinner,
+ * dimmed label — avoids the “frozen grey button” trap on slow devices.
  */
 export default function AppButton({
   title,
   onPress,
   disabled = false,
+  loading = false,
   variant = 'primary',
   style,
   textStyle,
@@ -17,29 +19,52 @@ export default function AppButton({
     variant === 'primary'
       ? styles.primary
       : variant === 'secondary'
-      ? styles.secondary
-      : styles.ghost;
+        ? styles.secondary
+        : styles.ghost;
 
   const labelBase =
     variant === 'primary'
       ? styles.primaryText
       : variant === 'secondary'
-      ? styles.secondaryText
-      : styles.ghostText;
+        ? styles.secondaryText
+        : styles.ghostText;
+
+  const isDisabled = disabled || loading;
 
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
+      disabled={isDisabled}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      accessibilityLabel={title}
+      accessibilityHint={loading ? 'Please wait' : undefined}
       style={({ pressed }) => [
         styles.base,
         base,
-        pressed && !disabled && styles.pressed,
-        disabled && styles.disabled,
+        pressed && !isDisabled && styles.pressed,
+        disabled && !loading && styles.disabled,
+        loading && styles.loadingBusy,
         style,
       ]}
     >
-      <Text style={[labelBase, textStyle]}>{title}</Text>
+      {loading ? (
+        <View style={styles.loadingRow}>
+          <AuthBusyIndicator
+            prominent
+            onPrimary={variant === 'primary'}
+            color={variant === 'primary' ? colors.textOnPrimary : colors.primary}
+          />
+          <Text
+            style={[labelBase, textStyle, styles.loadingLabel]}
+            numberOfLines={1}
+            importantForAccessibility="no-hide-descendants"
+          >
+            {title}
+          </Text>
+        </View>
+      ) : (
+        <Text style={[labelBase, textStyle]}>{title}</Text>
+      )}
     </Pressable>
   );
 }
@@ -51,6 +76,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   primary: { backgroundColor: colors.primary },
   primaryText: { color: colors.textOnPrimary, fontSize: 15, fontWeight: '600' },
@@ -64,8 +90,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     paddingVertical: 8,
     paddingHorizontal: 12,
+    minHeight: 40,
   },
   ghostText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
   pressed: { opacity: 0.75 },
   disabled: { opacity: 0.5 },
+  /** Full-strength button while busy — never reuse `disabled` fade. */
+  loadingBusy: {
+    opacity: 1,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 24,
+  },
+  loadingLabel: {
+    opacity: 0.55,
+    marginLeft: 12,
+  },
 });

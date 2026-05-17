@@ -118,23 +118,23 @@ export function PasswordToggle({ visible, onPress, disabled }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: 14 },
+  wrap: { marginBottom: 12 },
   label: {
     fontSize: 13,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 6,
-    letterSpacing: 0.2,
+    marginBottom: 5,
+    letterSpacing: 0.15,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
+    backgroundColor: '#ffffff',
     borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 14,
-    minHeight: 54,
+    minHeight: 52,
   },
   inputRowFocused: {
     borderColor: colors.primary,

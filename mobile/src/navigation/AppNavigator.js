@@ -1,14 +1,10 @@
-import {
-  Platform,
-  View,
-  ActivityIndicator,
-  Text,
-  StyleSheet,
-} from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
+import { useStartupSplash } from '../hooks/useStartupSplash';
+import StartupSplashScreen from '../components/splash/StartupSplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
@@ -29,6 +25,7 @@ import SmartPracticeScreen from '../screens/SmartPracticeScreen';
 import SavedMaterialsScreen from '../screens/SavedMaterialsScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import { colors, brand } from '../theme/colors';
+import { authScreenBg } from '../theme/authUi';
 
 const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -178,21 +175,30 @@ function MainTabs() {
 
 export default function AppNavigator() {
   const { isAuthenticated, initializing } = useAuth();
+  const { showSplash, showBootstrapLoader, onAnimationComplete, splashOpacity } =
+    useStartupSplash(initializing);
 
-  if (initializing) {
+  if (showSplash) {
     return (
-      <View style={styles.boot}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.bootBrand}>{brand.name}</Text>
-        <Text style={styles.bootText}>Loading...</Text>
-      </View>
+      <StartupSplashScreen
+        onAnimationComplete={onAnimationComplete}
+        showBootstrapLoader={showBootstrapLoader}
+        splashOpacity={splashOpacity}
+      />
     );
   }
 
   return (
     <RootStack.Navigator
       key={isAuthenticated ? 'app' : 'auth'}
-      screenOptions={{ ...themedHeader, headerShown: true }}
+      screenOptions={{
+        ...themedHeader,
+        headerShown: true,
+        contentStyle: {
+          backgroundColor: isAuthenticated ? colors.bg : authScreenBg,
+        },
+        ...(isAuthenticated ? {} : { animation: 'fade', headerShown: false }),
+      }}
     >
       {isAuthenticated ? (
         <>
@@ -253,42 +259,33 @@ export default function AppNavigator() {
         </>
       ) : (
         <>
-          <RootStack.Screen name="Login" component={LoginScreen} options={{ title: brand.name }} />
-          <RootStack.Screen name="Signup" component={SignupScreen} options={{ title: 'Sign up' }} />
+          <RootStack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="Signup"
+            component={SignupScreen}
+            options={{ headerShown: false }}
+          />
           <RootStack.Screen
             name="ForgotPassword"
             component={ForgotPasswordScreen}
-            options={{ title: 'Forgot password' }}
+            options={{ headerShown: false, animation: 'fade' }}
           />
           <RootStack.Screen
             name="VerifyOtp"
             component={VerifyOtpScreen}
-            options={{ title: 'Verify code' }}
+            options={{ headerShown: false, animation: 'fade' }}
           />
           <RootStack.Screen
             name="ResetPassword"
             component={ResetPasswordScreen}
-            options={{ title: 'Reset password' }}
+            options={{ headerShown: false, animation: 'fade' }}
           />
         </>
       )}
     </RootStack.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  boot: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-  },
-  bootBrand: {
-    marginTop: 16,
-    fontSize: 24,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 1,
-  },
-  bootText: { marginTop: 6, color: colors.muted },
-});

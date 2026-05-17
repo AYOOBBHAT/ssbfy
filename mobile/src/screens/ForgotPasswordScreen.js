@@ -1,33 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Pressable,
-} from 'react-native';
+import { Pressable, Text } from 'react-native';
 import AppButton from '../components/AppButton';
 import AuthField from '../components/AuthField';
-import { colors, brand } from '../theme/colors';
+import { AuthErrorBanner } from '../components/auth/AuthErrorBanner';
+import AuthScreenShell from '../components/auth/AuthScreenShell';
+import { brand } from '../theme/colors';
+import { authStyles } from '../theme/authUi';
 import { sendForgotPasswordOtp } from '../services/authService';
 import { getApiErrorMessage } from '../services/api';
 
-/** Default cooldown shown to the user when the server doesn't return one. */
 const DEFAULT_COOLDOWN_SEC = 45;
 
-/**
- * STEP 1 of the Forgot Password flow.
- *
- * Collects the email and asks the server to send an OTP. The server
- * applies a per-email cooldown even when the account does not exist,
- * and returns the SAME generic message either way — so this screen
- * never branches on the message text or the response status.
- *
- * After a successful send (or any "code may be on its way" outcome) we
- * navigate to VerifyOtp where the user enters the code.
- */
 export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -35,8 +18,6 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const tickRef = useRef(null);
 
-  // Stop the interval when the screen unmounts so we don't leak a timer
-  // (and don't call setState on an unmounted component).
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
@@ -70,10 +51,6 @@ export default function ForgotPasswordScreen({ navigation }) {
     setSubmitting(true);
     try {
       await sendForgotPasswordOtp({ email: trimmed });
-      // Move forward regardless of whether an account actually exists —
-      // the server returns the same generic response either way, and
-      // branching here would create the very enumeration vector we are
-      // protecting against. The next screen's behavior is identical.
       startCooldown(DEFAULT_COOLDOWN_SEC);
       navigation.navigate('VerifyOtp', {
         email: trimmed,
@@ -81,8 +58,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       });
     } catch (e) {
       const status = e?.response?.status;
-      const details = e?.response?.data?.details;
-      const retry = details?.retryAfterSeconds;
+      const retry = e?.response?.data?.details?.retryAfterSeconds;
       if (status === 429 && retry) {
         setError('Please wait before requesting another code.');
         startCooldown(retry);
@@ -95,119 +71,64 @@ export default function ForgotPasswordScreen({ navigation }) {
   }
 
   const canSend = email.trim().length > 0 && !submitting && cooldownLeft === 0;
-  const ctaLabel = submitting
-    ? 'Sending…'
-    : cooldownLeft > 0
-      ? `Resend in ${cooldownLeft}s`
-      : 'Send reset code';
+  const ctaLabel =
+    cooldownLeft > 0 ? `Resend in ${cooldownLeft}s` : 'Send reset code';
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <AuthScreenShell
+      flow
+      showBack
+      onBack={() => navigation.goBack()}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <Text style={authStyles.flowTitle}>Forgot password</Text>
+      <Text style={authStyles.flowSubtitle}>
+        Enter the email for your {brand.name} account. We&apos;ll email a 6-digit code if
+        an account exists.
+      </Text>
+
+      <AuthErrorBanner message={error} />
+
+      <AuthField
+        label="Email"
+        placeholder="you@example.com"
+        value={email}
+        onChangeText={setEmail}
+        editable={!submitting}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        autoComplete="email"
+        returnKeyType="send"
+        onSubmitEditing={sendCode}
+      />
+
+      <AppButton
+        title={ctaLabel}
+        loading={submitting}
+        onPress={sendCode}
+        disabled={!canSend}
+        style={authStyles.primaryCta}
+        textStyle={authStyles.primaryCtaText}
+      />
+
+      <Pressable
+        onPress={() => navigation.navigate('VerifyOtp', { email: email.trim() })}
+        disabled={!email.trim() || submitting}
+        style={({ pressed }) => [
+          authStyles.linkRow,
+          pressed && email.trim() && !submitting && { opacity: 0.7 },
+        ]}
       >
-        <Text style={styles.title}>Forgot password</Text>
-        <Text style={styles.subtitle}>
-          Enter the email you use for {brand.name}. We&apos;ll send a 6-digit
-          code if an account exists.
-        </Text>
-
-        {error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-
-        <AuthField
-          label="Email"
-          placeholder="you@example.com"
-          value={email}
-          onChangeText={setEmail}
-          editable={!submitting}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          autoComplete="email"
-          returnKeyType="send"
-          onSubmitEditing={sendCode}
-        />
-
-        <AppButton
-          title={ctaLabel}
-          onPress={sendCode}
-          disabled={!canSend}
-          style={styles.primaryCta}
-        />
-
-        <Pressable
-          onPress={() =>
-            navigation.navigate('VerifyOtp', { email: email.trim() })
-          }
-          disabled={!email.trim() || submitting}
-          style={({ pressed }) => [
-            styles.linkRow,
-            pressed && email.trim() && !submitting && { opacity: 0.7 },
+        <Text
+          style={[
+            authStyles.linkText,
+            (!email.trim() || submitting) && authStyles.linkTextDisabled,
           ]}
         >
-          <Text
-            style={[
-              styles.linkText,
-              (!email.trim() || submitting) && styles.linkTextDisabled,
-            ]}
-          >
-            I already have a code
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.mutedLink}>Back to sign in</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          I already have a code
+        </Text>
+      </Pressable>
+    </AuthScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.bg },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 32,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.muted,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  errorBanner: {
-    backgroundColor: colors.dangerSoft,
-    borderColor: colors.danger,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-  },
-  errorText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
-  primaryCta: { marginTop: 8, paddingVertical: 14, borderRadius: 12 },
-  linkRow: { alignSelf: 'center', marginTop: 16, paddingVertical: 8 },
-  linkText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
-  linkTextDisabled: { color: colors.muted, fontWeight: '600' },
-  mutedLink: { color: colors.muted, fontSize: 14 },
-});

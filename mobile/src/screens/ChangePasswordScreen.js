@@ -168,7 +168,8 @@ export default function ChangePasswordScreen({ navigation }) {
         />
 
         <AppButton
-          title={submitting ? 'Updating...' : 'Update password'}
+          title="Update password"
+          loading={submitting}
           onPress={handleSubmit}
           disabled={!canSubmit}
           style={styles.cta}
