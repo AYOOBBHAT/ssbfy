@@ -903,7 +903,7 @@ export default function ResultScreen() {
   const showStreakChip =
     !isHistoricalAttempt && !isRetry && returnMainTab === MAIN_TABS.HOME && streakCount > 0;
 
-  const correctCount = mockAttemptStats?.correct ?? Number(score) || 0;
+  const correctCount = mockAttemptStats?.correct ?? (Number(score) || 0);
   const wrongCount = mockAttemptStats
     ? mockAttemptStats.incorrect
     : Math.max(0, (Number(displayStats.answeredQ) || 0) - correctCount);
