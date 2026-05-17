@@ -22,6 +22,7 @@ const router = Router();
 
 router.get(
   '/',
+  authenticate,
   listQuestionsQueryValidators,
   validateRequest,
   questionController.list
@@ -31,6 +32,7 @@ router.get(
 // "weak-practice" as an ObjectId and the route would 400.
 router.get(
   '/weak-practice',
+  authenticate,
   weakPracticeValidators,
   validateRequest,
   questionController.weakPractice
@@ -133,7 +135,13 @@ router.post(
   questionController.create
 );
 
-router.get('/:id', questionIdParam, validateRequest, questionController.getById);
+router.get(
+  '/:id',
+  authenticate,
+  ...questionIdParam,
+  validateRequest,
+  questionController.getById
+);
 
 router.put(
   '/:id',

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, Pressable } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useMockTests } from '../hooks/useMockTests';
+import { useMockQuota } from '../hooks/useMockQuota';
 import { MockTestCard } from '../components/MockTestCard';
+import { MockQuotaBanner } from '../components/MockQuotaBanner';
+import { MockQuotaExhaustedCard } from '../components/MockQuotaExhaustedCard';
 import { LoadingState, ErrorState, EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
@@ -12,11 +14,13 @@ import { useAuth } from '../context/AuthContext';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getMyTestStatus } from '../services/testService';
+import { isQuotaExhausted } from '../utils/mockQuotaCopy';
 
 export default function TestsListScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const isPremium = userHasPremiumAccess(user);
+  const { quota, loading: quotaLoading, refresh: refreshQuota, showQuota } = useMockQuota();
   const [statusMap, setStatusMap] = useState({});
   const [statusError, setStatusError] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
@@ -27,9 +31,34 @@ export default function TestsListScreen() {
     loadTests,
     mockStartError,
     startingId,
-    handleStartTest,
+    handleStartTest: startTestBase,
     FREE_TEST_LIMIT_MESSAGE,
   } = useMockTests();
+
+  const showExhaustedCard =
+    showQuota &&
+    (mockStartError === FREE_TEST_LIMIT_MESSAGE ||
+      (isQuotaExhausted(quota) && !mockStartError));
+
+  const handleStartTest = useCallback(
+    async (item) => {
+      await startTestBase(item);
+      void refreshQuota();
+    },
+    [startTestBase, refreshQuota]
+  );
+
+  const goPremium = useCallback(() => {
+    navigation.navigate('Premium', { from: 'limit' });
+  }, [navigation]);
+
+  const goDaily = useCallback(() => {
+    navigation.navigate('Main', { screen: 'Home' });
+  }, [navigation]);
+
+  const goTopicPractice = useCallback(() => {
+    navigation.navigate('Main', { screen: 'Practice' });
+  }, [navigation]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -76,12 +105,16 @@ export default function TestsListScreen() {
       data={tests}
       keyExtractor={(item, idx) => String(item?._id ?? idx)}
       refreshing={loading && tests.length > 0}
-      onRefresh={loadTests}
+      onRefresh={() => {
+        void loadTests();
+        void refreshQuota();
+      }}
       ListHeaderComponent={
         <View style={styles.headerBlock}>
           <Text style={styles.lead}>
             Full-length timed mocks aligned with your exam pattern. Tap start when you are ready.
           </Text>
+          {showQuota ? <MockQuotaBanner quota={quota} loading={quotaLoading} /> : null}
           {statusLoading && tests.length > 0 ? (
             <View style={styles.syncInfo}>
               <Text style={styles.syncInfoText}>Syncing test status...</Text>
@@ -94,23 +127,18 @@ export default function TestsListScreen() {
               </Text>
             </View>
           ) : null}
-          {mockStartError ? (
+          {showExhaustedCard ? (
+            <MockQuotaExhaustedCard
+              compact={mockStartError === FREE_TEST_LIMIT_MESSAGE}
+              onSeePlans={goPremium}
+              onDailyPractice={goDaily}
+              onTopicPractice={goTopicPractice}
+            />
+          ) : null}
+          {mockStartError && mockStartError !== FREE_TEST_LIMIT_MESSAGE ? (
             <View style={styles.alert}>
               <Text style={styles.alertTitle}>Could not start test</Text>
               <Text style={styles.alertBody}>{mockStartError}</Text>
-              {mockStartError === FREE_TEST_LIMIT_MESSAGE ? (
-                <>
-                  <Text style={styles.alertHint}>
-                    Upgrade to premium for unlimited mock tests and full access on this device.
-                  </Text>
-                  <Pressable
-                    onPress={() => navigation.navigate('Premium', { from: 'limit' })}
-                    style={({ pressed }) => [styles.upgradeBtn, pressFeedbackStyle(pressed)]}
-                  >
-                    <Text style={styles.upgradeBtnText}>See plans & upgrade</Text>
-                  </Pressable>
-                </>
-              ) : null}
             </View>
           ) : null}
           {loading && tests.length === 0 ? (
@@ -154,8 +182,6 @@ export default function TestsListScreen() {
             ctaState = 'completed';
           }
         } else if (!statusLoading && statusError) {
-          // If status could not be fetched, avoid claiming a state we don't know.
-          // Backend will still resume / block correctly when Start is pressed.
           cta = 'Open test';
           ctaState = 'unknown';
         }
@@ -191,7 +217,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   card: {
     backgroundColor: colors.card,
@@ -215,58 +241,25 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   alertBody: { fontSize: 14, color: colors.danger, fontWeight: '600' },
-  alertHint: {
-    fontSize: 13,
-    color: colors.muted,
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  upgradeBtn: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-  },
-  upgradeBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  softWarn: {
-    backgroundColor: colors.warningSoft,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.warning,
-  },
   syncInfo: {
-    backgroundColor: colors.bg,
-    borderRadius: 12,
+    marginBottom: 12,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    marginBottom: 12,
+    borderRadius: 10,
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  syncInfoText: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+  syncInfoText: { fontSize: 12, color: colors.muted, fontWeight: '500' },
+  softWarn: {
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: colors.warningSoft,
+    borderWidth: 1,
+    borderColor: colors.warning,
   },
-  softWarnText: {
-    color: colors.warning,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 24,
-  },
+  softWarnText: { fontSize: 12, color: colors.text, lineHeight: 17 },
+  emptyWrap: { paddingVertical: 24 },
 });

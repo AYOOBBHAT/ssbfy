@@ -12,6 +12,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
+import {
+  NOTES_UPSELL_SUB,
+  NOTES_UPSELL_TITLE,
+  SAVE_ALERT_MESSAGE,
+  SAVE_ALERT_TITLE,
+} from '../constants/upgradeCopy';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getPosts } from '../services/pdfService';
 import {
@@ -272,9 +278,9 @@ export default function NotesListScreen() {
     const noteId = String(note?._id || '').trim();
     if (!noteId) return;
     if (!userHasPremiumAccess(user)) {
-      Alert.alert('Premium feature', 'Upgrade to save materials for later.', [
+      Alert.alert(SAVE_ALERT_TITLE, SAVE_ALERT_MESSAGE, [
         { text: 'Not now', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => navigation.navigate('Premium', { from: 'saved-materials' }) },
+        { text: 'See plans', onPress: () => navigation.navigate('Premium', { from: 'saved-materials' }) },
       ]);
       return;
     }
@@ -480,10 +486,8 @@ export default function NotesListScreen() {
           onPress={() => navigation.navigate('Premium', { from: 'notes' })}
           style={({ pressed }) => [styles.premiumUpsell, pressFeedbackStyle(pressed)]}
         >
-          <Text style={styles.premiumUpsellTitle}>Premium topic-wise notes</Text>
-          <Text style={styles.premiumUpsellSub}>
-            Unlock depth, filters, and full study mode — Go Premium
-          </Text>
+          <Text style={styles.premiumUpsellTitle}>{NOTES_UPSELL_TITLE}</Text>
+          <Text style={styles.premiumUpsellSub}>{NOTES_UPSELL_SUB}</Text>
         </Pressable>
       ) : null}
       {renderPostRow()}

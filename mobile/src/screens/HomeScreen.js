@@ -15,15 +15,20 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
-import {
-  getApiErrorMessage,
-  isFreeTestLimitError,
-  FREE_TEST_LIMIT_MESSAGE,
-  isRequestCancelled,
-} from '../services/api';
+import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getDailyPractice } from '../services/dailyPracticeService';
+import { useMockQuota } from '../hooks/useMockQuota';
+import { MockQuotaBanner } from '../components/MockQuotaBanner';
+import {
+  HOME_NOTES_SUB,
+  HOME_PDF_SUB,
+  HOME_PREMIUM_BUTTON,
+  HOME_PREMIUM_SUB,
+  HOME_PREMIUM_TITLE,
+} from '../constants/upgradeCopy';
 import { colors, brand } from '../theme/colors';
 import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
+import { userHasPremiumAccess } from '../utils/premiumAccess';
 
 function greetingForHour() {
   const h = new Date().getHours();
@@ -70,11 +75,7 @@ export default function HomeScreen() {
       });
     } catch (e) {
       if (isRequestCancelled(e) || dailyAbortRef.current !== ac) return;
-      setDailyError(
-        isFreeTestLimitError(e)
-          ? FREE_TEST_LIMIT_MESSAGE
-          : getApiErrorMessage(e)
-      );
+      setDailyError(getApiErrorMessage(e));
     } finally {
       if (dailyAbortRef.current === ac) {
         setDailyLoading(false);
@@ -87,6 +88,8 @@ export default function HomeScreen() {
   const streak = Number(user?.streakCount) || 0;
   const streakLabel = streak === 1 ? 'day' : 'days';
   const greet = greetingForHour();
+  const showPremiumBanner = !userHasPremiumAccess(user);
+  const { quota, loading: quotaLoading, showQuota } = useMockQuota();
 
   return (
     <ScrollView
@@ -102,16 +105,14 @@ export default function HomeScreen() {
         <Text style={styles.taglinePrompt}>Ready for today&apos;s practice?</Text>
       </View>
 
-      {user?.isPremium !== true ? (
+      {showPremiumBanner ? (
         <View style={styles.premiumCta}>
           <View style={styles.premiumCtaIconWrap}>
-            <Ionicons name="rocket-outline" size={28} color="#4F46E5" />
+            <Ionicons name="star-outline" size={28} color="#4F46E5" />
           </View>
           <View style={styles.premiumCtaBody}>
-            <Text style={styles.premiumCtaTitle}>Unlock Premium 🚀</Text>
-            <Text style={styles.premiumCtaSub}>
-              Unlimited mocks, full PDF access, and advanced practice
-            </Text>
+            <Text style={styles.premiumCtaTitle}>{HOME_PREMIUM_TITLE}</Text>
+            <Text style={styles.premiumCtaSub}>{HOME_PREMIUM_SUB}</Text>
             <Pressable
               onPress={() => navigation.navigate('Premium', { from: 'home' })}
               style={({ pressed }) => [
@@ -119,7 +120,7 @@ export default function HomeScreen() {
                 pressFeedbackStyle(pressed),
               ]}
             >
-              <Text style={styles.premiumCtaButtonText}>Go Premium</Text>
+              <Text style={styles.premiumCtaButtonText}>{HOME_PREMIUM_BUTTON}</Text>
             </Pressable>
           </View>
         </View>
@@ -144,19 +145,6 @@ export default function HomeScreen() {
         {dailyError ? (
           <View style={styles.inlineAlert}>
             <Text style={styles.err}>{dailyError}</Text>
-            {dailyError === FREE_TEST_LIMIT_MESSAGE ? (
-              <Text style={styles.limitHint}>
-                Upgrade to premium for unlimited practice on this device.
-              </Text>
-            ) : null}
-            {dailyError === FREE_TEST_LIMIT_MESSAGE ? (
-              <Pressable
-                onPress={() => navigation.navigate('Premium', { from: 'daily' })}
-                style={({ pressed }) => [styles.upgradeLink, pressFeedbackStyle(pressed)]}
-              >
-                <Text style={styles.upgradeLinkText}>See plans & upgrade</Text>
-              </Pressable>
-            ) : null}
           </View>
         ) : null}
         <Pressable
@@ -206,6 +194,11 @@ export default function HomeScreen() {
         </View>
         <Ionicons name="chevron-forward" size={22} color={colors.muted} />
       </Pressable>
+      {showQuota ? (
+        <View style={styles.mockQuotaWrap}>
+          <MockQuotaBanner quota={quota} loading={quotaLoading} />
+        </View>
+      ) : null}
 
       <Text style={styles.sectionTitle}>Study material</Text>
       <View style={styles.studyGroup}>
@@ -216,7 +209,7 @@ export default function HomeScreen() {
           <Ionicons name="document-text-outline" size={22} color={colors.primary} />
           <View style={styles.studyRowText}>
             <Text style={styles.studyRowTitle}>Notes</Text>
-            <Text style={styles.studyRowSub}>Topic-wise study notes by subject</Text>
+            <Text style={styles.studyRowSub}>{HOME_NOTES_SUB}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>
@@ -228,7 +221,7 @@ export default function HomeScreen() {
           <Ionicons name="reader-outline" size={22} color={colors.primary} />
           <View style={styles.studyRowText}>
             <Text style={styles.studyRowTitle}>PDF notes</Text>
-            <Text style={styles.studyRowSub}>Downloadable PDF study library</Text>
+            <Text style={styles.studyRowSub}>{HOME_PDF_SUB}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>
@@ -404,6 +397,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  mockQuotaWrap: {
+    marginTop: -4,
+    marginBottom: 20,
+  },
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -484,19 +481,4 @@ const styles = StyleSheet.create({
 
   inlineAlert: { marginBottom: 12 },
   err: { color: colors.danger, fontSize: 13, marginBottom: 4 },
-  limitHint: { fontSize: 13, color: colors.muted, lineHeight: 18 },
-  upgradeLink: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-  },
-  upgradeLinkText: {
-    color: colors.textOnPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
 });

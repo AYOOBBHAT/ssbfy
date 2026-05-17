@@ -21,23 +21,14 @@ import {
 import { colors } from '../theme/colors';
 import { pressFeedbackStyle } from '../utils/pressFeedback';
 import { isRequestCancelled } from '../services/api';
-
-const BENEFITS = [
-  'Unlimited Mock Tests',
-  'Practice weak topics',
-  'Full PDF Notes Access',
-  'Premium Topic-wise Notes',
-  'Advanced Performance Tracking',
-  'Faster Preparation with Smart Revision',
-];
-
-const FROM_COPY = {
-  limit: 'You’ve reached the free mock limit on this device.',
-  daily: 'Daily practice needs an active premium plan on this device.',
-  notes: 'Unlock the full notes experience with Premium.',
-  pdf: 'Open every PDF and study without limits.',
-  home: 'Upgrade when you’re ready — no pressure.',
-};
+import {
+  PREMIUM_ACTIVE_SUB,
+  PREMIUM_BENEFITS,
+  PREMIUM_FROM_COPY,
+  PREMIUM_HERO_SUB,
+  PREMIUM_HERO_TITLE,
+  PREMIUM_SUCCESS_SUB,
+} from '../constants/upgradeCopy';
 
 /** Shown while polling `GET /users/me` — never trust Razorpay UI alone. */
 const VERIFYING_HINT = 'Verifying payment...';
@@ -60,7 +51,7 @@ export default function PremiumScreen() {
 
   const isPremium = userHasPremiumAccess(user);
 
-  const contextLine = FROM_COPY[from] ?? FROM_COPY.home;
+  const contextLine = PREMIUM_FROM_COPY[from] ?? PREMIUM_FROM_COPY.home;
 
   useEffect(() => {
     const ac = new AbortController();
@@ -195,9 +186,7 @@ export default function PremiumScreen() {
       <View style={styles.centerWrap}>
         <Text style={styles.premiumActiveEmoji}>✅</Text>
         <Text style={styles.premiumActiveTitle}>Premium Active</Text>
-        <Text style={styles.premiumActiveSub}>
-          You have full access to mock tests, practice, and study material.
-        </Text>
+        <Text style={styles.premiumActiveSub}>{PREMIUM_ACTIVE_SUB}</Text>
         <Pressable
           onPress={goHome}
           style={({ pressed }) => [styles.primaryBtn, pressFeedbackStyle(pressed)]}
@@ -213,9 +202,7 @@ export default function PremiumScreen() {
       <View style={styles.centerWrap}>
         <Text style={styles.successEmoji}>🎉</Text>
         <Text style={styles.successTitle}>Premium Activated</Text>
-        <Text style={styles.successSub}>
-          You’re all set — unlimited mocks and full prep access are unlocked.
-        </Text>
+        <Text style={styles.successSub}>{PREMIUM_SUCCESS_SUB}</Text>
         <Pressable
           onPress={goHome}
           style={({ pressed }) => [styles.primaryBtn, pressFeedbackStyle(pressed)]}
@@ -233,15 +220,13 @@ export default function PremiumScreen() {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.heroTitle}>🚀 Upgrade to Premium</Text>
-      <Text style={styles.heroSub}>
-        Unlock unlimited mock tests and full preparation access
-      </Text>
+      <Text style={styles.heroTitle}>{PREMIUM_HERO_TITLE}</Text>
+      <Text style={styles.heroSub}>{PREMIUM_HERO_SUB}</Text>
       <Text style={styles.context}>{contextLine}</Text>
 
       <View style={styles.benefitsCard}>
         <Text style={styles.benefitsHeading}>What you get</Text>
-        {BENEFITS.map((line) => (
+        {PREMIUM_BENEFITS.map((line) => (
           <View key={line} style={styles.benefitRow}>
             <Text style={styles.benefitCheck}>✔</Text>
             <Text style={styles.benefitText}>{line}</Text>
@@ -327,7 +312,7 @@ export default function PremiumScreen() {
         {busy || verifying ? (
           <ActivityIndicator color={colors.textOnPrimary} />
         ) : (
-          <Text style={styles.primaryBtnText}>Upgrade Now</Text>
+          <Text style={styles.primaryBtnText}>Continue</Text>
         )}
       </Pressable>
 

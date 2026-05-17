@@ -1,7 +1,16 @@
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 
 export const testIdParam = [
   param('id').isMongoId().withMessage('Invalid test id'),
+];
+
+/** GET /tests/quota/device — read-only free mock quota for this device. */
+export const mockQuotaQueryValidators = [
+  query('deviceId')
+    .isString()
+    .trim()
+    .isLength({ min: 4, max: 256 })
+    .withMessage('deviceId query parameter is required (4–256 chars)'),
 ];
 
 /** POST /tests/:id/start — device id is mandatory for free-tier enforcement. */

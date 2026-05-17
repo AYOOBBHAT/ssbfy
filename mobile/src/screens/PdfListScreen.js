@@ -13,6 +13,12 @@ import * as WebBrowser from 'expo-web-browser';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
+import {
+  PDF_UPSELL_SUB,
+  PDF_UPSELL_TITLE,
+  SAVE_ALERT_MESSAGE,
+  SAVE_ALERT_TITLE,
+} from '../constants/upgradeCopy';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import {
   formatFileSize,
@@ -237,9 +243,9 @@ export default function PdfListScreen() {
     const pdfId = String(pdf?._id || '').trim();
     if (!pdfId) return;
     if (!userHasPremiumAccess(user)) {
-      Alert.alert('Premium feature', 'Upgrade to save materials for later.', [
+      Alert.alert(SAVE_ALERT_TITLE, SAVE_ALERT_MESSAGE, [
         { text: 'Not now', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => navigation.navigate('Premium', { from: 'saved-materials' }) },
+        { text: 'See plans', onPress: () => navigation.navigate('Premium', { from: 'saved-materials' }) },
       ]);
       return;
     }
@@ -419,10 +425,8 @@ export default function PdfListScreen() {
           onPress={() => navigation.navigate('Premium', { from: 'pdf' })}
           style={({ pressed }) => [styles.premiumUpsell, pressFeedbackStyle(pressed)]}
         >
-          <Text style={styles.premiumUpsellTitle}>Full PDF notes library</Text>
-          <Text style={styles.premiumUpsellSub}>
-            Go Premium for unlimited access to every PDF on this device.
-          </Text>
+          <Text style={styles.premiumUpsellTitle}>{PDF_UPSELL_TITLE}</Text>
+          <Text style={styles.premiumUpsellSub}>{PDF_UPSELL_SUB}</Text>
         </Pressable>
       ) : null}
       <Text style={styles.sectionTitle}>Post</Text>

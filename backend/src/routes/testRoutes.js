@@ -5,6 +5,7 @@ import { adminChain } from '../middlewares/adminGuard.js';
 import { checkTestAccess } from '../middlewares/checkTestAccess.js';
 import { validateRequest } from '../middlewares/validate.js';
 import {
+  mockQuotaQueryValidators,
   saveProgressValidators,
   startTestValidators,
   submitTestValidators,
@@ -52,6 +53,14 @@ router.get(
 );
 
 router.get('/status/mine', authenticate, testController.statusMine);
+
+router.get(
+  '/quota/device',
+  authenticate,
+  mockQuotaQueryValidators,
+  validateRequest,
+  testController.mockQuota
+);
 
 router.post(
   '/',

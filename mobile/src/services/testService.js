@@ -54,6 +54,20 @@ export async function getMyTestStatus(opts = {}) {
 }
 
 /**
+ * Read-only free mock quota for this device (does not consume slots).
+ * @returns {Promise<{ unlimited?: boolean, limit?: number, used?: number, remaining?: number, exhausted?: boolean }>}
+ */
+export async function getMockQuota(opts = {}) {
+  const { signal } = opts;
+  const deviceId = await getDeviceId();
+  const { data } = await api.get('/tests/quota/device', {
+    params: { deviceId },
+    signal,
+  });
+  return data?.data ?? {};
+}
+
+/**
  * @param {string} topicId
  * @param {{ limit?: number, signal?: AbortSignal }} [opts]
  * @returns {Promise<{ questions: object[], total: number, limit: number, skip: number }>}

@@ -14,7 +14,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { colors, brand } from '../theme/colors';
 import { pressCardStyle } from '../utils/pressFeedback';
+import {
+  PROFILE_CTA_RENEW,
+  PROFILE_CTA_SEE_PLANS,
+  PROFILE_FREE_PLAN_SUB,
+  SAVED_MATERIALS_ROW_SUB,
+} from '../constants/upgradeCopy';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
+import { useMockQuota } from '../hooks/useMockQuota';
+import { getQuotaProfileLine } from '../utils/mockQuotaCopy';
 import { getSubscriptionStatus, formatPlanDate } from '../utils/subscriptionStatus';
 import { getProfileAnalytics } from '../services/profileAnalyticsService';
 import { isRequestCancelled } from '../services/api';
@@ -24,6 +32,8 @@ export default function ProfileScreen({ navigation }) {
   const name = user?.name || 'Student';
   const isPremium = userHasPremiumAccess(user);
   const plan = getSubscriptionStatus(user);
+  const { quota, showQuota } = useMockQuota();
+  const mockQuotaLine = showQuota ? getQuotaProfileLine(quota) : null;
 
   const [analytics, setAnalytics] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
@@ -80,7 +90,7 @@ export default function ProfileScreen({ navigation }) {
         ) : null}
       </View>
 
-      <PlanCard plan={plan} onPress={goPremium} />
+      <PlanCard plan={plan} onPress={goPremium} mockQuotaLine={mockQuotaLine} />
 
       <Text style={styles.sectionLabel}>Progress & Performance</Text>
       <ProgressSection
@@ -125,7 +135,7 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>Saved Materials</Text>
             <Text style={styles.rowSub}>
-              {isPremium ? 'Your bookmarked notes and PDFs' : 'Premium feature'}
+              {isPremium ? 'Your bookmarked notes and PDFs' : SAVED_MATERIALS_ROW_SUB}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
@@ -172,7 +182,7 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-function PlanCard({ plan, onPress }) {
+function PlanCard({ plan, onPress, mockQuotaLine = null }) {
   const visual = visualForStatus(plan.status);
 
   const onCta = () => {
@@ -221,6 +231,11 @@ function PlanCard({ plan, onPress }) {
           >
             {planSubtitleFor(plan)}
           </Text>
+          {plan.status === 'free' && mockQuotaLine ? (
+            <Text style={styles.planQuotaLine} numberOfLines={2}>
+              {mockQuotaLine}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -262,7 +277,7 @@ function PlanCard({ plan, onPress }) {
 
 function planSubtitleFor(plan) {
   if (plan.status === 'free') {
-    return 'Limited access to mock tests and features';
+    return PROFILE_FREE_PLAN_SUB;
   }
   if (plan.status === 'lifetime') {
     return 'Lifetime Access — never expires';
@@ -277,7 +292,7 @@ function planSubtitleFor(plan) {
   }
   if (plan.status === 'expired') {
     const planLabel = plan.planName ? `${plan.planName} Plan` : 'Premium';
-    return `Your ${planLabel} has ended. Renew to continue full access.`;
+    return `Your ${planLabel} has ended. Renew for unlimited mocks, PDFs, and saves.`;
   }
   return '';
 }
@@ -285,15 +300,15 @@ function planSubtitleFor(plan) {
 function ctaLabelFor(status) {
   switch (status) {
     case 'free':
-      return 'Go Premium';
+      return PROFILE_CTA_SEE_PLANS;
     case 'active':
-      return 'Renew / Manage Plan';
+      return 'Manage plan';
     case 'lifetime':
-      return 'Manage Plan';
+      return 'Manage plan';
     case 'expired':
-      return 'Renew Premium';
+      return PROFILE_CTA_RENEW;
     default:
-      return 'Go Premium';
+      return PROFILE_CTA_SEE_PLANS;
   }
 }
 
@@ -630,6 +645,13 @@ const styles = StyleSheet.create({
   },
   planSubtitleFree: {
     marginTop: 6,
+  },
+  planQuotaLine: {
+    marginTop: 8,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+    fontWeight: '500',
   },
   planMetaRow: {
     flexDirection: 'row',

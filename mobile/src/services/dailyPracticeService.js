@@ -1,17 +1,12 @@
 import api from './api.js';
-import { getDeviceId } from '../utils/deviceId.js';
 
 /**
- * Fetch today's daily practice questions.
+ * Fetch today's daily practice questions (auth required; not tied to mock quota).
  * @returns {Promise<{ questions: object[] }>}
  */
 export async function getDailyPractice(opts = {}) {
   const { signal } = opts;
-  const deviceId = await getDeviceId();
-  const { data } = await api.get('/daily-practice', {
-    params: { deviceId },
-    signal,
-  });
+  const { data } = await api.get('/daily-practice', { signal });
   return data?.data ?? { questions: [] };
 }
 

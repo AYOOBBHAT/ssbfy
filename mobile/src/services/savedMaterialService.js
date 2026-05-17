@@ -1,6 +1,7 @@
 import api from './api.js';
+import { PREMIUM_SAVE_MESSAGE } from '../constants/upgradeCopy.js';
 
-export const PREMIUM_SAVE_MESSAGE = 'Upgrade to Premium to save materials for later.';
+export { PREMIUM_SAVE_MESSAGE };
 
 export async function toggleSavedMaterial(payload, opts = {}) {
   const { signal } = opts;

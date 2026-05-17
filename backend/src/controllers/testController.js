@@ -145,4 +145,43 @@ export const testController = {
 
     return sendSuccess(res, { status }, 'Test status');
   }),
+
+  /**
+   * GET /tests/quota/device?deviceId= — read-only mock quota (does not consume slots).
+   * Premium users get `{ unlimited: true }`; free users get limit/used/remaining.
+   */
+  mockQuota: asyncHandler(async (req, res) => {
+    const user = await userRepository.findById(req.user.id);
+    if (!user) {
+      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+    }
+
+    if (isPremiumUser(user)) {
+      return sendSuccess(res, { unlimited: true }, 'Mock quota');
+    }
+
+    const deviceId =
+      typeof req.query?.deviceId === 'string' ? req.query.deviceId.trim() : '';
+    if (!deviceId || deviceId.length < 4) {
+      throw new AppError('deviceId is required', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    await deviceUsageRepository.ensureDeviceRow(deviceId);
+    const doc = await deviceUsageRepository.findByDeviceId(deviceId);
+    const limit = env.freeTestLimit;
+    const used = Math.max(0, Number(doc?.freeAttemptsUsed) || 0);
+    const remaining = Math.max(0, limit - used);
+
+    return sendSuccess(
+      res,
+      {
+        unlimited: false,
+        limit,
+        used,
+        remaining,
+        exhausted: remaining === 0,
+      },
+      'Mock quota'
+    );
+  }),
 };
