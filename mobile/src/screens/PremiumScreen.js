@@ -19,6 +19,7 @@ import {
   isPaymentCancelledError,
 } from '../services/paymentService';
 import { colors } from '../theme/colors';
+import { pressFeedbackStyle } from '../utils/pressFeedback';
 import { isRequestCancelled } from '../services/api';
 
 const BENEFITS = [
@@ -199,7 +200,7 @@ export default function PremiumScreen() {
         </Text>
         <Pressable
           onPress={goHome}
-          style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.primaryBtn, pressFeedbackStyle(pressed)]}
         >
           <Text style={styles.primaryBtnText}>Back to Home</Text>
         </Pressable>
@@ -217,7 +218,7 @@ export default function PremiumScreen() {
         </Text>
         <Pressable
           onPress={goHome}
-          style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.primaryBtn, pressFeedbackStyle(pressed)]}
         >
           <Text style={styles.primaryBtnText}>Continue</Text>
         </Pressable>
@@ -279,7 +280,7 @@ export default function PremiumScreen() {
               styles.planCard,
               active && styles.planCardActive,
               recommended && styles.planCardRecommended,
-              pressed && !busy && !verifying && styles.pressed,
+              pressFeedbackStyle(pressed, busy || verifying),
             ]}
           >
             {recommended ? (
@@ -320,7 +321,7 @@ export default function PremiumScreen() {
         style={({ pressed }) => [
           styles.primaryBtn,
           (busy || verifying || plansLoading || plans.length === 0) && styles.primaryBtnDisabled,
-          pressed && !busy && !verifying && styles.pressed,
+          pressFeedbackStyle(pressed, busy || verifying),
         ]}
       >
         {busy || verifying ? (
@@ -335,7 +336,7 @@ export default function PremiumScreen() {
         disabled={busy || verifying}
         style={({ pressed }) => [
           styles.secondaryBtn,
-          pressed && !busy && !verifying && styles.pressed,
+          pressFeedbackStyle(pressed, busy || verifying),
         ]}
       >
         <Text style={styles.secondaryBtnText}>Maybe Later</Text>
@@ -550,7 +551,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   inlineLoadingText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
-  pressed: { opacity: 0.85 },
 
   centerWrap: {
     flex: 1,

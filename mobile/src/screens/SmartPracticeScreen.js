@@ -15,6 +15,13 @@ import { getSubjects, getTopicsForSubject } from '../services/noteService';
 import { postSmartPractice } from '../services/testService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
+import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
+import {
+  NAV_TRANSITION_LOCK_MS,
+  releaseLockAfter,
+  tryAcquireLock,
+} from '../utils/navigationGuard';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'all', label: 'All' },
@@ -48,6 +55,7 @@ export default function SmartPracticeScreen() {
 
   const [startError, setStartError] = useState(null);
   const [starting, setStarting] = useState(false);
+  const startLockRef = useRef(false);
   const postsLoadRef = useRef(null);
   const subjectsLoadRef = useRef(null);
 
@@ -165,7 +173,7 @@ export default function SmartPracticeScreen() {
   };
 
   const handleStart = async () => {
-    if (!canStart) return;
+    if (!canStart || !tryAcquireLock(startLockRef)) return;
     setStartError(null);
     setStarting(true);
     try {
@@ -195,7 +203,10 @@ export default function SmartPracticeScreen() {
     } catch (e) {
       setStartError(getApiErrorMessage(e));
     } finally {
-      setStarting(false);
+      setTimeout(() => {
+        startLockRef.current = false;
+        setStarting(false);
+      }, NAV_TRANSITION_LOCK_MS);
     }
   };
 
@@ -210,7 +221,7 @@ export default function SmartPracticeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{label}</Text>
           <View style={styles.cardPad}>
-            <LoadingState label={`Loading…`} compact />
+            <LoadingState compact />
           </View>
         </View>
       );
@@ -220,7 +231,7 @@ export default function SmartPracticeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{label}</Text>
           <View style={styles.cardPad}>
-            <Text style={styles.muted}>{emptyHint}</Text>
+            <EmptyState compact title={emptyHint} glyph="filter" />
           </View>
         </View>
       );
@@ -243,7 +254,7 @@ export default function SmartPracticeScreen() {
                 style={({ pressed }) => [
                   styles.chip,
                   active && styles.chipActive,
-                  pressed && styles.pressed,
+                  pressCardStyle(pressed),
                 ]}
               >
                 <Text
@@ -276,7 +287,7 @@ export default function SmartPracticeScreen() {
   if (postsLoading) {
     return (
       <View style={styles.center}>
-        <LoadingState label="Loading…" />
+        <LoadingState />
       </View>
     );
   }
@@ -284,7 +295,7 @@ export default function SmartPracticeScreen() {
   if (postsError) {
     return (
       <View style={styles.centerPad}>
-        <ErrorState message={postsError} onRetry={loadPosts} />
+        <ErrorState message={postsError} context="practice filters" onRetry={loadPosts} />
       </View>
     );
   }
@@ -292,11 +303,7 @@ export default function SmartPracticeScreen() {
   if (activePosts.length === 0) {
     return (
       <View style={styles.centerPad}>
-        <EmptyState
-          title="No posts yet"
-          subtitle="Content will appear once an admin adds exams."
-          emoji="📚"
-        />
+        <EmptyState {...EMPTY.PRACTICE_POSTS} />
       </View>
     );
   }
@@ -329,7 +336,7 @@ export default function SmartPracticeScreen() {
         selectedSubjectId,
         pickSubject,
         subjectsLoading,
-        'No subjects yet'
+        'No subjects available yet'
       )}
 
       {selectedSubjectId
@@ -339,7 +346,7 @@ export default function SmartPracticeScreen() {
             selectedTopicId,
             pickTopic,
             topicsLoading,
-            'No topics — use subject-wide practice'
+            'No topics yet — practice the whole subject instead'
           )
         : null}
 
@@ -359,7 +366,7 @@ export default function SmartPracticeScreen() {
                 style={({ pressed }) => [
                   styles.chip,
                   active && styles.chipActive,
-                  pressed && styles.pressed,
+                  pressCardStyle(pressed),
                 ]}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
@@ -376,7 +383,7 @@ export default function SmartPracticeScreen() {
         <View style={styles.countRow}>
           <Pressable
             onPress={() => handleAdjustCount(-1)}
-            style={({ pressed }) => [styles.countBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.countBtn, pressCardStyle(pressed)]}
           >
             <Text style={styles.countBtnText}>−</Text>
           </Pressable>
@@ -389,7 +396,7 @@ export default function SmartPracticeScreen() {
           />
           <Pressable
             onPress={() => handleAdjustCount(1)}
-            style={({ pressed }) => [styles.countBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.countBtn, pressCardStyle(pressed)]}
           >
             <Text style={styles.countBtnText}>+</Text>
           </Pressable>
@@ -409,7 +416,7 @@ export default function SmartPracticeScreen() {
         style={({ pressed }) => [
           styles.primaryBtn,
           (!canStart || starting) && styles.primaryBtnDisabled,
-          pressed && canStart && !starting && styles.pressed,
+          pressFeedbackStyle(pressed, !canStart || starting),
         ]}
       >
         {starting ? (
@@ -536,5 +543,4 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
-  pressed: { opacity: 0.85 },
 });

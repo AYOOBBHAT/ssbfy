@@ -10,6 +10,7 @@ import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getLeaderboard } from '../services/leaderboardService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
 
 export default function LeaderboardScreen() {
   const [entries, setEntries] = useState([]);
@@ -72,14 +73,16 @@ export default function LeaderboardScreen() {
   };
 
   if (loading) {
-    return <LoadingState label="Loading leaderboard..." />;
+    return <LoadingState />;
   }
 
   if (error) {
     return (
       <ErrorState
         message={error}
+        context="the leaderboard"
         onRetry={() => load()}
+        retrying={loading}
       />
     );
   }
@@ -93,11 +96,7 @@ export default function LeaderboardScreen() {
         renderItem={renderItem}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
-          <EmptyState
-            title="No data available"
-            subtitle="No leaderboard entries yet. Build a streak to be the first!"
-            emoji="🏆"
-          />
+          <EmptyState compact {...EMPTY.LEADERBOARD} />
         }
         contentContainerStyle={
           entries.length === 0 ? styles.emptyContainer : undefined

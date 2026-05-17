@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
 
 /**
  * Read a single note.
@@ -41,11 +42,7 @@ export default function NoteDetailScreen() {
   if (!note) {
     return (
       <View style={styles.fallback}>
-        <EmptyState
-          title="Note unavailable"
-          subtitle="Go back and pick a note from the list."
-          emoji="📄"
-        />
+        <EmptyState {...EMPTY.NOTE_MISSING} />
       </View>
     );
   }

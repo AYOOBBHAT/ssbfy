@@ -4,22 +4,14 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useMockTests } from '../hooks/useMockTests';
 import { MockTestCard } from '../components/MockTestCard';
-import { LoadingState, ErrorState } from '../components/StateView';
+import { LoadingState, ErrorState, EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
+import { pressFeedbackStyle } from '../utils/pressFeedback';
 import { useAuth } from '../context/AuthContext';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getMyTestStatus } from '../services/testService';
-
-function EmptyTests() {
-  return (
-    <View style={styles.emptyWrap}>
-      <Ionicons name="document-text-outline" size={40} color={colors.muted} />
-      <Text style={styles.emptyTitle}>No tests available</Text>
-      <Text style={styles.emptySub}>Check back soon for new mock tests.</Text>
-    </View>
-  );
-}
 
 export default function TestsListScreen() {
   const navigation = useNavigation();
@@ -113,7 +105,7 @@ export default function TestsListScreen() {
                   </Text>
                   <Pressable
                     onPress={() => navigation.navigate('Premium', { from: 'limit' })}
-                    style={({ pressed }) => [styles.upgradeBtn, pressed && styles.pressed]}
+                    style={({ pressed }) => [styles.upgradeBtn, pressFeedbackStyle(pressed)]}
                   >
                     <Text style={styles.upgradeBtnText}>See plans & upgrade</Text>
                   </Pressable>
@@ -123,12 +115,18 @@ export default function TestsListScreen() {
           ) : null}
           {loading && tests.length === 0 ? (
             <View style={styles.card}>
-              <LoadingState label="Loading tests..." compact />
+              <LoadingState compact />
             </View>
           ) : null}
-          {error ? (
+          {error && !loading ? (
             <View style={styles.card}>
-              <ErrorState message={error} onRetry={loadTests} compact />
+              <ErrorState
+                message={error}
+                context="mock tests"
+                onRetry={loadTests}
+                retrying={loading}
+                compact
+              />
             </View>
           ) : null}
         </View>
@@ -174,7 +172,11 @@ export default function TestsListScreen() {
         );
       }}
       ListEmptyComponent={
-        !loading && !error && tests.length === 0 ? <EmptyTests /> : null
+        !loading && !error && tests.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <EmptyState compact {...EMPTY.MOCK_TESTS_CATALOG} />
+          </View>
+        ) : null
       }
       showsVerticalScrollIndicator={false}
     />
@@ -232,7 +234,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  pressed: { opacity: 0.88 },
   softWarn: {
     backgroundColor: colors.warningSoft,
     borderRadius: 12,
@@ -267,18 +268,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 48,
     paddingHorizontal: 24,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 12,
-  },
-  emptySub: {
-    fontSize: 14,
-    color: colors.muted,
-    marginTop: 6,
-    textAlign: 'center',
-    lineHeight: 20,
   },
 });

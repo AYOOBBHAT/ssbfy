@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '../theme/colors';
+import { pressFeedbackStyle } from '../utils/pressFeedback';
 
 const TEST_TYPE = {
   SUBJECT: 'subject',
@@ -105,8 +106,7 @@ export function MockTestCard({
           styles.startBtn,
           isCompleted && styles.startBtnDisabled,
           isLoading && styles.startBtnSkeleton,
-          pressed && styles.pressed,
-          isStarting && styles.disabled,
+          pressFeedbackStyle(pressed, isStarting || isCompleted || isLoading),
         ]}
       >
         {isLoading ? (
@@ -268,6 +268,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   playIcon: { marginLeft: 8 },
-  pressed: { opacity: 0.88 },
-  disabled: { opacity: 0.55 },
 });

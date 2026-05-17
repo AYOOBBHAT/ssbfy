@@ -1,6 +1,7 @@
 import { Pressable, Text, StyleSheet, View } from 'react-native';
 import { colors } from '../theme/colors';
 import AuthBusyIndicator from './auth/AuthBusyIndicator';
+import { pressFeedbackStyle } from '../utils/pressFeedback';
 
 /**
  * Pressable button with a clear busy state: full contrast, animated spinner,
@@ -41,8 +42,7 @@ export default function AppButton({
       style={({ pressed }) => [
         styles.base,
         base,
-        pressed && !isDisabled && styles.pressed,
-        disabled && !loading && styles.disabled,
+        pressFeedbackStyle(pressed, disabled && !loading),
         loading && styles.loadingBusy,
         style,
       ]}
@@ -93,9 +93,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   ghostText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
-  pressed: { opacity: 0.75 },
-  disabled: { opacity: 0.5 },
-  /** Full-strength button while busy — never reuse `disabled` fade. */
+  /** Full-strength button while busy — never reuse disabled fade. */
   loadingBusy: {
     opacity: 1,
   },

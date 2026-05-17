@@ -17,7 +17,7 @@ import {
 } from '../../theme/splash';
 
 const EASE_OUT = Easing.out(Easing.cubic);
-const WORD_MOTION_Y = 8;
+const WORD_MOTION_Y = 7;
 
 function AnimatedMottoWord({ word, anim, isLast }) {
   return (
@@ -37,7 +37,7 @@ function AnimatedMottoWord({ word, anim, isLast }) {
 }
 
 /**
- * Visual-only: logo → motto words. Does not read auth state.
+ * Logo + SSBFY + motto overlap in time — slogan is part of the opening beat, not an afterthought.
  */
 export default function BrandSplashAnimation({ onSequenceComplete }) {
   const { width, height } = useWindowDimensions();
@@ -47,6 +47,7 @@ export default function BrandSplashAnimation({ onSequenceComplete }) {
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.94)).current;
   const logoTranslateY = useRef(new Animated.Value(WORD_MOTION_Y)).current;
+  const brandOpacity = useRef(new Animated.Value(0)).current;
 
   const wordAnims = useRef(
     SPLASH_WORDS.map(() => ({
@@ -60,7 +61,7 @@ export default function BrandSplashAnimation({ onSequenceComplete }) {
   ).current;
 
   useEffect(() => {
-    const logoAnim = Animated.parallel([
+    const logoBlock = Animated.parallel([
       Animated.timing(logoOpacity, {
         toValue: 1,
         duration: SPLASH_TIMING.logoDuration,
@@ -79,11 +80,21 @@ export default function BrandSplashAnimation({ onSequenceComplete }) {
         easing: EASE_OUT,
         useNativeDriver: true,
       }),
+      Animated.sequence([
+        Animated.delay(120),
+        Animated.timing(brandOpacity, {
+          toValue: 1,
+          duration: SPLASH_TIMING.logoDuration - 80,
+          easing: EASE_OUT,
+          useNativeDriver: true,
+        }),
+      ]),
     ]);
 
     const wordAnimations = SPLASH_WORDS.map((_, index) => {
       const { opacity, translateY } = wordAnims[index];
-      const delay = SPLASH_TIMING.wordStartDelay + index * SPLASH_TIMING.wordStagger;
+      const delay =
+        SPLASH_TIMING.wordStartDelay + index * SPLASH_TIMING.wordStagger;
       const fadeIn = [
         Animated.timing(opacity, {
           toValue: 1,
@@ -102,7 +113,7 @@ export default function BrandSplashAnimation({ onSequenceComplete }) {
         fadeIn.push(
           Animated.timing(dotAnims[index - 1], {
             toValue: 1,
-            duration: SPLASH_TIMING.wordDuration * 0.9,
+            duration: SPLASH_TIMING.wordDuration * 0.85,
             easing: EASE_OUT,
             useNativeDriver: true,
           })
@@ -122,10 +133,18 @@ export default function BrandSplashAnimation({ onSequenceComplete }) {
       onSequenceComplete?.();
     }, lastWordEnd + SPLASH_TIMING.sequenceEndPadding);
 
-    Animated.sequence([logoAnim, Animated.parallel(wordAnimations)]).start();
+    Animated.parallel([logoBlock, ...wordAnimations]).start();
 
     return () => clearTimeout(completeTimer);
-  }, [logoOpacity, logoScale, logoTranslateY, onSequenceComplete, wordAnims, dotAnims]);
+  }, [
+    brandOpacity,
+    logoOpacity,
+    logoScale,
+    logoTranslateY,
+    onSequenceComplete,
+    wordAnims,
+    dotAnims,
+  ]);
 
   return (
     <View style={styles.block}>
@@ -142,7 +161,9 @@ export default function BrandSplashAnimation({ onSequenceComplete }) {
           accessibilityRole="image"
           accessibilityLabel={`${brand.name} logo`}
         />
-        <Text style={styles.brandName}>{brand.name}</Text>
+        <Animated.Text style={[styles.brandName, { opacity: brandOpacity }]}>
+          {brand.name}
+        </Animated.Text>
       </Animated.View>
 
       <View style={styles.mottoRow}>
@@ -171,11 +192,11 @@ const styles = StyleSheet.create({
     maxWidth: 360,
   },
   brandName: {
-    marginTop: 16,
-    fontSize: 32,
+    marginTop: 14,
+    fontSize: 28,
     fontWeight: '800',
     color: splashTheme.brandName,
-    letterSpacing: 3,
+    letterSpacing: 2.5,
     textAlign: 'center',
   },
   mottoRow: {
@@ -183,8 +204,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 22,
-    minHeight: 24,
+    marginTop: 18,
+    minHeight: 26,
     paddingHorizontal: 8,
   },
   mottoSegment: {
@@ -192,7 +213,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   word: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: splashTheme.word,
     letterSpacing: 0.35,
@@ -202,7 +223,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   dot: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: splashTheme.accent,
   },

@@ -8,45 +8,50 @@ export const splashTheme = {
   wordEmphasis: colors.primary,
   accent: '#c9a227',
   loader: colors.primary,
-  /** Subtle track behind bootstrap spinner (Android visibility). */
-  loaderTrack: 'rgba(37, 99, 235, 0.12)',
+  loaderTrack: 'rgba(37, 99, 235, 0.08)',
 };
 
 export const SPLASH_WORDS = ['Prepare', 'Practice', 'Succeed'];
 
 /**
- * Animation timing (ms) — ~1.85s sequence; exit fade handled separately.
- * Slightly snappier than v1 to avoid a “frozen” feel after the last word.
+ * Startup motion — logo + motto overlap; slogan hold without feeling slow overall.
+ * Sequence runs in parallel (see BrandSplashAnimation).
  */
 export const SPLASH_TIMING = {
-  logoDuration: 620,
-  wordStagger: 240,
-  wordDuration: 260,
-  wordStartDelay: 560,
-  /** Hold after full slogan so “Prepare • Practice • Succeed” registers (~600ms). */
-  sequenceEndPadding: 600,
+  logoDuration: 520,
+  /** Motto begins while logo is still settling (not after logo finishes). */
+  wordStartDelay: 300,
+  wordStagger: 220,
+  wordDuration: 280,
+  /** Readable beat once full slogan is visible. */
+  sequenceEndPadding: 680,
 };
 
-/** Only show bootstrap spinner if auth is still pending after this delay. */
-export const BOOTSTRAP_LOADER_DELAY_MS = 420;
+/** Spinner only if bootstrap exceeds ~1.1s after animation completes. */
+export const BOOTSTRAP_LOADER_DELAY_MS = 1100;
 
-/** Cross-fade into Login/Home when bootstrap is ready. */
-export const SPLASH_EXIT_FADE_MS = 140;
+/** Splash fade-out while app content fades in (cross-fade). */
+export const SPLASH_EXIT_FADE_MS = 240;
+
+/** App (Login/Home) fade-in — slightly offset for shared motion. */
+export const APP_ENTER_FADE_MS = 280;
+
+export const APP_ENTER_FADE_DELAY_MS = 50;
 
 export function getSplashSequenceDurationMs() {
   const { wordStartDelay, wordStagger, wordDuration, sequenceEndPadding } = SPLASH_TIMING;
   const words = SPLASH_WORDS.length;
-  return wordStartDelay + (words - 1) * wordStagger + wordDuration + sequenceEndPadding;
+  const lastWordEnd =
+    wordStartDelay + (words - 1) * wordStagger + wordDuration;
+  return Math.max(SPLASH_TIMING.logoDuration, lastWordEnd) + sequenceEndPadding;
 }
 
-/** Responsive logo — premium on tall phones, safe on small widths. */
 export function getSplashLogoSize(screenWidth, screenHeight) {
   const byWidth = screenWidth * 0.36;
   const byHeight = screenHeight * 0.17;
   return Math.round(Math.min(Math.max(byWidth, byHeight, 132), 168));
 }
 
-/** Vertical nudge — balanced on tall screens (avoid top-heavy splash). */
 export function getSplashContentLift(screenHeight) {
   if (screenHeight >= 800) return Math.round(screenHeight * 0.02);
   if (screenHeight >= 680) return 4;

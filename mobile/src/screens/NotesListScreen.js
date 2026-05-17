@@ -27,6 +27,9 @@ import {
 } from '../services/savedMaterialService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
+import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
+import { useNavigationActionLock } from '../hooks/useNavigationActionLock';
 
 /**
  * Browse structured (text) notes.
@@ -49,6 +52,7 @@ import { colors } from '../theme/colors';
  */
 export default function NotesListScreen() {
   const navigation = useNavigation();
+  const { runOnce } = useNavigationActionLock();
   const route = useRoute();
   const { user } = useAuth();
   const initial = route?.params || {};
@@ -261,7 +265,7 @@ export default function NotesListScreen() {
 
   const openNote = (note) => {
     if (!note) return;
-    navigation.navigate('NoteDetail', { note });
+    runOnce(() => navigation.navigate('NoteDetail', { note }));
   };
 
   const handleToggleSave = async (note) => {
@@ -298,7 +302,7 @@ export default function NotesListScreen() {
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>{label}</Text>
           <View style={styles.chipsFallback}>
-            <LoadingState label={`Loading ${label.toLowerCase()}...`} compact />
+            <LoadingState compact />
           </View>
         </View>
       );
@@ -308,7 +312,12 @@ export default function NotesListScreen() {
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>{label}</Text>
           <View style={styles.chipsFallback}>
-            <EmptyState title={emptyText} emoji="📭" compact />
+            <EmptyState
+              compact
+              title={emptyText}
+              subtitle="Try another filter or check back later."
+              glyph="filter"
+            />
           </View>
         </View>
       );
@@ -330,7 +339,7 @@ export default function NotesListScreen() {
                 style={({ pressed }) => [
                   styles.chip,
                   active && styles.chipActive,
-                  pressed && styles.btnPressed,
+                  pressFeedbackStyle(pressed),
                 ]}
               >
                 <Text
@@ -359,7 +368,7 @@ export default function NotesListScreen() {
           onPress={() => handleToggleSave(item)}
           hitSlop={8}
           disabled={isSaving}
-          style={({ pressed }) => [styles.saveBtn, pressed && styles.btnPressed, isSaving && styles.btnDisabled]}
+          style={({ pressed }) => [styles.saveBtn, pressFeedbackStyle(pressed), isSaving && styles.btnDisabled]}
         >
           <Ionicons
             name={isSaved ? 'bookmark' : 'bookmark-outline'}
@@ -367,7 +376,7 @@ export default function NotesListScreen() {
             color={isSaved ? colors.primary : colors.muted}
           />
         </Pressable>
-        <Pressable onPress={() => openNote(item)} style={({ pressed }) => [pressed && styles.btnPressed]}>
+        <Pressable onPress={() => openNote(item)} style={({ pressed }) => [pressCardStyle(pressed)]}>
           <Text style={styles.noteTitle} numberOfLines={2}>
             {title}
           </Text>
@@ -385,14 +394,14 @@ export default function NotesListScreen() {
     if (notesLoading) {
       return (
         <View style={styles.card}>
-          <LoadingState label="Loading notes..." compact />
+          <LoadingState compact />
         </View>
       );
     }
     if (notesError) {
       return (
         <View style={styles.card}>
-          <ErrorState message={notesError} onRetry={loadNotes} compact />
+          <ErrorState message={notesError} context="notes" onRetry={loadNotes} compact />
         </View>
       );
     }
@@ -400,16 +409,15 @@ export default function NotesListScreen() {
       return (
         <View style={styles.card}>
           <EmptyState
-            title="No notes available"
+            compact
+            {...EMPTY.NOTES_NONE}
             subtitle={
               selectedTopicId
-                ? 'No notes for this topic yet.'
+                ? 'Notes for this topic will appear when they are published.'
                 : selectedSubjectId
-                ? 'No notes for this subject yet.'
-                : 'Try narrowing the filters or check back later.'
+                ? 'Notes for this subject will appear when they are published.'
+                : EMPTY.NOTES_NONE.subtitle
             }
-            emoji="📝"
-            compact
           />
         </View>
       );
@@ -436,7 +444,7 @@ export default function NotesListScreen() {
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>Post</Text>
           <View style={styles.chipsFallback}>
-            <LoadingState label="Loading posts..." compact />
+            <LoadingState compact />
           </View>
         </View>
       );
@@ -446,7 +454,7 @@ export default function NotesListScreen() {
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>Post</Text>
           <View style={styles.chipsFallback}>
-            <ErrorState message={postsError} onRetry={loadPosts} compact />
+            <ErrorState message={postsError} context="posts" onRetry={loadPosts} compact />
           </View>
         </View>
       );
@@ -457,7 +465,7 @@ export default function NotesListScreen() {
       selectedId: selectedPostId,
       onSelect: pickPost,
       loading: false,
-      emptyText: 'No posts yet',
+      emptyText: 'No posts available yet',
     });
   };
 
@@ -470,7 +478,7 @@ export default function NotesListScreen() {
       {showPremiumUpsell ? (
         <Pressable
           onPress={() => navigation.navigate('Premium', { from: 'notes' })}
-          style={({ pressed }) => [styles.premiumUpsell, pressed && styles.btnPressed]}
+          style={({ pressed }) => [styles.premiumUpsell, pressFeedbackStyle(pressed)]}
         >
           <Text style={styles.premiumUpsellTitle}>Premium topic-wise notes</Text>
           <Text style={styles.premiumUpsellSub}>
@@ -486,7 +494,7 @@ export default function NotesListScreen() {
         selectedId: selectedSubjectId,
         onSelect: pickSubject,
         loading: subjectsLoading,
-        emptyText: 'No subjects yet',
+        emptyText: 'No subjects available yet',
       })}
 
       {selectedSubjectId
@@ -496,7 +504,7 @@ export default function NotesListScreen() {
             selectedId: selectedTopicId,
             onSelect: pickTopic,
             loading: topicsLoading,
-            emptyText: 'No topics for this subject',
+            emptyText: 'No topics for this subject yet',
           })
         : null}
 
@@ -602,6 +610,5 @@ const styles = StyleSheet.create({
   noteTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   notePreview: { fontSize: 13, color: colors.muted, marginTop: 6, lineHeight: 18 },
 
-  btnPressed: { opacity: 0.8 },
   btnDisabled: { opacity: 0.6 },
 });

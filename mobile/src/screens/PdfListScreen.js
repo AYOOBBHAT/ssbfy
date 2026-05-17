@@ -29,6 +29,9 @@ import {
 } from '../services/savedMaterialService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
+import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
+import { isGlobalOpening } from '../utils/navigationGuard';
 
 /**
  * Browse study PDFs scoped by Post.
@@ -195,6 +198,7 @@ export default function PdfListScreen() {
    * it's ignored on Android.
    */
   const handleOpenPdf = async (pdf) => {
+    if (isGlobalOpening(openingId)) return;
     const id = pdf?._id;
     if (!id) {
       Alert.alert('Cannot open', 'This PDF has no valid link.');
@@ -266,26 +270,21 @@ export default function PdfListScreen() {
     if (postsLoading) {
       return (
         <View style={styles.chipsFallback}>
-          <LoadingState label="Loading posts..." compact />
+          <LoadingState compact />
         </View>
       );
     }
     if (postsError) {
       return (
         <View style={styles.chipsFallback}>
-          <ErrorState message={postsError} onRetry={loadPosts} compact />
+          <ErrorState message={postsError} context="posts" onRetry={loadPosts} compact />
         </View>
       );
     }
     if (activePosts.length === 0) {
       return (
         <View style={styles.chipsFallback}>
-          <EmptyState
-            title="No posts yet"
-            subtitle="Posts (exams) appear here once an admin creates them."
-            emoji="📚"
-            compact
-          />
+          <EmptyState compact {...EMPTY.POSTS_NONE} />
         </View>
       );
     }
@@ -304,7 +303,7 @@ export default function PdfListScreen() {
               style={({ pressed }) => [
                 styles.chip,
                 active && styles.chipActive,
-                pressed && styles.btnPressed,
+                pressFeedbackStyle(pressed),
               ]}
             >
               <Text
@@ -324,38 +323,28 @@ export default function PdfListScreen() {
     if (!selectedPostId) {
       return (
         <View style={styles.card}>
-          <EmptyState
-            title="Pick a post"
-            subtitle="Select a post above to see its PDF notes."
-            emoji="👆"
-            compact
-          />
+          <EmptyState compact {...EMPTY.PDF_PICK_POST} />
         </View>
       );
     }
     if (pdfsLoading) {
       return (
         <View style={styles.card}>
-          <LoadingState label="Loading PDFs..." compact />
+          <LoadingState compact />
         </View>
       );
     }
     if (pdfsError) {
       return (
         <View style={styles.card}>
-          <ErrorState message={pdfsError} onRetry={loadPdfs} compact />
+          <ErrorState message={pdfsError} context="PDFs" onRetry={loadPdfs} compact />
         </View>
       );
     }
     if (pdfs.length === 0) {
       return (
         <View style={styles.card}>
-          <EmptyState
-            title="No PDFs yet"
-            subtitle="Check back soon — new study material is added regularly."
-            emoji="📄"
-            compact
-          />
+          <EmptyState compact {...EMPTY.PDF_NONE} />
         </View>
       );
     }
@@ -374,7 +363,8 @@ export default function PdfListScreen() {
   const renderPdf = ({ item }) => {
     const title = item?.title || item?.fileName || 'Untitled PDF';
     const size = formatFileSize(item?.fileSize);
-    const isOpening = openingId != null && String(openingId) === String(item?._id);
+    const anyOpening = isGlobalOpening(openingId);
+    const isOpening = anyOpening && String(openingId) === String(item?._id);
     const pdfId = String(item?._id || '');
     const isSaved = savedPdfIds.has(pdfId);
     const isSaving = savingId != null && String(savingId) === pdfId;
@@ -382,8 +372,12 @@ export default function PdfListScreen() {
       <View style={styles.pdfCard}>
         <Pressable
           onPress={() => handleOpenPdf(item)}
-          disabled={isOpening}
-          style={({ pressed }) => [styles.pdfMainArea, pressed && styles.btnPressed, isOpening && styles.btnDisabled]}
+          disabled={anyOpening}
+          style={({ pressed }) => [
+            styles.pdfMainArea,
+            pressCardStyle(pressed, anyOpening),
+            anyOpening && styles.btnDisabled,
+          ]}
         >
           <View style={styles.pdfIconWrap}>
             <Text style={styles.pdfIcon}>📄</Text>
@@ -402,7 +396,7 @@ export default function PdfListScreen() {
           onPress={() => handleToggleSave(item)}
           hitSlop={8}
           disabled={isSaving}
-          style={({ pressed }) => [styles.saveBtn, pressed && styles.btnPressed, isSaving && styles.btnDisabled]}
+          style={({ pressed }) => [styles.saveBtn, pressFeedbackStyle(pressed), isSaving && styles.btnDisabled]}
         >
           <Ionicons
             name={isSaved ? 'bookmark' : 'bookmark-outline'}
@@ -423,7 +417,7 @@ export default function PdfListScreen() {
       {showPremiumUpsell ? (
         <Pressable
           onPress={() => navigation.navigate('Premium', { from: 'pdf' })}
-          style={({ pressed }) => [styles.premiumUpsell, pressed && styles.btnPressed]}
+          style={({ pressed }) => [styles.premiumUpsell, pressFeedbackStyle(pressed)]}
         >
           <Text style={styles.premiumUpsellTitle}>Full PDF notes library</Text>
           <Text style={styles.premiumUpsellSub}>
@@ -555,6 +549,5 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
 
-  btnPressed: { opacity: 0.8 },
   btnDisabled: { opacity: 0.6 },
 });

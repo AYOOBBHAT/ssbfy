@@ -18,12 +18,12 @@ import {
 } from '../../theme/splash';
 
 /**
- * Fullscreen branded startup — animation layer only; auth runs in parallel.
+ * Branded startup overlay — opacity controlled by parent for cross-fade.
  */
 export default function StartupSplashScreen({
   onAnimationComplete,
   showBootstrapLoader,
-  splashOpacity,
+  overlayOpacity,
 }) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
@@ -48,7 +48,7 @@ export default function StartupSplashScreen({
       setShowDelayedLoader(true);
       Animated.timing(loaderOpacity, {
         toValue: 1,
-        duration: 220,
+        duration: 280,
         useNativeDriver: true,
       }).start();
     }, BOOTSTRAP_LOADER_DELAY_MS);
@@ -58,10 +58,10 @@ export default function StartupSplashScreen({
     };
   }, [showBootstrapLoader, loaderOpacity]);
 
-  const footerBottom = Math.max(insets.bottom + 20, 28);
+  const footerBottom = Math.max(insets.bottom + 16, 24);
 
   return (
-    <View style={styles.root}>
+    <Animated.View style={[styles.root, { opacity: overlayOpacity }]}>
       <AuthAmbientBackground />
       <StatusBar style="dark" backgroundColor={splashTheme.background} translucent={false} />
       {Platform.OS === 'android' ? (
@@ -70,29 +70,28 @@ export default function StartupSplashScreen({
           pointerEvents="none"
         />
       ) : null}
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <Animated.View style={[styles.safeInner, { opacity: splashOpacity }]}>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']} pointerEvents="box-none">
+        <View style={styles.safeInner}>
           <View style={[styles.content, { marginTop: contentLift }]}>
             <BrandSplashAnimation onSequenceComplete={onAnimationComplete} />
           </View>
-          <View style={[styles.footer, { bottom: footerBottom }]}>
-            {showDelayedLoader ? (
-              <Animated.View style={[styles.loaderWrap, { opacity: loaderOpacity }]}>
-                <View style={styles.loaderTrack}>
-                  <ActivityIndicator size="small" color={splashTheme.loader} />
-                </View>
-              </Animated.View>
-            ) : null}
-          </View>
-        </Animated.View>
+          {showDelayedLoader ? (
+            <Animated.View
+              style={[styles.footer, { bottom: footerBottom, opacity: loaderOpacity }]}
+              pointerEvents="none"
+            >
+              <ActivityIndicator size="small" color={splashTheme.loader} />
+            </Animated.View>
+          ) : null}
+        </View>
       </SafeAreaView>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: splashTheme.background,
   },
   statusBarFill: {
@@ -118,15 +117,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-  },
-  loaderWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loaderTrack: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: splashTheme.loaderTrack,
+    opacity: 0.45,
   },
 });

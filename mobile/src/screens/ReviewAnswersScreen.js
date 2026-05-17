@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
 import { typography } from '../theme/typography';
 
 const TEXT = colors.text;
@@ -235,11 +236,7 @@ export default function ReviewAnswersScreen() {
 
   if (questions.length === 0) {
     return (
-      <EmptyState
-        title="No questions to review"
-        subtitle="Nothing to display for this attempt."
-        emoji="📭"
-      />
+      <EmptyState {...EMPTY.REVIEW_NONE} />
     );
   }
 

@@ -1,5 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 import {
+  NAV_TRANSITION_LOCK_MS,
+  releaseLockAfter,
+  tryAcquireLock,
+} from '../utils/navigationGuard';
+import {
   View,
   Text,
   StyleSheet,
@@ -18,6 +23,7 @@ import {
 } from '../services/api';
 import { getDailyPractice } from '../services/dailyPracticeService';
 import { colors, brand } from '../theme/colors';
+import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
 
 function greetingForHour() {
   const h = new Date().getHours();
@@ -28,6 +34,7 @@ function greetingForHour() {
 
 export default function HomeScreen() {
   const navigation = useNavigation();
+  const dailyStartLockRef = useRef(false);
   const { user, refreshUser } = useAuth();
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyError, setDailyError] = useState(null);
@@ -40,7 +47,7 @@ export default function HomeScreen() {
   );
 
   const handleStartDailyPractice = async () => {
-    if (dailyLoading) return;
+    if (dailyLoading || !tryAcquireLock(dailyStartLockRef)) return;
     dailyAbortRef.current?.abort();
     const ac = new AbortController();
     dailyAbortRef.current = ac;
@@ -72,6 +79,7 @@ export default function HomeScreen() {
       if (dailyAbortRef.current === ac) {
         setDailyLoading(false);
       }
+      releaseLockAfter(dailyStartLockRef, NAV_TRANSITION_LOCK_MS);
     }
   };
 
@@ -108,7 +116,7 @@ export default function HomeScreen() {
               onPress={() => navigation.navigate('Premium', { from: 'home' })}
               style={({ pressed }) => [
                 styles.premiumCtaButton,
-                pressed && styles.pressed,
+                pressFeedbackStyle(pressed),
               ]}
             >
               <Text style={styles.premiumCtaButtonText}>Go Premium</Text>
@@ -144,7 +152,7 @@ export default function HomeScreen() {
             {dailyError === FREE_TEST_LIMIT_MESSAGE ? (
               <Pressable
                 onPress={() => navigation.navigate('Premium', { from: 'daily' })}
-                style={({ pressed }) => [styles.upgradeLink, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.upgradeLink, pressFeedbackStyle(pressed)]}
               >
                 <Text style={styles.upgradeLinkText}>See plans & upgrade</Text>
               </Pressable>
@@ -156,13 +164,12 @@ export default function HomeScreen() {
           disabled={dailyLoading}
           style={({ pressed }) => [
             styles.heroBtn,
-            pressed && styles.pressed,
-            dailyLoading && styles.disabled,
+            pressFeedbackStyle(pressed, dailyLoading),
           ]}
         >
           <Ionicons name="play" size={18} color={colors.textOnPrimary} />
           <Text style={styles.heroBtnText}>
-            {dailyLoading ? 'Loading…' : 'Start daily practice'}
+            {dailyLoading ? 'Starting…' : 'Start daily practice'}
           </Text>
         </Pressable>
       </View>
@@ -170,7 +177,7 @@ export default function HomeScreen() {
       <Text style={styles.sectionTitle}>Practice</Text>
       <Pressable
         onPress={() => navigation.navigate('Practice')}
-        style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.linkCard, pressCardStyle(pressed)]}
       >
         <View style={styles.linkIcon}>
           <Ionicons name="book" size={22} color={colors.primary} />
@@ -186,7 +193,7 @@ export default function HomeScreen() {
 
       <Pressable
         onPress={() => navigation.navigate('Tests')}
-        style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.linkCard, pressCardStyle(pressed)]}
       >
         <View style={styles.linkIcon}>
           <Ionicons name="clipboard" size={22} color={colors.primary} />
@@ -204,7 +211,7 @@ export default function HomeScreen() {
       <View style={styles.studyGroup}>
         <Pressable
           onPress={() => navigation.navigate('NotesList')}
-          style={({ pressed }) => [styles.studyRow, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.studyRow, pressCardStyle(pressed)]}
         >
           <Ionicons name="document-text-outline" size={22} color={colors.primary} />
           <View style={styles.studyRowText}>
@@ -216,7 +223,7 @@ export default function HomeScreen() {
         <View style={styles.studyDivider} />
         <Pressable
           onPress={() => navigation.navigate('PdfList')}
-          style={({ pressed }) => [styles.studyRow, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.studyRow, pressCardStyle(pressed)]}
         >
           <Ionicons name="reader-outline" size={22} color={colors.primary} />
           <View style={styles.studyRowText}>
@@ -492,6 +499,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  pressed: { opacity: 0.88 },
-  disabled: { opacity: 0.55 },
 });

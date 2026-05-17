@@ -8,6 +8,8 @@ import { getSavedMaterials, toggleSavedMaterial } from '../services/savedMateria
 import { getPdfOpenUserMessage, openPdfInAppBrowser } from '../services/pdfService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
+import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
 
 const TABS = {
   PDF: 'pdf',
@@ -51,32 +53,34 @@ export default function SavedMaterialsScreen() {
   };
 
 
-  const loadSaved = useCallback(async (signal) => {
+  const loadSaved = useCallback(async () => {
+    loadAbortRef.current?.abort();
+    const ac = new AbortController();
+    loadAbortRef.current = ac;
     setError(null);
     setLoading(true);
     try {
-      const data = await getSavedMaterials({ signal });
-      if (signal?.aborted) return;
+      const data = await getSavedMaterials({ signal: ac.signal });
+      if (loadAbortRef.current !== ac) return;
       setSavedPdfs(Array.isArray(data?.savedPdfs) ? data.savedPdfs : []);
       setSavedNotes(Array.isArray(data?.savedNotes) ? data.savedNotes : []);
     } catch (e) {
-      if (signal?.aborted || isRequestCancelled(e)) return;
+      if (loadAbortRef.current !== ac || isRequestCancelled(e)) return;
       setError(getApiErrorMessage(e));
       setSavedPdfs([]);
       setSavedNotes([]);
     } finally {
-      setLoading(false);
+      if (loadAbortRef.current === ac) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadAbortRef.current?.abort();
-      const ac = new AbortController();
-      loadAbortRef.current = ac;
-      void loadSaved(ac.signal);
+      void loadSaved();
       return () => {
-        ac.abort();
+        loadAbortRef.current?.abort();
         loadAbortRef.current = null;
       };
     }, [loadSaved])
@@ -116,7 +120,10 @@ export default function SavedMaterialsScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.rowTop}>
-          <Pressable style={styles.flexOne} onPress={() => openSavedPdf(item)}>
+          <Pressable
+            style={({ pressed }) => [styles.flexOne, pressCardStyle(pressed)]}
+            onPress={() => openSavedPdf(item)}
+          >
             <Text style={styles.cardTitle} numberOfLines={2}>
               {item?.title || 'Untitled PDF'}
             </Text>
@@ -129,7 +136,7 @@ export default function SavedMaterialsScreen() {
           <Pressable
             onPress={() => handleUnsavePdf(item)}
             disabled={disabled}
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed, disabled && styles.disabled]}
+            style={({ pressed }) => [styles.iconBtn, pressFeedbackStyle(pressed, disabled), disabled && styles.disabled]}
           >
             <Ionicons name="bookmark" size={16} color={colors.primary} />
           </Pressable>
@@ -144,7 +151,10 @@ export default function SavedMaterialsScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.rowTop}>
-          <Pressable style={styles.flexOne} onPress={() => openSavedNote(item)}>
+          <Pressable
+            style={({ pressed }) => [styles.flexOne, pressCardStyle(pressed)]}
+            onPress={() => openSavedNote(item)}
+          >
             <Text style={styles.cardTitle} numberOfLines={2}>
               {item?.title || 'Untitled note'}
             </Text>
@@ -160,7 +170,7 @@ export default function SavedMaterialsScreen() {
           <Pressable
             onPress={() => handleUnsaveNote(item)}
             disabled={disabled}
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed, disabled && styles.disabled]}
+            style={({ pressed }) => [styles.iconBtn, pressFeedbackStyle(pressed, disabled), disabled && styles.disabled]}
           >
             <Ionicons name="bookmark" size={16} color={colors.primary} />
           </Pressable>
@@ -176,27 +186,30 @@ export default function SavedMaterialsScreen() {
       <View style={styles.tabWrap}>
         <Pressable
           onPress={() => setActiveTab(TABS.PDF)}
-          style={({ pressed }) => [styles.tab, activeTab === TABS.PDF && styles.tabActive, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.tab, activeTab === TABS.PDF && styles.tabActive, pressFeedbackStyle(pressed)]}
         >
           <Text style={[styles.tabText, activeTab === TABS.PDF && styles.tabTextActive]}>Saved PDFs</Text>
         </Pressable>
         <Pressable
           onPress={() => setActiveTab(TABS.NOTE)}
-          style={({ pressed }) => [styles.tab, activeTab === TABS.NOTE && styles.tabActive, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.tab, activeTab === TABS.NOTE && styles.tabActive, pressFeedbackStyle(pressed)]}
         >
           <Text style={[styles.tabText, activeTab === TABS.NOTE && styles.tabTextActive]}>Saved Notes</Text>
         </Pressable>
       </View>
 
-      {loading ? <LoadingState label="Loading saved materials..." /> : null}
-      {!loading && error ? <ErrorState message={error} onRetry={loadSaved} /> : null}
+      {loading ? <LoadingState /> : null}
+      {!loading && error ? (
+        <ErrorState
+          message={error}
+          context="saved materials"
+          onRetry={loadSaved}
+          retrying={loading}
+        />
+      ) : null}
       {!loading && !error && currentData.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <EmptyState
-            title="No saved materials yet"
-            subtitle="Save important notes and PDFs here for quick access."
-            emoji="🔖"
-          />
+          <EmptyState {...EMPTY.SAVED_MATERIALS} />
         </View>
       ) : null}
       {!loading && !error && currentData.length > 0 ? (
@@ -259,6 +272,5 @@ const styles = StyleSheet.create({
   preview: { marginTop: 7, fontSize: 13, color: colors.muted, lineHeight: 19 },
   meta: { marginTop: 8, fontSize: 12, color: colors.muted },
   emptyWrap: { marginTop: 28 },
-  pressed: { opacity: 0.85 },
   disabled: { opacity: 0.6 },
 });

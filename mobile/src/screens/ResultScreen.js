@@ -7,8 +7,8 @@ import {
   ScrollView,
   FlatList,
   Alert,
-  ActivityIndicator,
   BackHandler,
+  Animated,
 } from 'react-native';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
@@ -32,9 +32,21 @@ import {
   computeRetryListsFromResult,
   isQuestionDocRetryable as isQuestionRetryable,
 } from '../utils/retryWorthy';
+import {
+  buildRetryAgainCopy,
+  buildRetryCtaCopy,
+  getEncouragingTierMessage,
+} from '../utils/retryMessaging';
 import logger from '../utils/logger';
-import { EmptyState } from '../components/StateView';
+import { EmptyState, ErrorState, InlineLoading, LoadingState } from '../components/StateView';
+import { pressFeedbackStyle } from '../utils/pressFeedback';
+import { useNavigationActionLock } from '../hooks/useNavigationActionLock';
+import { isGlobalOpening } from '../utils/navigationGuard';
 import { colors } from '../theme/colors';
+import { EMPTY } from '../theme/stateCopy';
+import { ERROR_TITLES } from '../utils/userFacingErrors';
+import { motion } from '../theme/motion';
+import { useAuth } from '../context/AuthContext';
 
 /*
  * Manual QA — Result screen (mobile):
@@ -43,6 +55,9 @@ import { colors } from '../theme/colors';
  * - Practice result: back → Practice; daily → Home.
  * - Retry chain preserves returnMainTab; finish retry → single Result on stack.
  * - Spam Android back during upstream “Finishing…” handled on TestScreen.
+ * - Hierarchy: accuracy hero → stats → next steps (retry/review) → focus areas → history.
+ * - All-correct: perfect card + review primary; low score: encouraging tier + focus areas.
+ * - Retry tone: "Practice missed" / focused retry — not punitive "wrong" / "failed" language.
  */
 
 // Cap for both recommendation lists — keeps the Result screen readable
@@ -56,9 +71,38 @@ const BORDER = colors.border;
 const BG = colors.bg;
 const CARD_BG = colors.card;
 
-const TIER_HIGH = { color: colors.success, bg: colors.successSoft, message: 'Great job! 🎉' };
-const TIER_MID = { color: colors.warning, bg: colors.warningSoft, message: 'Good effort 👍' };
-const TIER_LOW = { color: colors.danger, bg: colors.dangerSoft, message: 'Keep practicing 💪' };
+const TIER_HIGH = {
+  color: colors.success,
+  bg: colors.successSoft,
+  message: 'Strong work — keep this momentum',
+};
+const TIER_MID = {
+  color: colors.warning,
+  bg: colors.warningSoft,
+  message: 'Solid effort — small improvements add up',
+};
+const TIER_LOW = {
+  color: colors.primary,
+  bg: colors.primarySoft,
+  message: 'Every session builds skill — focus below',
+};
+
+function getSessionContext({ isRetry, isMock, returnMainTab, testTitle }) {
+  if (isRetry) return { label: 'Retry complete', hint: 'Focused review session' };
+  if (isMock) return { label: 'Mock test complete', hint: testTitle || 'Timed exam' };
+  if (returnMainTab === MAIN_TABS.PRACTICE) {
+    return { label: 'Practice complete', hint: 'Untimed session' };
+  }
+  return { label: 'Daily practice complete', hint: 'Quick skills drill' };
+}
+
+function formatDuration(seconds) {
+  const n = Math.max(0, Number(seconds) || 0);
+  if (n < 60) return `${n}s`;
+  const mm = Math.floor(n / 60);
+  const ss = n % 60;
+  return `${mm}m ${String(ss).padStart(2, '0')}s`;
+}
 
 function getPerformanceTier(accuracy) {
   const pct = Number(accuracy) || 0;
@@ -177,6 +221,9 @@ function mapAttemptResultToNavExtras(api) {
 export default function ResultScreen() {
   const route = useRoute();
   const navigation = useNavigation();
+  const { user } = useAuth();
+  const { runOnce, runOnceAsync } = useNavigationActionLock();
+  const heroOpacity = useRef(new Animated.Value(0)).current;
   const routeAttemptId = useMemo(() => {
     const p = route.params;
     if (!p || typeof p !== 'object' || p.attemptId == null) return null;
@@ -397,6 +444,26 @@ export default function ResultScreen() {
   const wrongQuestionIds = retryLists.wrongQuestionIds;
   const retrySkippedFromSelection = retryLists.retrySkippedUnavailableCount;
 
+  const retryBreakdown = useMemo(() => {
+    let unanswered = 0;
+    let incorrect = 0;
+    const worthy = new Set(wrongQuestionIds);
+    const qs = Array.isArray(questions) ? questions : [];
+    for (const q of qs) {
+      const qid = String(q?._id ?? '');
+      if (!worthy.has(qid)) continue;
+      const userArr = toIndexArray(userAnswers?.[qid]);
+      if (userArr.length === 0) unanswered += 1;
+      else incorrect += 1;
+    }
+    return {
+      incorrect,
+      unanswered,
+      total: wrongQuestionIds.length,
+      retryable: wrongQuestions.length,
+    };
+  }, [questions, wrongQuestionIds, wrongQuestions, userAnswers]);
+
   const mockAttemptStats = useMemo(() => {
     if (isRetry) return null;
     const qs = Array.isArray(questions) ? questions : [];
@@ -441,12 +508,14 @@ export default function ResultScreen() {
   ]);
 
   const handleReviewAnswers = () => {
-    navigation.navigate('ReviewAnswers', {
-      questions: Array.isArray(questions) ? questions : [],
-      userAnswers: userAnswers && typeof userAnswers === 'object' ? userAnswers : {},
-      correctAnswers: Array.isArray(correctAnswers) ? correctAnswers : [],
-      retry,
-      readOnly: true,
+    runOnce(() => {
+      navigation.navigate('ReviewAnswers', {
+        questions: Array.isArray(questions) ? questions : [],
+        userAnswers: userAnswers && typeof userAnswers === 'object' ? userAnswers : {},
+        correctAnswers: Array.isArray(correctAnswers) ? correctAnswers : [],
+        retry,
+        readOnly: true,
+      });
     });
   };
 
@@ -487,6 +556,23 @@ export default function ResultScreen() {
     [retryWrongQuestions]
   );
 
+  const retryCtaCopy = useMemo(
+    () =>
+      buildRetryCtaCopy({
+        total: retryBreakdown.total,
+        incorrect: retryBreakdown.incorrect,
+        unanswered: retryBreakdown.unanswered,
+        retryable: retryBreakdown.retryable,
+        examTotal: displayStats.totalQ,
+      }),
+    [retryBreakdown, displayStats.totalQ]
+  );
+
+  const retryAgainCopy = useMemo(
+    () => buildRetryAgainCopy(retryWrongQuestionIds.length),
+    [retryWrongQuestionIds.length]
+  );
+
   const handleRetryWrong = () => {
     if (!wrongQuestionIds.length) return;
     const { retryable, skipped: skippedLocal } = partitionRetryableQuestions(wrongQuestions);
@@ -496,46 +582,50 @@ export default function ResultScreen() {
       skippedLocal;
     if (!retryable.length) {
       Alert.alert(
-        'Cannot retry',
+        'Unable to start practice',
         skippedTotal > 0
-          ? `${skippedTotal} unavailable question${skippedTotal === 1 ? '' : 's'} could not be retried.`
-          : 'No retryable questions from this attempt.'
+          ? `Those questions are no longer available. Try Review answers to study what you can.`
+          : 'Nothing from this attempt can be practiced right now. Review answers may still help.'
       );
       return;
     }
     if (skippedTotal > 0) {
       Alert.alert(
-        'Retry started',
-        `${skippedTotal} unavailable question${skippedTotal === 1 ? '' : 's'} ${skippedTotal === 1 ? 'was' : 'were'} skipped.`
+        'Starting focused practice',
+        `${skippedTotal} question${skippedTotal === 1 ? '' : 's'} couldn't be included — the rest are ready when you are.`
       );
     }
-    navigation.navigate('Test', {
-      mode: 'retry',
-      questionIds: retryable.map((q) => String(q._id)),
-      questions: retryable,
-      historicalAttemptMode: isHistoricalAttempt,
-      sourceAttemptId: historicalAttemptId || undefined,
-      originMainTab: resolveRetryOriginMainTab({
-        returnMainTab,
-        isHistoricalAttempt,
-        testId,
-      }),
-      // Do not pass testId in historical mode — retry must not touch live test APIs.
-      ...(!isHistoricalAttempt && testId ? { testId } : {}),
+    runOnce(() => {
+      navigation.navigate('Test', {
+        mode: 'retry',
+        questionIds: retryable.map((q) => String(q._id)),
+        questions: retryable,
+        historicalAttemptMode: isHistoricalAttempt,
+        sourceAttemptId: historicalAttemptId || undefined,
+        originMainTab: resolveRetryOriginMainTab({
+          returnMainTab,
+          isHistoricalAttempt,
+          testId,
+        }),
+        // Do not pass testId in historical mode — retry must not touch live test APIs.
+        ...(!isHistoricalAttempt && testId ? { testId } : {}),
+      });
     });
   };
 
   const handleRetryAgain = () => {
     if (!retryWrongQuestionIds.length) return;
-    navigation.navigate('Test', {
-      mode: 'retry',
-      questionIds: retryWrongQuestionIds,
-      questions: retryWrongQuestions,
-      originMainTab: resolveRetryOriginMainTab({
-        returnMainTab,
-        isHistoricalAttempt,
-        testId,
-      }),
+    runOnce(() => {
+      navigation.navigate('Test', {
+        mode: 'retry',
+        questionIds: retryWrongQuestionIds,
+        questions: retryWrongQuestions,
+        originMainTab: resolveRetryOriginMainTab({
+          returnMainTab,
+          isHistoricalAttempt,
+          testId,
+        }),
+      });
     });
   };
 
@@ -676,7 +766,7 @@ export default function ResultScreen() {
 
   const handleOpenNote = (note) => {
     if (!note) return;
-    navigation.navigate('NoteDetail', { note });
+    runOnce(() => navigation.navigate('NoteDetail', { note }));
   };
 
   /**
@@ -685,6 +775,7 @@ export default function ResultScreen() {
    * wherever the user encounters PDFs in the app.
    */
   const handleOpenPdf = async (pdf) => {
+    if (isGlobalOpening(openingPdfId)) return;
     const id = pdf?._id;
     if (!id) return;
     setOpeningPdfId(id);
@@ -718,87 +809,236 @@ export default function ResultScreen() {
   const handleWeakPractice = async () => {
     if (weakLoading || practiceTopicId != null) return;
     if (weakTopicIds.length === 0) return;
-    setPracticeError(null);
-    setWeakLoading(true);
-    try {
-      const data = await getWeakPractice(weakTopicIds, { limit: 10 });
-      const fetched = Array.isArray(data?.questions) ? data.questions : [];
-      if (fetched.length === 0) {
-        setPracticeError('No questions available for practice.');
-        return;
+    await runOnceAsync(async () => {
+      setPracticeError(null);
+      setWeakLoading(true);
+      try {
+        const data = await getWeakPractice(weakTopicIds, { limit: 10 });
+        const fetched = Array.isArray(data?.questions) ? data.questions : [];
+        if (fetched.length === 0) {
+          setPracticeError('No questions available for practice.');
+          return;
+        }
+        const questionIds = fetched
+          .map((q) => (q?._id == null ? '' : String(q._id)))
+          .filter(Boolean);
+        navigation.navigate('Test', {
+          mode: 'practice',
+          questions: fetched,
+          questionIds,
+          originMainTab: resolveRetryOriginMainTab({
+            returnMainTab,
+            isHistoricalAttempt,
+            testId,
+          }),
+        });
+      } catch (e) {
+        setPracticeError(getApiErrorMessage(e));
+      } finally {
+        setWeakLoading(false);
       }
-      const questionIds = fetched
-        .map((q) => (q?._id == null ? '' : String(q._id)))
-        .filter(Boolean);
-      navigation.navigate('Test', {
-        mode: 'practice',
-        questions: fetched,
-        questionIds,
-        originMainTab: resolveRetryOriginMainTab({
-          returnMainTab,
-          isHistoricalAttempt,
-          testId,
-        }),
-      });
-    } catch (e) {
-      setPracticeError(getApiErrorMessage(e));
-    } finally {
-      setWeakLoading(false);
-    }
+    });
   };
 
   const handlePractice = async (topicId) => {
     if (!topicId || practiceTopicId) return;
     const id = String(topicId);
-    setPracticeError(null);
-    setPracticeTopicId(id);
-    try {
-      const data = await getQuestionsByTopic(id, { limit: 10 });
-      const fetched = Array.isArray(data?.questions) ? data.questions : [];
-      const limited = fetched.slice(0, 15);
-      const questionIds = limited.map((q) => String(q?._id)).filter(Boolean);
-      if (!questionIds.length) {
-        setPracticeError('No practice questions available for this topic.');
-        return;
+    await runOnceAsync(async () => {
+      setPracticeError(null);
+      setPracticeTopicId(id);
+      try {
+        const data = await getQuestionsByTopic(id, { limit: 10 });
+        const fetched = Array.isArray(data?.questions) ? data.questions : [];
+        const limited = fetched.slice(0, 15);
+        const questionIds = limited.map((q) => String(q?._id)).filter(Boolean);
+        if (!questionIds.length) {
+          setPracticeError('No practice questions available for this topic.');
+          return;
+        }
+        navigation.navigate('Test', {
+          mode: 'practice',
+          questionIds,
+          questions: limited,
+          originMainTab: resolveRetryOriginMainTab({
+            returnMainTab,
+            isHistoricalAttempt,
+            testId,
+          }),
+        });
+      } catch (e) {
+        setPracticeError(getApiErrorMessage(e));
+      } finally {
+        setPracticeTopicId(null);
       }
-      navigation.navigate('Test', {
-        mode: 'practice',
-        questionIds,
-        questions: limited,
-        originMainTab: resolveRetryOriginMainTab({
-          returnMainTab,
-          isHistoricalAttempt,
-          testId,
-        }),
-      });
-    } catch (e) {
-      setPracticeError(getApiErrorMessage(e));
-    } finally {
-      setPracticeTopicId(null);
-    }
+    });
   };
 
-  const tier = getPerformanceTier(accuracy);
+  const sessionContext = useMemo(
+    () =>
+      getSessionContext({
+        isRetry,
+        isMock,
+        returnMainTab,
+        testTitle: _testTitle,
+      }),
+    [isRetry, isMock, returnMainTab, _testTitle]
+  );
+
+  const progressInsight = useMemo(() => {
+    if (isRetry || isHistoricalAttempt || !isMock || attempts.length === 0) return null;
+    const prev = Number(attempts[0]?.accuracy) || 0;
+    const current = Number(accuracy) || 0;
+    const delta = Math.round((current - prev) * 10) / 10;
+    if (Math.abs(delta) < 0.05) {
+      return { text: 'On par with your previous attempt', variant: 'neutral' };
+    }
+    if (delta > 0) return { text: `Up ${delta}% from your previous attempt`, variant: 'up' };
+    return {
+      text: `${Math.abs(delta)}% below last time — a focused retry can lift you`,
+      variant: 'focus',
+    };
+  }, [isRetry, isHistoricalAttempt, isMock, attempts, accuracy]);
+
+  const streakCount = Number(user?.streakCount) || 0;
+  const showStreakChip =
+    !isHistoricalAttempt && !isRetry && returnMainTab === MAIN_TABS.HOME && streakCount > 0;
+
+  const correctCount = mockAttemptStats?.correct ?? Number(score) || 0;
+  const wrongCount = mockAttemptStats
+    ? mockAttemptStats.incorrect
+    : Math.max(0, (Number(displayStats.answeredQ) || 0) - correctCount);
+
+  const heroAccuracy =
+    isRetry && retryStats ? retryStats.accuracyPct : Number(accuracy) || 0;
+  const heroCorrect = isRetry && retryStats ? retryStats.correct : correctCount;
+  const heroTotal = isRetry && retryStats ? retryStats.total : displayStats.totalQ;
+  const tier = useMemo(() => {
+    const base = getPerformanceTier(heroAccuracy);
+    if (isRetry) return base;
+    return {
+      ...base,
+      message: getEncouragingTierMessage(
+        heroAccuracy,
+        wrongQuestionIds.length,
+        displayStats.totalQ
+      ),
+    };
+  }, [heroAccuracy, isRetry, wrongQuestionIds.length, displayStats.totalQ]);
+
+  const resultAnimKey = `${historicalAttemptId || testId || 'session'}-${isRetry ? 'retry' : 'main'}`;
+
+  useEffect(() => {
+    heroOpacity.setValue(0);
+    Animated.timing(heroOpacity, {
+      toValue: 1,
+      duration: motion.duration.fast,
+      useNativeDriver: true,
+    }).start();
+  }, [resultAnimKey, heroOpacity]);
+
+  const renderPrimaryActions = () => {
+    const hasWrong = !isRetry && wrongQuestionIds.length > 0;
+    const hasRetryWrong = isRetry && retryWrongQuestionIds.length > 0;
+    const allCorrect =
+      !isRetry && wrongQuestionIds.length === 0 && displayStats.totalQ > 0;
+    const showReviewPrimary = allCorrect || (isRetry && !hasRetryWrong);
+    const showReviewSecondary = hasWrong || hasRetryWrong;
+
+    return (
+      <View style={styles.actionsBlock}>
+        <Text style={styles.actionsHeading}>Next steps</Text>
+        {hasWrong && retryCtaCopy.encourage ? (
+          <Text style={styles.retryEncourage}>{retryCtaCopy.encourage}</Text>
+        ) : null}
+        {hasWrong ? (
+          <Pressable
+            onPress={handleRetryWrong}
+            style={({ pressed }) => [styles.actionPrimary, pressFeedbackStyle(pressed)]}
+          >
+            <Text style={styles.actionPrimaryTitle}>{retryCtaCopy.title}</Text>
+            <Text style={styles.actionPrimarySub}>{retryCtaCopy.subtitle}</Text>
+          </Pressable>
+        ) : null}
+        {hasRetryWrong ? (
+          <Pressable
+            onPress={handleRetryAgain}
+            style={({ pressed }) => [styles.actionPrimary, pressFeedbackStyle(pressed)]}
+          >
+            <Text style={styles.actionPrimaryTitle}>{retryAgainCopy.title}</Text>
+            <Text style={styles.actionPrimarySub}>{retryAgainCopy.subtitle}</Text>
+          </Pressable>
+        ) : null}
+        {allCorrect ? (
+          <View style={styles.perfectCard}>
+            <Text style={styles.perfectTitle}>All questions correct</Text>
+            <Text style={styles.perfectSub}>
+              Reinforce what you know by reviewing your answers.
+            </Text>
+          </View>
+        ) : null}
+        {showReviewPrimary ? (
+          <Pressable
+            onPress={handleReviewAnswers}
+            style={({ pressed }) => [styles.actionPrimary, pressFeedbackStyle(pressed)]}
+          >
+            <Text style={styles.actionPrimaryTitle}>Review answers</Text>
+            <Text style={styles.actionPrimarySub}>Walk through questions and explanations</Text>
+          </Pressable>
+        ) : null}
+        {showReviewSecondary ? (
+          <Pressable
+            onPress={handleReviewAnswers}
+            style={({ pressed }) => [styles.actionSecondary, pressFeedbackStyle(pressed)]}
+          >
+            <Text style={styles.actionSecondaryTitle}>Review answers</Text>
+            <Text style={styles.actionSecondarySub}>Analytical breakdown of each question</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  };
 
   const renderHeader = () => (
     <View>
-      <View
+      <Animated.View
         style={[
           styles.heroCard,
-          { borderColor: tier.color, backgroundColor: tier.bg },
+          { borderColor: tier.color, backgroundColor: tier.bg, opacity: heroOpacity },
         ]}
       >
-        <Text style={styles.heroLabel}>Your Score</Text>
-        <Text style={[styles.heroScore, { color: tier.color }]}>
-          {String(score ?? 0)}
+        <Text style={styles.sessionLabel}>{sessionContext.label}</Text>
+        <Text style={styles.sessionHint}>{sessionContext.hint}</Text>
+        <Text style={[styles.heroAccuracyMain, { color: tier.color }]}>
+          {String(heroAccuracy)}%
         </Text>
-        <Text style={styles.heroAccuracy}>
-          Accuracy: <Text style={styles.heroAccuracyValue}>{String(accuracy ?? 0)}%</Text>
+        <Text style={styles.heroCorrectLine}>
+          {String(heroCorrect)} of {String(heroTotal)} correct
         </Text>
-        <Text style={[styles.heroMessage, { color: tier.color }]}>
-          {tier.message}
-        </Text>
-      </View>
+        {Number(timeTaken) > 0 ? (
+          <Text style={styles.heroMeta}>Time {formatDuration(timeTaken)}</Text>
+        ) : null}
+        <Text style={[styles.heroMessage, { color: tier.color }]}>{tier.message}</Text>
+        {showStreakChip || progressInsight ? (
+          <View style={styles.insightRow}>
+            {showStreakChip ? (
+              <View style={styles.insightChip}>
+                <Text style={styles.insightChipText}>🔥 {streakCount}-day streak</Text>
+              </View>
+            ) : null}
+            {progressInsight ? (
+              <View
+                style={[
+                  styles.insightChip,
+                  progressInsight.variant === 'up' && styles.insightChipUp,
+                  progressInsight.variant === 'focus' && styles.insightChipFocus,
+                ]}
+              >
+                <Text style={styles.insightChipText}>{progressInsight.text}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </Animated.View>
 
       {recoveredSubmit ? (
         <View style={styles.recoveredBanner}>
@@ -834,151 +1074,94 @@ export default function ResultScreen() {
         </View>
       ) : null}
 
-      {isMock && !viewingHistoricalAttempt ? (
-        <View style={styles.attemptsBlock}>
-          <View style={styles.attemptsHeaderRow}>
-            <Text style={styles.sectionTitle}>Previous Attempts</Text>
-            {attemptsLoading ? <Text style={styles.attemptsMeta}>Loading…</Text> : null}
-          </View>
-          {attemptsError ? (
-            <Text style={styles.attemptsError}>{attemptsError}</Text>
-          ) : null}
-          {!attemptsLoading && attempts.length > 0 ? (
-            <View style={styles.attemptsSummaryRow}>
-              <View style={styles.summaryPill}>
-                <Text style={styles.summaryLabel}>Total attempts</Text>
-                <Text style={styles.summaryValue}>{String(attempts.length)}</Text>
-              </View>
-              <View style={styles.summaryPill}>
-                <Text style={styles.summaryLabel}>Best score</Text>
-                <Text style={styles.summaryValue}>{String(bestAttempt?.accuracy ?? 0)}%</Text>
-              </View>
-              <View style={styles.summaryPill}>
-                <Text style={styles.summaryLabel}>Latest score</Text>
-                <Text style={styles.summaryValue}>
-                  {String(attempts?.[0]?.accuracy ?? 0)}%
-                </Text>
-              </View>
-            </View>
-          ) : null}
-          {bestAttempt ? (
-            <View style={styles.bestAttemptCard}>
-              <View style={styles.bestAttemptTop}>
-                <Text style={styles.bestAttemptLabel}>Best score</Text>
-                <Text style={styles.bestAttemptValue}>
-                  {String(bestAttempt?.accuracy ?? 0)}%
-                </Text>
-              </View>
-              <Text style={styles.bestAttemptSub}>
-                Attempt {String(bestAttempt?.attemptNumber ?? '—')} • {formatAttemptDate(bestAttempt?.endTime)}
-              </Text>
-            </View>
-          ) : null}
-          {!attemptsLoading && attempts.length > 0 ? (
-            <View style={styles.attemptList}>
-              {attempts
-                .slice()
-                .sort((a, b) => (Number(a?.attemptNumber) || 0) - (Number(b?.attemptNumber) || 0))
-                .map((a) => (
-                  <View key={String(a?._id)} style={styles.attemptRow}>
-                    <View style={styles.attemptLeft}>
-                      <Text style={styles.attemptTitle}>
-                        Attempt {String(a?.attemptNumber ?? '—')}
-                      </Text>
-                      <Text style={styles.attemptSub}>
-                        Accuracy {String(a?.accuracy ?? 0)}% • Time {formatAttemptTime(a?.timeTaken)}
-                      </Text>
-                      <Text style={styles.attemptDate}>{formatAttemptDate(a?.endTime)}</Text>
-                    </View>
-                    <Text style={styles.attemptPct}>{String(a?.accuracy ?? 0)}%</Text>
-                  </View>
-                ))}
-            </View>
-          ) : !attemptsLoading ? (
-            <Text style={styles.attemptsEmpty}>No previous attempts yet.</Text>
-          ) : null}
+      <View style={styles.statsCompact}>
+        <View style={styles.statCell}>
+          <Text style={[styles.statCellValue, styles.statPositive]}>{String(heroCorrect)}</Text>
+          <Text style={styles.statCellLabel}>Correct</Text>
         </View>
-      ) : null}
-
-      <View style={styles.statsBlock}>
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{String(displayStats.totalQ)}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{String(displayStats.answeredQ)}</Text>
-            <Text style={styles.statLabel}>Answered</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{String(timeTaken ?? 0)}s</Text>
-            <Text style={styles.statLabel}>Time</Text>
-          </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statCell}>
+          <Text
+            style={[
+              styles.statCellValue,
+              (isRetry && retryStats
+                ? retryStats.total - retryStats.correct
+                : wrongCount) > 0 && styles.statNegative,
+            ]}
+          >
+            {String(
+              isRetry && retryStats
+                ? Math.max(0, retryStats.total - retryStats.correct)
+                : wrongCount
+            )}
+          </Text>
+          <Text style={styles.statCellLabel}>Missed</Text>
         </View>
-        {!isRetry && mockAttemptStats ? (
-          <View style={[styles.statsRow, styles.statsRowSecondary]}>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{String(displayStats.unansweredQ)}</Text>
-              <Text style={styles.statLabel}>Unanswered</Text>
+        {!isRetry && displayStats.unansweredQ > 0 ? (
+          <>
+            <View style={styles.statDivider} />
+            <View style={styles.statCell}>
+              <Text style={styles.statCellValue}>{String(displayStats.unansweredQ)}</Text>
+              <Text style={styles.statCellLabel}>Unanswered</Text>
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{String(mockAttemptStats.correct)}</Text>
-              <Text style={styles.statLabel}>Correct</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{String(mockAttemptStats.incorrect)}</Text>
-              <Text style={styles.statLabel}>Incorrect</Text>
-            </View>
-          </View>
+          </>
         ) : null}
-        {!isRetry && isMock && (displayStats.skippedQ != null || displayStats.markedQ != null) ? (
-          <View style={[styles.statsRow, styles.statsRowSecondary]}>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {displayStats.skippedQ != null ? String(displayStats.skippedQ) : '—'}
-              </Text>
-              <Text style={styles.statLabel}>Skipped</Text>
+        {Number(timeTaken) > 0 ? (
+          <>
+            <View style={styles.statDivider} />
+            <View style={styles.statCell}>
+              <Text style={styles.statCellValue}>{formatDuration(timeTaken)}</Text>
+              <Text style={styles.statCellLabel}>Time</Text>
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>
-                {displayStats.markedQ != null ? String(displayStats.markedQ) : '—'}
-              </Text>
-              <Text style={styles.statLabel}>Marked review</Text>
-            </View>
-          </View>
+          </>
         ) : null}
       </View>
 
+      {renderPrimaryActions()}
+
       {retryStats ? (
         <View style={styles.retryBlock}>
-          <Text style={styles.sectionTitle}>Retry Performance</Text>
-          <Text style={styles.retryLine}>
-            Correct: <Text style={styles.retryStrong}>{String(retryStats.correct)} / {String(retryStats.total)}</Text>
+          <Text style={styles.sectionTitle}>Retry progress</Text>
+          <Text style={styles.sectionSubtitle}>
+            You reworked questions you missed earlier.
           </Text>
-          <Text style={styles.retryLine}>
-            Accuracy: <Text style={styles.retryStrong}>{String(retryStats.accuracyPct)}%</Text>
-          </Text>
-          <Text style={styles.retryLine}>
-            Improvement: <Text style={styles.retryStrong}>+{String(retryStats.correct)}</Text>{' '}
-            (originally 0 / {String(retryStats.total)} on these)
-          </Text>
+          <View style={styles.retryMetricsRow}>
+            <View style={styles.retryMetric}>
+              <Text style={styles.retryMetricValue}>{String(retryStats.accuracyPct)}%</Text>
+              <Text style={styles.retryMetricLabel}>Accuracy</Text>
+            </View>
+            <View style={styles.retryMetric}>
+              <Text style={styles.retryMetricValue}>
+                {String(retryStats.correct)}/{String(retryStats.total)}
+              </Text>
+              <Text style={styles.retryMetricLabel}>Correct now</Text>
+            </View>
+          </View>
         </View>
       ) : null}
 
-      <Text style={styles.sectionTitle}>Weak Topics</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Focus areas</Text>
+        <Text style={styles.sectionSubtitle}>
+          {weakTopicIds.length > 0
+            ? 'Topics to strengthen — practice builds confidence'
+            : 'No weak topics this time'}
+        </Text>
+      </View>
       {weakTopicIds.length > 0 ? (
         <Pressable
           onPress={handleWeakPractice}
           disabled={weakLoading || practiceTopicId != null}
           style={({ pressed }) => [
             styles.weakCta,
-            pressed && styles.btnPressed,
+            pressFeedbackStyle(pressed),
             (weakLoading || practiceTopicId != null) && styles.btnDisabled,
           ]}
         >
           <Text style={styles.weakCtaText}>
-            {weakLoading ? 'Loading…' : '🔥 Practice Weak Topics'}
+            {weakLoading ? 'Loading…' : 'Practice all weak topics'}
           </Text>
+          <Text style={styles.weakCtaSub}>10-question mixed drill</Text>
         </Pressable>
       ) : null}
       {Array.isArray(weakTopics) && weakTopics.length > 0 ? (
@@ -997,16 +1180,19 @@ export default function ResultScreen() {
                 <View style={styles.weakTopicRow}>
                   <View style={styles.weakTopicTextBlock}>
                     <Text style={styles.weakTopicName}>{topicName}</Text>
-                    <Text style={styles.weakTopicMistakes}>
-                      {`Mistakes: ${String(item?.mistakeCount ?? 0)}`}
-                    </Text>
+                    <View style={styles.mistakeBadge}>
+                      <Text style={styles.mistakeBadgeText}>
+                        {String(item?.mistakeCount ?? 0)} mistake
+                        {Number(item?.mistakeCount) === 1 ? '' : 's'}
+                      </Text>
+                    </View>
                   </View>
                   <Pressable
                     onPress={() => handlePractice(item?.topicId)}
                     disabled={practiceTopicId != null}
                     style={({ pressed }) => [
                       styles.practiceBtn,
-                      pressed && styles.btnPressed,
+                      pressFeedbackStyle(pressed),
                       practiceTopicId != null && styles.btnDisabled,
                     ]}
                   >
@@ -1021,25 +1207,66 @@ export default function ResultScreen() {
         </View>
       ) : (
         <View style={styles.sectionCard}>
-          <EmptyState
-            title="No weak topics"
-            subtitle="Great job — you nailed every topic!"
-            emoji="🎉"
-            compact
-          />
+          <EmptyState compact {...EMPTY.WEAK_TOPICS_CLEAR} />
         </View>
       )}
       {practiceError ? <Text style={styles.err}>{practiceError}</Text> : null}
 
       {weakTopicIds.length > 0 ? renderRecommendations() : null}
 
-      <Text style={styles.sectionTitle}>Review</Text>
-      <Pressable
-        onPress={handleReviewAnswers}
-        style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
-      >
-        <Text style={styles.primaryBtnText}>Review Answers</Text>
-      </Pressable>
+      {isMock && !viewingHistoricalAttempt ? (
+        <View style={styles.attemptsBlock}>
+          <Text style={styles.sectionTitleMuted}>Mock test history</Text>
+          <Text style={styles.sectionSubtitle}>
+            Track improvement across attempts on this test.
+          </Text>
+          {attemptsLoading ? (
+            <View style={styles.attemptsLoadingWrap}>
+              <InlineLoading size="small" />
+            </View>
+          ) : null}
+          {attemptsError ? (
+            <Text style={styles.attemptsError}>{attemptsError}</Text>
+          ) : null}
+          {!attemptsLoading && attempts.length > 0 ? (
+            <>
+              <View style={styles.attemptsSummaryRow}>
+                <View style={styles.summaryPill}>
+                  <Text style={styles.summaryLabel}>Attempts</Text>
+                  <Text style={styles.summaryValue}>{String(attempts.length)}</Text>
+                </View>
+                <View style={styles.summaryPill}>
+                  <Text style={styles.summaryLabel}>Best</Text>
+                  <Text style={styles.summaryValue}>{String(bestAttempt?.accuracy ?? 0)}%</Text>
+                </View>
+              </View>
+              <View style={styles.attemptList}>
+                {attempts
+                  .slice()
+                  .sort(
+                    (a, b) => (Number(b?.attemptNumber) || 0) - (Number(a?.attemptNumber) || 0)
+                  )
+                  .slice(0, 3)
+                  .map((a) => (
+                    <View key={String(a?._id)} style={styles.attemptRow}>
+                      <View style={styles.attemptLeft}>
+                        <Text style={styles.attemptTitle}>
+                          Attempt {String(a?.attemptNumber ?? '—')}
+                        </Text>
+                        <Text style={styles.attemptSub}>
+                          {String(a?.accuracy ?? 0)}% • {formatAttemptTime(a?.timeTaken)}
+                        </Text>
+                      </View>
+                      <Text style={styles.attemptPct}>{String(a?.accuracy ?? 0)}%</Text>
+                    </View>
+                  ))}
+              </View>
+            </>
+          ) : !attemptsLoading ? (
+            <Text style={styles.attemptsEmpty}>First attempt — your baseline starts here.</Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -1052,12 +1279,12 @@ export default function ResultScreen() {
         <Text style={styles.sectionTitle}>Weak Topic Resources</Text>
         <View style={styles.sectionCard}>
           {recLoading ? (
-            <Text style={styles.recMuted}>Finding resources…</Text>
+            <LoadingState compact size="small" label="Finding study resources…" />
           ) : recError ? (
             <Text style={styles.err}>{recError}</Text>
           ) : !hasNotes && !hasPdfs ? (
             <Text style={styles.recMuted}>
-              No matching study material yet. Check back later.
+              No notes or PDFs matched your focus areas yet. Try practice on those topics.
             </Text>
           ) : (
             <>
@@ -1073,7 +1300,7 @@ export default function ResultScreen() {
                         onPress={() => handleOpenNote(note)}
                         style={({ pressed }) => [
                           styles.recRow,
-                          pressed && styles.btnPressed,
+                          pressFeedbackStyle(pressed),
                         ]}
                       >
                         <Text style={styles.recRowTitle} numberOfLines={2}>
@@ -1109,7 +1336,7 @@ export default function ResultScreen() {
                         disabled={opening}
                         style={({ pressed }) => [
                           styles.recRow,
-                          pressed && styles.btnPressed,
+                          pressFeedbackStyle(pressed),
                           opening && styles.btnDisabled,
                         ]}
                       >
@@ -1135,52 +1362,24 @@ export default function ResultScreen() {
     );
   };
 
-  const renderFooter = () => {
-    return (
-      <View style={styles.footer}>
-        {!isRetry && wrongQuestionIds.length > 0 ? (
-          <Pressable
-            onPress={handleRetryWrong}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              pressed && styles.btnPressed,
-            ]}
-          >
-            <Text style={styles.primaryBtnText}>Retry Wrong Questions</Text>
-          </Pressable>
-        ) : null}
-        {isRetry && retryWrongQuestionIds.length > 0 ? (
-          <Pressable
-            onPress={handleRetryAgain}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              pressed && styles.btnPressed,
-            ]}
-          >
-            <Text style={styles.primaryBtnText}>Retry Again</Text>
-          </Pressable>
-        ) : null}
-        <Pressable
-          onPress={navigateBackFromResult}
-          style={({ pressed }) => [
-            styles.secondaryBtn,
-            pressed && styles.btnPressed,
-          ]}
-        >
-          <Text style={styles.secondaryBtnText}>
-            {resolveResultBackTarget(params).label}
-          </Text>
-        </Pressable>
-      </View>
-    );
-  };
+  const renderFooter = () => (
+    <View style={styles.footer}>
+      <Pressable
+        onPress={navigateBackFromResult}
+        style={({ pressed }) => [styles.secondaryBtn, pressFeedbackStyle(pressed)]}
+      >
+        <Text style={styles.secondaryBtnText}>
+          {resolveResultBackTarget(params).label}
+        </Text>
+      </Pressable>
+    </View>
+  );
 
   if (routeAttemptId) {
     if (histLoading) {
       return (
         <View style={styles.histGate}>
-          <ActivityIndicator size="large" color={PRIMARY} />
-          <Text style={styles.histGateText}>Loading results…</Text>
+          <LoadingState compact />
         </View>
       );
     }
@@ -1192,14 +1391,14 @@ export default function ResultScreen() {
           : getApiErrorMessage(histError) || 'Could not load results.';
       return (
         <View style={styles.histGate}>
-          <Text style={styles.histGateTitle}>Could not open results</Text>
-          <Text style={styles.histGateText}>{msg}</Text>
-          <Pressable
-            onPress={() => setRetryTick((t) => t + 1)}
-            style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed, styles.histRetryBtn]}
-          >
-            <Text style={styles.primaryBtnText}>Try again</Text>
-          </Pressable>
+          <ErrorState
+            compact
+            title={ERROR_TITLES.open}
+            message={msg}
+            context="results"
+            onRetry={() => setRetryTick((t) => t + 1)}
+            retrying={histLoading}
+          />
         </View>
       );
     }
@@ -1207,11 +1406,7 @@ export default function ResultScreen() {
 
   if (!hasParams) {
     return (
-      <EmptyState
-        title="No data available"
-        subtitle="Result data is missing. Please start a test first."
-        emoji="📭"
-      />
+      <EmptyState {...EMPTY.RESULT_MISSING} />
     );
   }
 
@@ -1236,21 +1431,152 @@ const styles = StyleSheet.create({
 
   heroCard: {
     borderRadius: 16,
-    padding: 24,
+    padding: 22,
     alignItems: 'center',
-    borderWidth: 2,
-    marginBottom: 16,
+    borderWidth: 1,
+    marginBottom: 14,
   },
-  heroLabel: { fontSize: 13, color: MUTED, fontWeight: '600', letterSpacing: 0.5 },
-  heroScore: {
-    fontSize: 56,
+  sessionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: MUTED,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  sessionHint: { fontSize: 13, color: MUTED, marginTop: 4 },
+  heroAccuracyMain: {
+    fontSize: 52,
     fontWeight: '800',
-    marginVertical: 4,
-    lineHeight: 64,
+    marginTop: 10,
+    lineHeight: 58,
   },
-  heroAccuracy: { fontSize: 15, color: TEXT, marginTop: 4 },
-  heroAccuracyValue: { fontWeight: '700' },
-  heroMessage: { fontSize: 16, fontWeight: '700', marginTop: 12 },
+  heroCorrectLine: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT,
+    marginTop: 4,
+  },
+  heroMeta: { fontSize: 13, color: MUTED, marginTop: 6 },
+  heroMessage: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 14,
+    textAlign: 'center',
+    lineHeight: 21,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  insightChip: {
+    backgroundColor: 'rgba(255,255,255,0.65)',
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  insightChipUp: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
+  },
+  insightChipFocus: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  insightChipText: { fontSize: 12, fontWeight: '600', color: TEXT },
+
+  statsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    marginBottom: 18,
+  },
+  statCell: { flex: 1, alignItems: 'center' },
+  statCellValue: { fontSize: 18, fontWeight: '800', color: TEXT },
+  statCellLabel: { fontSize: 11, color: MUTED, marginTop: 3, fontWeight: '600' },
+  statDivider: { width: 1, height: 28, backgroundColor: BORDER },
+  statPositive: { color: colors.success },
+  statNegative: { color: colors.danger },
+
+  actionsBlock: { marginBottom: 22 },
+  actionsHeading: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: MUTED,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 10,
+  },
+  retryEncourage: {
+    fontSize: 14,
+    color: TEXT,
+    lineHeight: 20,
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+  actionPrimary: {
+    backgroundColor: PRIMARY,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  actionPrimaryTitle: {
+    color: colors.textOnPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  actionPrimarySub: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  actionSecondary: {
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+  },
+  actionSecondaryTitle: { fontSize: 15, fontWeight: '600', color: TEXT },
+  actionSecondarySub: { fontSize: 13, color: MUTED, marginTop: 3, lineHeight: 18 },
+  perfectCard: {
+    backgroundColor: colors.successSoft,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.success,
+    padding: 14,
+    marginBottom: 10,
+  },
+  perfectTitle: { fontSize: 15, fontWeight: '700', color: TEXT },
+  perfectSub: { fontSize: 13, color: MUTED, marginTop: 4, lineHeight: 18 },
+
+  sectionHeader: { marginTop: 4, marginBottom: 10 },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: MUTED,
+    lineHeight: 19,
+    marginTop: -4,
+    marginBottom: 4,
+  },
+  sectionTitleMuted: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: MUTED,
+    marginTop: 12,
+    marginBottom: 4,
+  },
 
   recoveredBanner: {
     backgroundColor: colors.warningSoft,
@@ -1310,31 +1636,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  statsBlock: {
-    marginBottom: 24,
-    gap: 10,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    backgroundColor: CARD_BG,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: BORDER,
-    paddingVertical: 14,
-  },
-  statsRowSecondary: {
-    marginTop: 0,
-  },
-  statBox: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '700', color: TEXT },
-  statLabel: { fontSize: 12, color: MUTED, marginTop: 2 },
-
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: TEXT,
-    marginTop: 8,
-    marginBottom: 10,
+    marginTop: 4,
+    marginBottom: 6,
   },
 
   attemptsBlock: {
@@ -1343,13 +1650,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
     padding: 12,
-    marginBottom: 16,
+    marginTop: 8,
+    marginBottom: 8,
   },
-  attemptsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  attemptsLoadingWrap: { marginLeft: 8 },
   attemptsMeta: { fontSize: 12, color: MUTED, fontWeight: '600' },
   attemptsError: { color: colors.danger, fontSize: 13, marginTop: 6, fontWeight: '600' },
   attemptsEmpty: { color: MUTED, fontSize: 13, marginTop: 6 },
@@ -1372,26 +1676,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   summaryValue: { fontSize: 16, fontWeight: '800', color: TEXT, marginTop: 6 },
-  bestAttemptCard: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    padding: 12,
-    marginTop: 10,
-    marginBottom: 12,
-  },
-  bestAttemptTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  bestAttemptLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.primaryText,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  bestAttemptValue: { fontSize: 18, fontWeight: '800', color: colors.primaryDark },
-  bestAttemptSub: { fontSize: 12, color: colors.primaryText, marginTop: 6, lineHeight: 16, opacity: 0.9 },
-  attemptList: { gap: 10 },
+  attemptList: { gap: 8, marginTop: 10 },
   attemptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1423,11 +1708,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.primary,
-    padding: 16,
-    marginBottom: 24,
+    padding: 14,
+    marginBottom: 18,
   },
-  retryLine: { fontSize: 15, color: TEXT, marginTop: 4 },
-  retryStrong: { fontWeight: '700' },
+  retryMetricsRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
+  retryMetric: {
+    flex: 1,
+    backgroundColor: CARD_BG,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  retryMetricValue: { fontSize: 20, fontWeight: '800', color: TEXT },
+  retryMetricLabel: { fontSize: 11, color: MUTED, marginTop: 4, fontWeight: '600' },
 
   weakSeparator: { height: 1, backgroundColor: BORDER, marginVertical: 6 },
   weakTopicRow: {
@@ -1437,8 +1732,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   weakTopicTextBlock: { flex: 1, marginRight: 8 },
-  weakTopicName: { fontSize: 16, fontWeight: '600', color: TEXT },
-  weakTopicMistakes: { fontSize: 13, color: MUTED, marginTop: 2 },
+  weakTopicName: { fontSize: 15, fontWeight: '600', color: TEXT },
+  mistakeBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    backgroundColor: colors.warningSoft,
+    borderRadius: 6,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  mistakeBadgeText: { fontSize: 11, fontWeight: '600', color: colors.warning },
 
   practiceBtn: {
     backgroundColor: PRIMARY,
@@ -1452,15 +1757,16 @@ const styles = StyleSheet.create({
   // list. Uses the accent (warm orange) palette to distinguish it from
   // the main primary-colored Retry actions in the footer.
   weakCta: {
-    backgroundColor: colors.accent,
-    borderRadius: 10,
-    paddingVertical: 14,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 12,
+    paddingVertical: 13,
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: colors.accentBorder,
+    borderColor: colors.primary,
   },
-  weakCtaText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  weakCtaText: { color: colors.primaryText, fontSize: 15, fontWeight: '700' },
+  weakCtaSub: { color: colors.primary, fontSize: 12, marginTop: 3, opacity: 0.9 },
 
   // ---- Recommendations (notes + pdfs) ----
   recMuted: {
@@ -1570,7 +1876,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  footer: { marginTop: 24 },
+  footer: { marginTop: 8, paddingTop: 8 },
 
   primaryBtn: {
     backgroundColor: PRIMARY,
@@ -1590,6 +1896,5 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: TEXT, fontSize: 15, fontWeight: '600' },
 
-  btnPressed: { opacity: 0.8 },
   btnDisabled: { opacity: 0.6 },
 });

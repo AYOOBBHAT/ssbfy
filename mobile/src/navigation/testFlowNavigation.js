@@ -10,6 +10,8 @@
  * - Finish while app backgrounds → no duplicate reset / orphaned Test (see testTransitionLifecycle.js).
  * - Profile historical Result → back → Profile.
  * - Low-network delayed mock submit → one navigation commit only.
+ * - Rapid taps: mock start / retry / PDF open / note detail — no double routes (navigationGuard).
+ * - Motion: default push for study/tool screens; short fade on Result only (see theme/motion.js).
  */
 
 export const MAIN_TABS = {

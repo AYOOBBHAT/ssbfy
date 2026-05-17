@@ -1,22 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing } from 'react-native';
-import { SPLASH_EXIT_FADE_MS } from '../theme/splash';
+import { Animated, Easing, StyleSheet } from 'react-native';
+import {
+  APP_ENTER_FADE_DELAY_MS,
+  APP_ENTER_FADE_MS,
+  SPLASH_EXIT_FADE_MS,
+} from '../theme/splash';
+import { authScreenBg } from '../theme/authUi';
 
-/**
- * Cold-start only: after first successful exit, splash is skipped on resume.
- */
 let startupSplashConsumed = false;
 
+const EASE = Easing.out(Easing.cubic);
+
 /**
- * Branded splash gate — animation complete AND auth bootstrap ready before exit.
- * Fades out briefly to avoid a hard cut into Login/Home.
+ * Splash gate with cross-fade into app — splash and Login/Home overlap briefly.
  */
 export function useStartupSplash(initializing) {
   const skipSplash = startupSplashConsumed;
   const [animationComplete, setAnimationComplete] = useState(skipSplash);
-  const [visible, setVisible] = useState(!skipSplash);
+  const [overlayVisible, setOverlayVisible] = useState(!skipSplash);
+  const [appRevealed, setAppRevealed] = useState(skipSplash);
   const exitStartedRef = useRef(false);
-  const opacity = useRef(new Animated.Value(skipSplash ? 0 : 1)).current;
+
+  const splashOpacity = useRef(new Animated.Value(skipSplash ? 0 : 1)).current;
+  const appOpacity = useRef(new Animated.Value(skipSplash ? 1 : 0)).current;
 
   const onAnimationComplete = useCallback(() => {
     setAnimationComplete(true);
@@ -27,23 +33,46 @@ export function useStartupSplash(initializing) {
     if (!animationComplete || initializing) return;
 
     exitStartedRef.current = true;
-    Animated.timing(opacity, {
-      toValue: 0,
-      duration: SPLASH_EXIT_FADE_MS,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
+    setAppRevealed(true);
+
+    Animated.parallel([
+      Animated.timing(splashOpacity, {
+        toValue: 0,
+        duration: SPLASH_EXIT_FADE_MS,
+        easing: EASE,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(APP_ENTER_FADE_DELAY_MS),
+        Animated.timing(appOpacity, {
+          toValue: 1,
+          duration: APP_ENTER_FADE_MS,
+          easing: EASE,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(({ finished }) => {
       if (!finished) return;
       startupSplashConsumed = true;
-      setVisible(false);
+      setOverlayVisible(false);
     });
-  }, [animationComplete, initializing, opacity, skipSplash]);
+  }, [animationComplete, initializing, splashOpacity, appOpacity, skipSplash]);
 
   return {
-    showSplash: visible,
-    splashOpacity: opacity,
+    overlayVisible,
+    appRevealed,
+    splashOpacity,
+    appOpacity,
     animationComplete,
-    showBootstrapLoader: visible && animationComplete && initializing,
+    showBootstrapLoader: overlayVisible && animationComplete && initializing,
     onAnimationComplete: skipSplash ? () => {} : onAnimationComplete,
+    rootStyle: styles.root,
   };
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: authScreenBg,
+  },
+});

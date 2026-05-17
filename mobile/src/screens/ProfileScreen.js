@@ -13,6 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { colors, brand } from '../theme/colors';
+import { pressCardStyle } from '../utils/pressFeedback';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getSubscriptionStatus, formatPlanDate } from '../utils/subscriptionStatus';
 import { getProfileAnalytics } from '../services/profileAnalyticsService';
@@ -97,7 +98,7 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.card}>
         <Pressable
           onPress={() => navigation.navigate('ChangePassword')}
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.row, pressCardStyle(pressed)]}
         >
           <Ionicons name="lock-closed-outline" size={22} color={colors.text} />
           <View style={styles.rowText}>
@@ -114,7 +115,7 @@ export default function ProfileScreen({ navigation }) {
               ? navigation.navigate('SavedMaterials')
               : navigation.navigate('Premium', { from: 'saved-materials' })
           }
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.row, pressCardStyle(pressed)]}
         >
           <Ionicons
             name={isPremium ? 'bookmark' : 'bookmark-outline'}
@@ -134,7 +135,7 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.card}>
         <Pressable
           onPress={() => openLegalUrl('https://ssbfy.vercel.app/privacy-policy')}
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.row, pressCardStyle(pressed)]}
         >
           <Ionicons name="document-text-outline" size={22} color={colors.text} />
           <View style={styles.rowText}>
@@ -145,7 +146,7 @@ export default function ProfileScreen({ navigation }) {
         </Pressable>
         <Pressable
           onPress={() => openLegalUrl('https://ssbfy.vercel.app/terms-and-conditions')}
-          style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.row, styles.rowDivider, pressCardStyle(pressed)]}
         >
           <Ionicons name="shield-checkmark-outline" size={22} color={colors.text} />
           <View style={styles.rowText}>
@@ -162,7 +163,7 @@ export default function ProfileScreen({ navigation }) {
       <Text style={styles.sectionLabel}>Session</Text>
       <Pressable
         onPress={logout}
-        style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.logout, pressCardStyle(pressed)]}
       >
         <Ionicons name="log-out-outline" size={22} color={colors.danger} />
         <Text style={styles.logoutText}>Log out</Text>
@@ -247,7 +248,7 @@ function PlanCard({ plan, onPress }) {
           styles.planCta,
           plan.status === 'free' && styles.planCtaFree,
           { backgroundColor: visual.ctaBg },
-          pressed && styles.pressed,
+          pressCardStyle(pressed),
         ]}
       >
         <Text style={[styles.planCtaText, { color: visual.ctaText }]}>
@@ -393,7 +394,7 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
         </Text>
         <Pressable
           onPress={onStart}
-          style={({ pressed }) => [styles.progressEmptyCta, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.progressEmptyCta, pressCardStyle(pressed)]}
         >
           <Text style={styles.progressEmptyCtaText}>Take a Test</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textOnPrimary} />
@@ -494,7 +495,7 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
                 disabled={!att?.id || !onOpenMockAttempt}
                 style={({ pressed }) => [
                   styles.recentAttemptRow,
-                  pressed && styles.pressed,
+                  pressCardStyle(pressed),
                   (!att?.id || !onOpenMockAttempt) && styles.recentAttemptRowDisabled,
                 ]}
               >
@@ -920,5 +921,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.danger,
   },
-  pressed: { opacity: 0.85 },
 });

@@ -20,9 +20,12 @@ import { submitTest, saveTestProgress, getQuestionsByIds } from '../services/tes
 import { completeDailyPractice } from '../services/dailyPracticeService';
 import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateView';
+import { EMPTY } from '../theme/stateCopy';
 import TestCountdownBar from '../components/TestCountdownBar';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { pressCardStyle } from '../utils/pressFeedback';
 import {
   loadDraft,
   saveDraft,
@@ -1193,7 +1196,7 @@ export default function TestScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <Text>Loading questions...</Text>
+        <LoadingState label="Preparing questions…" />
       </View>
     );
   }
@@ -1201,7 +1204,13 @@ export default function TestScreen() {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.err}>{error}</Text>
+        <ErrorState
+          message={error}
+          context="questions"
+          title="Couldn't load this session"
+          onRetry={() => navigation.goBack()}
+          retryLabel="Go back"
+        />
       </View>
     );
   }
@@ -1209,7 +1218,11 @@ export default function TestScreen() {
   if (total === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.muted}>No questions to display.</Text>
+        <EmptyState
+          {...EMPTY.REVIEW_NONE}
+          title="No questions in this session"
+          subtitle="Go back and try starting again."
+        />
       </View>
     );
   }
@@ -1297,7 +1310,7 @@ export default function TestScreen() {
                 style={({ pressed }) => [
                   styles.optionRow,
                   isSelected && styles.optionRowSelected,
-                  pressed && !submitting && styles.optionRowPressed,
+                  !submitting && pressCardStyle(pressed),
                 ]}
               >
                 <View
@@ -1399,10 +1412,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.primary,
     backgroundColor: colors.primarySoft,
-  },
-  optionRowPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.99 }],
   },
   optionIndicator: {
     width: 20,

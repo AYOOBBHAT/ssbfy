@@ -8,9 +8,15 @@ import {
   isRequestCancelled,
 } from '../services/api';
 import { getTests, startTest } from '../services/testService';
+import {
+  NAV_TRANSITION_LOCK_MS,
+  releaseLockAfter,
+  tryAcquireLock,
+} from '../utils/navigationGuard';
 
 export function useMockTests() {
   const navigation = useNavigation();
+  const startLockRef = useRef(false);
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -49,8 +55,10 @@ export function useMockTests() {
   }, [loadTests]);
 
   const handleStartTest = async (item) => {
+    if (!tryAcquireLock(startLockRef)) return;
     const testId = item?._id;
     if (!testId) {
+      releaseLockAfter(startLockRef, 0);
       setError('This test is unavailable.');
       return;
     }
@@ -78,7 +86,10 @@ export function useMockTests() {
           : getApiErrorMessage(e)
       );
     } finally {
-      setStartingId(null);
+      setTimeout(() => {
+        startLockRef.current = false;
+        setStartingId(null);
+      }, NAV_TRANSITION_LOCK_MS);
     }
   };
 

@@ -1,4 +1,4 @@
-import { Platform, StyleSheet } from 'react-native';
+import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -26,6 +26,7 @@ import SavedMaterialsScreen from '../screens/SavedMaterialsScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import { colors, brand } from '../theme/colors';
 import { authScreenBg } from '../theme/authUi';
+import { stackContentStyle, stackMotion, tabSceneStyle } from '../theme/motion';
 
 const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -40,6 +41,7 @@ const themedHeader = {
   headerTintColor: colors.textOnPrimary,
   headerTitleStyle: { fontWeight: '700' },
   headerShadowVisible: false,
+  contentStyle: stackContentStyle,
 };
 
 function HomeStackNavigator() {
@@ -142,6 +144,7 @@ function MainTabs() {
         tabBarIcon: ({ color, size }) => (
           <Ionicons name={tabIcons[route.name] || 'ellipse-outline'} size={size} color={color} />
         ),
+        sceneContainerStyle: tabSceneStyle,
       })}
     >
       <Tab.Screen
@@ -175,28 +178,26 @@ function MainTabs() {
 
 export default function AppNavigator() {
   const { isAuthenticated, initializing } = useAuth();
-  const { showSplash, showBootstrapLoader, onAnimationComplete, splashOpacity } =
-    useStartupSplash(initializing);
-
-  if (showSplash) {
-    return (
-      <StartupSplashScreen
-        onAnimationComplete={onAnimationComplete}
-        showBootstrapLoader={showBootstrapLoader}
-        splashOpacity={splashOpacity}
-      />
-    );
-  }
+  const {
+    overlayVisible,
+    appRevealed,
+    splashOpacity,
+    appOpacity,
+    showBootstrapLoader,
+    onAnimationComplete,
+    rootStyle,
+  } = useStartupSplash(initializing);
 
   return (
-    <RootStack.Navigator
+    <View style={rootStyle}>
+      {appRevealed ? (
+        <Animated.View style={[styles.appLayer, { opacity: appOpacity }]}>
+          <RootStack.Navigator
       key={isAuthenticated ? 'app' : 'auth'}
       screenOptions={{
         ...themedHeader,
         headerShown: true,
-        contentStyle: {
-          backgroundColor: isAuthenticated ? colors.bg : authScreenBg,
-        },
+        contentStyle: isAuthenticated ? stackContentStyle : { backgroundColor: authScreenBg },
         ...(isAuthenticated ? {} : { animation: 'fade', headerShown: false }),
       }}
     >
@@ -217,44 +218,49 @@ export default function AppNavigator() {
               return {
                 title: 'Test',
                 gestureEnabled: !blockSwipe,
+                ...stackMotion.defaultPush,
               };
             }}
           />
-          <RootStack.Screen name="Result" component={ResultScreen} options={{ title: 'Result' }} />
+          <RootStack.Screen
+            name="Result"
+            component={ResultScreen}
+            options={{ title: 'Result', ...stackMotion.resultReveal }}
+          />
           <RootStack.Screen
             name="ReviewAnswers"
             component={ReviewAnswersScreen}
-            options={{ title: 'Review Answers' }}
+            options={{ title: 'Review Answers', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="PdfList"
             component={PdfListScreen}
-            options={{ title: 'PDF Notes' }}
+            options={{ title: 'PDF Notes', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="NotesList"
             component={NotesListScreen}
-            options={{ title: 'Study Notes' }}
+            options={{ title: 'Study Notes', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="NoteDetail"
             component={NoteDetailScreen}
-            options={{ title: 'Note' }}
+            options={{ title: 'Note', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="Premium"
             component={PremiumScreen}
-            options={{ title: 'Premium' }}
+            options={{ title: 'Premium', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="SavedMaterials"
             component={SavedMaterialsScreen}
-            options={{ title: 'Saved Materials' }}
+            options={{ title: 'Saved Materials', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="ChangePassword"
             component={ChangePasswordScreen}
-            options={{ title: 'Change Password' }}
+            options={{ title: 'Change Password', ...stackMotion.defaultPush }}
           />
         </>
       ) : (
@@ -286,6 +292,22 @@ export default function AppNavigator() {
           />
         </>
       )}
-    </RootStack.Navigator>
+          </RootStack.Navigator>
+        </Animated.View>
+      ) : null}
+      {overlayVisible ? (
+        <StartupSplashScreen
+          onAnimationComplete={onAnimationComplete}
+          showBootstrapLoader={showBootstrapLoader}
+          overlayOpacity={splashOpacity}
+        />
+      ) : null}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  appLayer: {
+    flex: 1,
+  },
+});
