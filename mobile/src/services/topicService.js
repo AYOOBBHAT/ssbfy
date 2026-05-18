@@ -1,4 +1,5 @@
 import api from './api.js';
+import { buildTopicLabelMapFromCatalog } from '../utils/topicRef.js';
 
 /**
  * Module-level cache so all callers share the same topics payload across the
@@ -49,4 +50,15 @@ export async function getTopics(opts = {}) {
 export function clearTopicsCache() {
   topicsCache = null;
   topicsInFlight = null;
+}
+
+/**
+ * Last successfully fetched catalog labels (module cache). Safe for fallback when
+ * a live `getTopics()` call fails — does not trigger network or async flicker.
+ * @returns {Record<string, string>}
+ */
+export function getCachedTopicLabelMap() {
+  if (!topicsCache) return {};
+  const list = Array.isArray(topicsCache?.topics) ? topicsCache.topics : [];
+  return buildTopicLabelMapFromCatalog(list);
 }

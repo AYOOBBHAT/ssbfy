@@ -1,4 +1,5 @@
 import api from './api.js';
+import { resolveMongoId, sanitizeNotesQueryParams } from '../utils/mongoId.js';
 
 /**
  * List notes scoped by any combination of post / subject / topic.
@@ -13,23 +14,7 @@ import api from './api.js';
  */
 export async function getNotes(params = {}, opts = {}) {
   const { signal } = opts;
-  const clean = {};
-  if (params.postId) clean.postId = params.postId;
-  if (params.subjectId) clean.subjectId = params.subjectId;
-
-  if (Array.isArray(params.topicIds)) {
-    const ids = params.topicIds
-      .map((t) => (t == null ? '' : String(t).trim()))
-      .filter(Boolean);
-    if (ids.length > 0) {
-      // CSV form keeps the URL compact when the user has many weak
-      // topics. The backend validator accepts CSV or repeated params.
-      clean.topicIds = Array.from(new Set(ids)).join(',');
-    }
-  } else if (params.topicId) {
-    clean.topicId = params.topicId;
-  }
-
+  const clean = sanitizeNotesQueryParams(params);
   const { data } = await api.get('/notes', { params: clean, signal });
   const payload = data?.data ?? {};
   const notes = Array.isArray(payload.notes) ? payload.notes : [];
@@ -51,9 +36,10 @@ export async function getSubjects(opts = {}) {
 }
 
 export async function getTopicsForSubject(subjectId, opts = {}) {
+  const id = resolveMongoId(subjectId, 'subjectId');
+  if (!id) return { topics: [] };
   const { signal } = opts;
-  if (!subjectId) return { topics: [] };
-  const { data } = await api.get('/topics', { params: { subjectId }, signal });
+  const { data } = await api.get('/topics', { params: { subjectId: id }, signal });
   const payload = data?.data ?? {};
   const topics = Array.isArray(payload.topics) ? payload.topics : [];
   return { topics };

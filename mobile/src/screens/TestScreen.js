@@ -41,6 +41,7 @@ import {
   consumeHardwareBackDuringTransition,
 } from '../navigation/testFlowNavigation';
 import { clearTestSessionTimers } from '../utils/testSessionCleanup';
+import { resolveTopicId, resolveTopicName } from '../utils/topicRef';
 import {
   markTransitionStarted,
   releaseIncompleteTransition,
@@ -979,9 +980,15 @@ export default function TestScreen() {
       const isCorrect = correctSet.length > 0 && indexSetsEqual(userArr, correctSet);
       if (isCorrect) {
         correctCount += 1;
-      } else if (userArr.length > 0 && q.topicId) {
-        const tid = String(q.topicId);
-        weakTopicsMap.set(tid, (weakTopicsMap.get(tid) || 0) + 1);
+      } else if (userArr.length > 0) {
+        const tid = resolveTopicId(q.topicId);
+        if (!tid) continue;
+        const embeddedName = resolveTopicName(q.topicId);
+        const prev = weakTopicsMap.get(tid);
+        weakTopicsMap.set(tid, {
+          mistakeCount: (prev?.mistakeCount || 0) + 1,
+          topicName: prev?.topicName || embeddedName || null,
+        });
       }
     }
 
@@ -994,7 +1001,11 @@ export default function TestScreen() {
         ? 0
         : Math.round(((correctCount / total) * 100 + Number.EPSILON) * 100) / 100;
     const weakTopics = Array.from(weakTopicsMap.entries())
-      .map(([topicId, mistakeCount]) => ({ topicId, mistakeCount }))
+      .map(([topicId, meta]) => ({
+        topicId,
+        mistakeCount: meta.mistakeCount,
+        ...(meta.topicName ? { topicName: meta.topicName } : {}),
+      }))
       .sort((a, b) => b.mistakeCount - a.mistakeCount)
       .slice(0, 10);
 

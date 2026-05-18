@@ -22,6 +22,8 @@ import {
   releaseLockAfter,
   tryAcquireLock,
 } from '../utils/navigationGuard';
+import { questionIdsFromDocs, resolveMongoId } from '../utils/mongoId.js';
+import { resolveTopicId } from '../utils/topicRef';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'all', label: 'All' },
@@ -116,7 +118,7 @@ export default function SmartPracticeScreen() {
 
   useEffect(() => {
     if (!selectedTopicId) return;
-    if (!topics.some((t) => String(t._id) === String(selectedTopicId))) {
+    if (!topics.some((t) => resolveTopicId(t?._id) === selectedTopicId)) {
       setSelectedTopicId('');
     }
   }, [topics, selectedTopicId]);
@@ -180,9 +182,12 @@ export default function SmartPracticeScreen() {
       const body = {
         limit: limitNum,
       };
-      if (selectedPostId) body.postId = selectedPostId;
-      if (selectedSubjectId) body.subjectId = selectedSubjectId;
-      if (selectedTopicId) body.topicId = selectedTopicId;
+      const postId = resolveMongoId(selectedPostId, 'postId');
+      if (postId) body.postId = postId;
+      const subjectId = resolveMongoId(selectedSubjectId, 'subjectId');
+      if (subjectId) body.subjectId = subjectId;
+      const topicId = resolveTopicId(selectedTopicId);
+      if (topicId) body.topicId = topicId;
       if (difficulty && difficulty !== 'all') {
         body.difficulty = difficulty;
       }
@@ -193,7 +198,7 @@ export default function SmartPracticeScreen() {
         setStartError('No questions available for this selection');
         return;
       }
-      const questionIds = list.map((q) => String(q?._id)).filter(Boolean);
+      const questionIds = questionIdsFromDocs(list);
       navigation.navigate('Test', {
         mode: 'practice',
         questionIds,

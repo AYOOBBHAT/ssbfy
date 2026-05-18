@@ -19,7 +19,7 @@ import {
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
 import { getAttemptResult } from '../services/resultService';
-import { getTopics } from '../services/topicService';
+import { getCachedTopicLabelMap, getTopics } from '../services/topicService';
 import { getNotes, previewOf } from '../services/noteService';
 import {
   formatFileSize,
@@ -47,6 +47,14 @@ import { EMPTY } from '../theme/stateCopy';
 import { ERROR_TITLES } from '../utils/userFacingErrors';
 import { motion } from '../theme/motion';
 import { useAuth } from '../context/AuthContext';
+import { questionIdsFromDocs, resolveMongoId } from '../utils/mongoId.js';
+import {
+  buildRenderableWeakTopics,
+  buildTopicLabelMapFromCatalog,
+  createTopicLabelContext,
+  normalizeWeakTopicsList,
+  resolveTopicId,
+} from '../utils/topicRef';
 
 /*
  * Manual QA — Result screen (mobile):
@@ -212,7 +220,7 @@ function mapAttemptResultToNavExtras(api) {
     testTitle: api.testTitle ?? null,
     viewingHistoricalAttempt: true,
     historicalAttemptMode: true,
-    historicalAttemptId: api.attemptId != null ? String(api.attemptId) : null,
+    historicalAttemptId: resolveMongoId(api.attemptId, 'attemptId'),
     attemptNumber: api.attemptNumber ?? null,
     returnMainTab: MAIN_TABS.PROFILE,
   };
@@ -226,19 +234,23 @@ export default function ResultScreen() {
   const heroOpacity = useRef(new Animated.Value(0)).current;
   const routeAttemptId = useMemo(() => {
     const p = route.params;
-    if (!p || typeof p !== 'object' || p.attemptId == null) return null;
-    const s = String(p.attemptId).trim();
-    return s || null;
+    if (!p || typeof p !== 'object') return null;
+    return resolveMongoId(p.attemptId, 'attemptId');
   }, [route.params]);
 
   const loadGenRef = useRef(0);
+  /** In-flight historical fetches; loading clears only when this hits 0. */
+  const histPendingRef = useRef(0);
   const [historicalExtras, setHistoricalExtras] = useState(null);
   const [histLoading, setHistLoading] = useState(() => !!routeAttemptId);
   const [histError, setHistError] = useState(null);
   const [retryTick, setRetryTick] = useState(0);
 
+  const HIST_LOAD_WATCHDOG_MS = 25000;
+
   useEffect(() => {
     if (!routeAttemptId) {
+      histPendingRef.current = 0;
       setHistLoading(false);
       setHistoricalExtras(null);
       setHistError(null);
@@ -246,13 +258,43 @@ export default function ResultScreen() {
     }
     const gen = ++loadGenRef.current;
     const ac = new AbortController();
+    histPendingRef.current += 1;
     setHistLoading(true);
     setHistError(null);
     setHistoricalExtras(null);
+
+    logger.debug('[Result/historical] load start', {
+      gen,
+      attemptId: routeAttemptId,
+      pending: histPendingRef.current,
+    });
+
+    let loadSettled = false;
+    const settleHistoricalLoad = (reason) => {
+      if (loadSettled) return;
+      loadSettled = true;
+      histPendingRef.current = Math.max(0, histPendingRef.current - 1);
+      logger.debug('[Result/historical] load settle', {
+        gen,
+        reason,
+        pending: histPendingRef.current,
+        currentGen: loadGenRef.current,
+      });
+      if (histPendingRef.current === 0) {
+        setHistLoading(false);
+      }
+    };
+
     (async () => {
       try {
         const raw = await getAttemptResult(routeAttemptId, { signal: ac.signal });
-        if (gen !== loadGenRef.current) return;
+        if (gen !== loadGenRef.current) {
+          logger.debug('[Result/historical] stale response ignored', {
+            gen,
+            currentGen: loadGenRef.current,
+          });
+          return;
+        }
         const mapped = mapAttemptResultToNavExtras(raw);
         if (!mapped?.testId) {
           setHistError(new Error('Invalid result payload'));
@@ -262,18 +304,51 @@ export default function ResultScreen() {
         setHistoricalExtras(mapped);
         setHistError(null);
       } catch (e) {
-        if (isRequestCancelled(e)) return;
+        if (isRequestCancelled(e)) {
+          logger.debug('[Result/historical] request cancelled', {
+            gen,
+            currentGen: loadGenRef.current,
+          });
+          return;
+        }
         if (gen !== loadGenRef.current) return;
         setHistoricalExtras(null);
         setHistError(e);
       } finally {
-        if (gen === loadGenRef.current) setHistLoading(false);
+        settleHistoricalLoad('finally');
       }
     })();
     return () => {
+      logger.debug('[Result/historical] cleanup abort', {
+        gen,
+        currentGen: loadGenRef.current,
+      });
       ac.abort();
     };
   }, [routeAttemptId, retryTick]);
+
+  useEffect(() => {
+    if (!routeAttemptId || !histLoading) return undefined;
+
+    const watchdogGen = loadGenRef.current;
+    const id = setTimeout(() => {
+      if (histPendingRef.current <= 0) return;
+      if (loadGenRef.current !== watchdogGen) return;
+      logger.debug('[Result/historical] watchdog fired', {
+        watchdogGen,
+        pending: histPendingRef.current,
+      });
+      histPendingRef.current = 0;
+      loadGenRef.current += 1;
+      setHistLoading(false);
+      setHistError((prev) => {
+        if (prev) return prev;
+        return new Error('Request timed out. Please try again.');
+      });
+    }, HIST_LOAD_WATCHDOG_MS);
+
+    return () => clearTimeout(id);
+  }, [routeAttemptId, histLoading, retryTick]);
 
   const params = useMemo(() => {
     const base = route.params && typeof route.params === 'object' ? route.params : {};
@@ -552,7 +627,7 @@ export default function ResultScreen() {
   }, [isRetry, retryQuestions, retryAnswers, correctAnswerMap]);
 
   const retryWrongQuestionIds = useMemo(
-    () => retryWrongQuestions.map((q) => String(q._id)),
+    () => questionIdsFromDocs(retryWrongQuestions),
     [retryWrongQuestions]
   );
 
@@ -598,7 +673,7 @@ export default function ResultScreen() {
     runOnce(() => {
       navigation.navigate('Test', {
         mode: 'retry',
-        questionIds: retryable.map((q) => String(q._id)),
+        questionIds: questionIdsFromDocs(retryable),
         questions: retryable,
         historicalAttemptMode: isHistoricalAttempt,
         sourceAttemptId: historicalAttemptId || undefined,
@@ -608,7 +683,10 @@ export default function ResultScreen() {
           testId,
         }),
         // Do not pass testId in historical mode — retry must not touch live test APIs.
-        ...(!isHistoricalAttempt && testId ? { testId } : {}),
+        ...(() => {
+          const tid = !isHistoricalAttempt ? resolveMongoId(testId, 'testId') : null;
+          return tid ? { testId: tid } : {};
+        })(),
       });
     });
   };
@@ -632,6 +710,10 @@ export default function ResultScreen() {
   const [practiceTopicId, setPracticeTopicId] = useState(null);
   const [practiceError, setPracticeError] = useState(null);
   const [topicMap, setTopicMap] = useState({});
+  /** Last good catalog labels — stable fallback when live fetch fails. */
+  const [stableCatalogLabels, setStableCatalogLabels] = useState(() =>
+    getCachedTopicLabelMap()
+  );
   const [weakLoading, setWeakLoading] = useState(false);
 
   // "Weak Topic Resources" recommender. Both lists are populated from a
@@ -644,15 +726,45 @@ export default function ResultScreen() {
   const [recError, setRecError] = useState(null);
   const [openingPdfId, setOpeningPdfId] = useState(null);
 
-  // Flatten weakTopics → unique topicId strings for the combined
-  // "Practice Weak Topics" CTA. Kept as a memo so the render path and
-  // the handler see the exact same list.
-  const weakTopicIds = useMemo(() => {
-    const ids = (Array.isArray(weakTopics) ? weakTopics : [])
-      .map((t) => (t?.topicId == null ? null : String(t.topicId)))
-      .filter(Boolean);
-    return Array.from(new Set(ids));
-  }, [weakTopics]);
+  // Normalize ids/names from server, local practice, or historical payloads.
+  const normalizedWeakTopics = useMemo(
+    () => normalizeWeakTopicsList(weakTopics),
+    [weakTopics]
+  );
+
+  const topicLabelContext = useMemo(
+    () =>
+      createTopicLabelContext({
+        catalogMap: topicMap,
+        questions,
+        historicalQuestions: isHistoricalAttempt ? questions : [],
+        supplementalQuestions: wrongQuestions,
+        rawWeakTopics: weakTopics,
+        cachedCatalogMap: stableCatalogLabels,
+      }),
+    [
+      topicMap,
+      questions,
+      isHistoricalAttempt,
+      wrongQuestions,
+      weakTopics,
+      stableCatalogLabels,
+    ]
+  );
+
+  const renderableWeakTopics = useMemo(
+    () => buildRenderableWeakTopics(normalizedWeakTopics, topicLabelContext),
+    [normalizedWeakTopics, topicLabelContext]
+  );
+
+  const weakTopicIds = useMemo(
+    () => renderableWeakTopics.map((t) => t.topicId),
+    [renderableWeakTopics]
+  );
+
+  const hadRawWeakTopics = (Array.isArray(weakTopics) ? weakTopics : []).length > 0;
+  const focusAreasSuppressedOnly =
+    hadRawWeakTopics && normalizedWeakTopics.length > 0 && renderableWeakTopics.length === 0;
 
   // Derive the test's parent post id from the questions payload. Each
   // Question doc carries `postIds: [ObjectId]` (a question can belong to
@@ -677,13 +789,13 @@ export default function ResultScreen() {
       try {
         const data = await getTopics({ signal: ac.signal });
         const list = Array.isArray(data?.topics) ? data.topics : [];
-        const map = {};
-        list.forEach((t) => {
-          if (t?._id != null) {
-            map[String(t._id)] = t.name ?? '';
+        const map = buildTopicLabelMapFromCatalog(list);
+        if (!ac.signal.aborted) {
+          setTopicMap(map);
+          if (Object.keys(map).length > 0) {
+            setStableCatalogLabels(map);
           }
-        });
-        if (!ac.signal.aborted) setTopicMap(map);
+        }
       } catch (e) {
         if (ac.signal.aborted || isRequestCancelled(e)) return;
         logger.info('[TOPICS] failed to load:', getApiErrorMessage(e));
@@ -776,7 +888,7 @@ export default function ResultScreen() {
    */
   const handleOpenPdf = async (pdf) => {
     if (isGlobalOpening(openingPdfId)) return;
-    const id = pdf?._id;
+    const id = resolveMongoId(pdf?._id ?? pdf?.pdfId, 'pdfId');
     if (!id) return;
     setOpeningPdfId(id);
     try {
@@ -788,7 +900,7 @@ export default function ResultScreen() {
         dismissButtonStyle: 'close',
         presentationStyle:
           WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
-      }, { pdfId: String(id) });
+      }, { pdfId: id });
     } catch (e) {
       Alert.alert('Could not open PDF', getPdfOpenUserMessage(e));
     } finally {
@@ -809,19 +921,22 @@ export default function ResultScreen() {
   const handleWeakPractice = async () => {
     if (weakLoading || practiceTopicId != null) return;
     if (weakTopicIds.length === 0) return;
+    const topicIds = weakTopicIds;
     await runOnceAsync(async () => {
       setPracticeError(null);
       setWeakLoading(true);
       try {
-        const data = await getWeakPractice(weakTopicIds, { limit: 10 });
+        const data = await getWeakPractice(topicIds, { limit: 10 });
         const fetched = Array.isArray(data?.questions) ? data.questions : [];
         if (fetched.length === 0) {
           setPracticeError('No questions available for practice.');
           return;
         }
-        const questionIds = fetched
-          .map((q) => (q?._id == null ? '' : String(q._id)))
-          .filter(Boolean);
+        const questionIds = questionIdsFromDocs(fetched);
+        if (!questionIds.length) {
+          setPracticeError('No practice questions available for this topic.');
+          return;
+        }
         navigation.navigate('Test', {
           mode: 'practice',
           questions: fetched,
@@ -841,8 +956,8 @@ export default function ResultScreen() {
   };
 
   const handlePractice = async (topicId) => {
-    if (!topicId || practiceTopicId) return;
-    const id = String(topicId);
+    const id = resolveTopicId(topicId);
+    if (!id || practiceTopicId) return;
     await runOnceAsync(async () => {
       setPracticeError(null);
       setPracticeTopicId(id);
@@ -1143,71 +1258,73 @@ export default function ResultScreen() {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Focus areas</Text>
         <Text style={styles.sectionSubtitle}>
-          {weakTopicIds.length > 0
+          {renderableWeakTopics.length > 0
             ? 'Topics to strengthen — practice builds confidence'
+            : focusAreasSuppressedOnly
+            ? 'Focus areas are unavailable for this session'
             : 'No weak topics this time'}
         </Text>
       </View>
-      {weakTopicIds.length > 0 ? (
-        <Pressable
-          onPress={handleWeakPractice}
-          disabled={weakLoading || practiceTopicId != null}
-          style={({ pressed }) => [
-            styles.weakCta,
-            pressFeedbackStyle(pressed),
-            (weakLoading || practiceTopicId != null) && styles.btnDisabled,
-          ]}
-        >
-          <Text style={styles.weakCtaText}>
-            {weakLoading ? 'Loading…' : 'Practice all weak topics'}
-          </Text>
-          <Text style={styles.weakCtaSub}>10-question mixed drill</Text>
-        </Pressable>
-      ) : null}
-      {Array.isArray(weakTopics) && weakTopics.length > 0 ? (
-        <View style={styles.sectionCard}>
-          <FlatList
-            data={weakTopics}
-            keyExtractor={(item, idx) => String(item?.topicId ?? idx)}
-            scrollEnabled={false}
-            ItemSeparatorComponent={() => <View style={styles.weakSeparator} />}
-            renderItem={({ item }) => {
-              const topicIdStr = String(item?.topicId ?? '');
-              const loadingThis = practiceTopicId === topicIdStr;
-              const topicName =
-                (topicIdStr && topicMap[topicIdStr]) || 'Unknown Topic';
-              return (
-                <View style={styles.weakTopicRow}>
-                  <View style={styles.weakTopicTextBlock}>
-                    <Text style={styles.weakTopicName}>{topicName}</Text>
-                    <View style={styles.mistakeBadge}>
-                      <Text style={styles.mistakeBadgeText}>
-                        {String(item?.mistakeCount ?? 0)} mistake
-                        {Number(item?.mistakeCount) === 1 ? '' : 's'}
-                      </Text>
+      {renderableWeakTopics.length > 0 ? (
+        <>
+          <Pressable
+            onPress={handleWeakPractice}
+            disabled={weakLoading || practiceTopicId != null}
+            style={({ pressed }) => [
+              styles.weakCta,
+              pressFeedbackStyle(pressed),
+              (weakLoading || practiceTopicId != null) && styles.btnDisabled,
+            ]}
+          >
+            <Text style={styles.weakCtaText}>
+              {weakLoading ? 'Loading…' : 'Practice all weak topics'}
+            </Text>
+            <Text style={styles.weakCtaSub}>10-question mixed drill</Text>
+          </Pressable>
+          <View style={styles.sectionCard}>
+            <FlatList
+              data={renderableWeakTopics}
+              keyExtractor={(item) => item.topicId}
+              scrollEnabled={false}
+              ItemSeparatorComponent={() => <View style={styles.weakSeparator} />}
+              renderItem={({ item }) => {
+                const loadingThis = practiceTopicId === item.topicId;
+                return (
+                  <View style={styles.weakTopicRow}>
+                    <View style={styles.weakTopicTextBlock}>
+                      <Text style={styles.weakTopicName}>{item.displayLabel}</Text>
+                      <View style={styles.mistakeBadge}>
+                        <Text style={styles.mistakeBadgeText}>
+                          {String(item.mistakeCount)} mistake
+                          {item.mistakeCount === 1 ? '' : 's'}
+                        </Text>
+                      </View>
                     </View>
+                    <Pressable
+                      onPress={() => handlePractice(item.topicId)}
+                      disabled={practiceTopicId != null}
+                      style={({ pressed }) => [
+                        styles.practiceBtn,
+                        pressFeedbackStyle(pressed),
+                        practiceTopicId != null && styles.btnDisabled,
+                      ]}
+                    >
+                      <Text style={styles.practiceBtnText}>
+                        {loadingThis ? 'Loading…' : 'Practice'}
+                      </Text>
+                    </Pressable>
                   </View>
-                  <Pressable
-                    onPress={() => handlePractice(item?.topicId)}
-                    disabled={practiceTopicId != null}
-                    style={({ pressed }) => [
-                      styles.practiceBtn,
-                      pressFeedbackStyle(pressed),
-                      practiceTopicId != null && styles.btnDisabled,
-                    ]}
-                  >
-                    <Text style={styles.practiceBtnText}>
-                      {loadingThis ? 'Loading…' : 'Practice'}
-                    </Text>
-                  </Pressable>
-                </View>
-              );
-            }}
-          />
-        </View>
+                );
+              }}
+            />
+          </View>
+        </>
       ) : (
         <View style={styles.sectionCard}>
-          <EmptyState compact {...EMPTY.WEAK_TOPICS_CLEAR} />
+          <EmptyState
+            compact
+            {...(focusAreasSuppressedOnly ? EMPTY.FOCUS_AREAS_EMPTY : EMPTY.WEAK_TOPICS_CLEAR)}
+          />
         </View>
       )}
       {practiceError ? <Text style={styles.err}>{practiceError}</Text> : null}

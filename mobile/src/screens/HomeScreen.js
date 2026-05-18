@@ -17,6 +17,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getDailyPractice } from '../services/dailyPracticeService';
+import { questionIdsFromDocs } from '../utils/mongoId.js';
 import { useMockQuota } from '../hooks/useMockQuota';
 import { MockQuotaBanner } from '../components/MockQuotaBanner';
 import { PremiumHomeBanner } from '../components/PremiumHomeBanner';
@@ -63,7 +64,7 @@ export default function HomeScreen() {
       const data = await getDailyPractice({ signal: ac.signal });
       if (dailyAbortRef.current !== ac) return;
       const questions = Array.isArray(data?.questions) ? data.questions : [];
-      const questionIds = questions.map((q) => String(q?._id)).filter(Boolean);
+      const questionIds = questionIdsFromDocs(questions);
       if (!questionIds.length) {
         setDailyError('No daily practice questions available.');
         return;

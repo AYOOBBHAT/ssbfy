@@ -1,6 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import api, { API_BASE_URL, isOfflineError, isTimeoutError } from './api.js';
 import logger from '../utils/logger.js';
+import { encodeMongoIdPath, resolveMongoId } from '../utils/mongoId.js';
 
 /**
  * Derive the origin (scheme + host + port) of the API so we can
@@ -110,7 +111,8 @@ const pdfNotesInFlight = new Map();
 const pdfListBgScheduled = new Set();
 
 function pdfListCacheKey(postId) {
-  return postId ? `p:${String(postId)}` : 'all';
+  const id = resolveMongoId(postId, 'postId');
+  return id ? `p:${id}` : 'all';
 }
 
 export function clearPdfCaches() {
@@ -127,7 +129,8 @@ function schedulePdfListSwrRefresh(postId, key) {
   if (pdfListBgScheduled.has(key)) return;
   pdfListBgScheduled.add(key);
   const params = {};
-  if (postId) params.postId = postId;
+  const post = resolveMongoId(postId, 'postId');
+  if (post) params.postId = post;
   void (async () => {
     try {
       const { data } = await api.get('/notes/pdfs', { params });
@@ -157,7 +160,8 @@ function schedulePdfListSwrRefresh(postId, key) {
 export async function getPdfNotes(postId, { force = false, swr = true, signal } = {}) {
   const key = pdfListCacheKey(postId);
   const params = {};
-  if (postId) params.postId = postId;
+  const post = resolveMongoId(postId, 'postId');
+  if (post) params.postId = post;
 
   const fetchFresh = async () => {
     const { data } = await api.get('/notes/pdfs', { params, signal });
@@ -207,8 +211,9 @@ const pdfResignInflight = new Map();
  */
 export async function fetchPdfSignedUrlById(pdfId, opts = {}) {
   const { signal } = opts;
-  const id = String(pdfId || '').trim();
-  if (!id) return '';
+  const pathId = encodeMongoIdPath(pdfId, 'pdfId');
+  if (!pathId) return '';
+  const id = decodeURIComponent(pathId);
   if (!signal) {
     const existing = pdfResignInflight.get(id);
     if (existing) return existing;
@@ -412,7 +417,10 @@ export function getPdfOpenUserMessage(error) {
  * @param {{ pdfId?: string, onRefreshed?: (signedUrl: string) => void }} [opts]
  */
 export async function openPdfInAppBrowser(pdf, browserOptions, opts = {}) {
-  const pdfId = String(opts.pdfId ?? pdf?._id ?? pdf?.pdfId ?? '').trim();
+  const pdfId =
+    resolveMongoId(opts.pdfId, 'pdfId') ??
+    resolveMongoId(pdf?._id, 'pdfId') ??
+    resolveMongoId(pdf?.pdfId, 'pdfId');
   let url = resolvePdfOpenUrl(pdf)?.trim();
   if (!url) {
     throw new PdfOpenError('MISSING', 'This PDF has no valid download link.');

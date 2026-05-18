@@ -1,4 +1,5 @@
 import api, { getApiErrorMessage } from './api.js';
+import { resolveMongoId } from '../utils/mongoId.js';
 import RazorpayCheckout from 'react-native-razorpay';
 
 /**
@@ -6,8 +7,12 @@ import RazorpayCheckout from 'react-native-razorpay';
  * @returns {Promise<{ order_id: string, key_id: string, amount: number, currency: string, receipt?: string }>}
  */
 export async function createPremiumOrder(planId) {
+  const id = resolveMongoId(planId, 'planId');
+  if (!id) {
+    throw new Error('Invalid plan selection. Please try again.');
+  }
   const { data } = await api.post('/payments/create-order', {
-    planId,
+    planId: id,
   });
   return data?.data ?? {};
 }

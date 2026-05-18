@@ -33,6 +33,8 @@ import {
   PREMIUM_SAVE_MESSAGE,
 } from '../services/savedMaterialService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
+import { resolveMongoId } from '../utils/mongoId.js';
+import { resolveTopicId } from '../utils/topicRef';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
 import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
@@ -66,12 +68,14 @@ export default function NotesListScreen() {
   const showPremiumUpsell = !userHasPremiumAccess(user);
 
   // ---- Selection state ----
-  const [selectedPostId, setSelectedPostId] = useState(initial.postId || '');
+  const [selectedPostId, setSelectedPostId] = useState(
+    () => resolveMongoId(initial.postId, 'postId') || ''
+  );
   const [selectedSubjectId, setSelectedSubjectId] = useState(
-    initial.subjectId || ''
+    () => resolveMongoId(initial.subjectId, 'subjectId') || ''
   );
   const [selectedTopicId, setSelectedTopicId] = useState(
-    initial.topicId || ''
+    () => resolveTopicId(initial.topicId) || ''
   );
 
   // ---- Reference data ----
@@ -153,7 +157,7 @@ export default function NotesListScreen() {
   // ---- Load topics whenever subject changes ---------------------------
   useEffect(() => {
     if (!selectedTopicId) return;
-    if (!topics.some((t) => String(t._id) === String(selectedTopicId))) {
+    if (!topics.some((t) => resolveTopicId(t?._id) === selectedTopicId)) {
       setSelectedTopicId('');
     }
   }, [topics, selectedTopicId]);

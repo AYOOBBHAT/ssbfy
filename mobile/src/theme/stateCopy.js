@@ -76,6 +76,11 @@ export const EMPTY = {
     subtitle: 'No focus areas flagged — keep your routine going.',
     glyph: 'success',
   },
+  FOCUS_AREAS_EMPTY: {
+    title: 'No focus areas to show',
+    subtitle: 'Mistakes could not be matched to topics for this session.',
+    glyph: 'practice',
+  },
   PROFILE_PROGRESS: {
     title: 'No mock progress yet',
     subtitle: 'Your first timed mock unlocks trends and history.',
