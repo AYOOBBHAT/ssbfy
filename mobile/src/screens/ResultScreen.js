@@ -19,7 +19,14 @@ import {
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
 import { getAttemptResult } from '../services/resultService';
+import { getLearningSession } from '../services/learningSessionService';
+import {
+  getLearningSessionCache,
+  normalizeLearningSessionCachePayload,
+  putLearningSessionCache,
+} from '../utils/learningSessionCache';
 import { getCachedTopicLabelMap, getTopics } from '../services/topicService';
+import { resolvePracticeTopicId } from '../utils/canonicalTopicResolve';
 import { getNotes, previewOf } from '../services/noteService';
 import {
   formatFileSize,
@@ -55,6 +62,10 @@ import {
   normalizeWeakTopicsList,
   resolveTopicId,
 } from '../utils/topicRef';
+import {
+  buildRetryStatsFromSummary,
+  normalizeResultReviewParams,
+} from '../utils/resultReviewPayload';
 
 /*
  * Manual QA — Result screen (mobile):
@@ -195,6 +206,46 @@ function partitionRetryableQuestions(questions) {
  * Maps GET /results/attempt/:id into ResultScreen params.
  * Historical mode: wrong sets + correctness come from the server snapshot only.
  */
+/**
+ * Maps GET /learning-sessions/:id into ResultScreen params (immutable snapshot only).
+ */
+function mapLearningSessionToNavExtras(api) {
+  if (!api || typeof api !== 'object') return null;
+  const sessionId = resolveMongoId(api.learningSessionId, 'learningSessionId');
+  const sessionType =
+    typeof api.sessionType === 'string' && api.sessionType.trim()
+      ? api.sessionType.trim()
+      : null;
+  return {
+    score: api.score,
+    accuracy: api.accuracy,
+    timeTaken: api.timeTaken ?? 0,
+    weakTopics: Array.isArray(api.weakTopics) ? api.weakTopics : [],
+    totalQuestions: api.totalQuestions,
+    attemptedQuestions: api.attemptedQuestions,
+    unansweredQuestions: api.unansweredQuestions,
+    skippedQuestions: api.skippedQuestions ?? 0,
+    markedForReviewCount: api.markedForReviewCount ?? 0,
+    questions: Array.isArray(api.questions) ? api.questions : [],
+    userAnswers: api.userAnswers && typeof api.userAnswers === 'object' ? api.userAnswers : {},
+    correctAnswers: Array.isArray(api.correctAnswers) ? api.correctAnswers : [],
+    wrongQuestionIds: Array.isArray(api.wrongQuestionIds) ? api.wrongQuestionIds : [],
+    wrongQuestions: Array.isArray(api.wrongQuestions) ? api.wrongQuestions : [],
+    summary: api.summary && typeof api.summary === 'object' ? api.summary : null,
+    immutableAttemptSnapshot: api.immutableAttemptSnapshot === true,
+    retrySkippedUnavailableCount: Number(api.retrySkippedUnavailableCount) || 0,
+    practiceRevealed: api.practiceRevealed !== false,
+    retryMeta: api.retryMeta ?? null,
+    retry: sessionType === 'retry',
+    sessionType,
+    viewingHistoricalAttempt: true,
+    historicalAttemptMode: true,
+    historicalLearningSessionId: sessionId,
+    learningSessionId: sessionId,
+    returnMainTab: MAIN_TABS.PROFILE,
+  };
+}
+
 function mapAttemptResultToNavExtras(api) {
   if (!api || typeof api !== 'object') return null;
   return {
@@ -238,18 +289,42 @@ export default function ResultScreen() {
     return resolveMongoId(p.attemptId, 'attemptId');
   }, [route.params]);
 
+  const routeLearningSessionId = useMemo(() => {
+    const p = route.params;
+    if (!p || typeof p !== 'object') return null;
+    return resolveMongoId(p.learningSessionId, 'learningSessionId');
+  }, [route.params]);
+
+  const hasInlineImmutablePayload = useMemo(() => {
+    const p = route.params;
+    if (!p || typeof p !== 'object') return false;
+    const hasQuestions = Array.isArray(p.questions) && p.questions.length > 0;
+    const hasCorrect =
+      Array.isArray(p.correctAnswers) && p.correctAnswers.length > 0;
+    return (
+      hasQuestions &&
+      hasCorrect &&
+      (p.immutableAttemptSnapshot === true || p.practiceRevealed === true)
+    );
+  }, [route.params]);
+
+  const needsLearningSessionFetch =
+    !!routeLearningSessionId && !hasInlineImmutablePayload;
+
   const loadGenRef = useRef(0);
   /** In-flight historical fetches; loading clears only when this hits 0. */
   const histPendingRef = useRef(0);
   const [historicalExtras, setHistoricalExtras] = useState(null);
-  const [histLoading, setHistLoading] = useState(() => !!routeAttemptId);
+  const [histLoading, setHistLoading] = useState(
+    () => !!routeAttemptId || needsLearningSessionFetch
+  );
   const [histError, setHistError] = useState(null);
   const [retryTick, setRetryTick] = useState(0);
 
   const HIST_LOAD_WATCHDOG_MS = 25000;
 
   useEffect(() => {
-    if (!routeAttemptId) {
+    if (!routeAttemptId && !needsLearningSessionFetch) {
       histPendingRef.current = 0;
       setHistLoading(false);
       setHistoricalExtras(null);
@@ -261,11 +336,14 @@ export default function ResultScreen() {
     histPendingRef.current += 1;
     setHistLoading(true);
     setHistError(null);
-    setHistoricalExtras(null);
+    if (routeAttemptId) {
+      setHistoricalExtras(null);
+    }
 
     logger.debug('[Result/historical] load start', {
       gen,
       attemptId: routeAttemptId,
+      learningSessionId: routeLearningSessionId,
       pending: histPendingRef.current,
     });
 
@@ -286,8 +364,30 @@ export default function ResultScreen() {
     };
 
     (async () => {
+      let cacheHadPayload = false;
       try {
-        const raw = await getAttemptResult(routeAttemptId, { signal: ac.signal });
+        if (needsLearningSessionFetch && routeLearningSessionId) {
+          const cached = normalizeLearningSessionCachePayload(
+            await getLearningSessionCache(routeLearningSessionId)
+          );
+          if (gen === loadGenRef.current && cached) {
+            const cachedMapped = mapLearningSessionToNavExtras(cached);
+            if (cachedMapped?.questions?.length) {
+              cacheHadPayload = true;
+              setHistoricalExtras(cachedMapped);
+              setHistError(null);
+              setHistLoading(false);
+            }
+          }
+        }
+
+        let raw = null;
+        if (routeAttemptId) {
+          raw = await getAttemptResult(routeAttemptId, { signal: ac.signal });
+        } else if (routeLearningSessionId) {
+          raw = await getLearningSession(routeLearningSessionId, { signal: ac.signal });
+        }
+
         if (gen !== loadGenRef.current) {
           logger.debug('[Result/historical] stale response ignored', {
             gen,
@@ -295,14 +395,29 @@ export default function ResultScreen() {
           });
           return;
         }
-        const mapped = mapAttemptResultToNavExtras(raw);
-        if (!mapped?.testId) {
-          setHistError(new Error('Invalid result payload'));
-          setHistoricalExtras(null);
+
+        const mapped = routeAttemptId
+          ? mapAttemptResultToNavExtras(raw)
+          : mapLearningSessionToNavExtras(raw);
+
+        const valid = routeAttemptId
+          ? !!mapped?.testId
+          : Array.isArray(mapped?.questions) && mapped.questions.length > 0;
+
+        if (!valid) {
+          if (!cacheHadPayload) {
+            setHistError(new Error('Invalid result payload'));
+            setHistoricalExtras(null);
+          }
           return;
         }
+
         setHistoricalExtras(mapped);
         setHistError(null);
+
+        if (routeLearningSessionId && raw) {
+          void putLearningSessionCache(routeLearningSessionId, raw);
+        }
       } catch (e) {
         if (isRequestCancelled(e)) {
           logger.debug('[Result/historical] request cancelled', {
@@ -312,6 +427,9 @@ export default function ResultScreen() {
           return;
         }
         if (gen !== loadGenRef.current) return;
+        if (needsLearningSessionFetch && cacheHadPayload) {
+          return;
+        }
         setHistoricalExtras(null);
         setHistError(e);
       } finally {
@@ -325,10 +443,16 @@ export default function ResultScreen() {
       });
       ac.abort();
     };
-  }, [routeAttemptId, retryTick]);
+  }, [
+    routeAttemptId,
+    routeLearningSessionId,
+    needsLearningSessionFetch,
+    retryTick,
+  ]);
 
   useEffect(() => {
-    if (!routeAttemptId || !histLoading) return undefined;
+    const needsWatchdog = routeAttemptId || needsLearningSessionFetch;
+    if (!needsWatchdog || !histLoading) return undefined;
 
     const watchdogGen = loadGenRef.current;
     const id = setTimeout(() => {
@@ -348,16 +472,22 @@ export default function ResultScreen() {
     }, HIST_LOAD_WATCHDOG_MS);
 
     return () => clearTimeout(id);
-  }, [routeAttemptId, histLoading, retryTick]);
+  }, [routeAttemptId, needsLearningSessionFetch, histLoading, retryTick]);
 
   const params = useMemo(() => {
     const base = route.params && typeof route.params === 'object' ? route.params : {};
-    if (!routeAttemptId || !historicalExtras) return base;
-    const { attemptId: _omit, ...rest } = base;
+    if ((!routeAttemptId && !routeLearningSessionId) || !historicalExtras) return base;
+    const { attemptId: _a, learningSessionId: _l, ...rest } = base;
     return { ...rest, ...historicalExtras };
-  }, [route.params, routeAttemptId, historicalExtras]);
+  }, [route.params, routeAttemptId, routeLearningSessionId, historicalExtras]);
 
   const hasParams = !!params && typeof params === 'object';
+
+  const reviewParams = useMemo(
+    () => normalizeResultReviewParams(params),
+    [params]
+  );
+
   const {
     testId,
     score,
@@ -372,20 +502,24 @@ export default function ResultScreen() {
     questions = [],
     userAnswers = {},
     correctAnswers = [],
-    retry = false,
-    retryAnswers = {},
-    retryQuestions = [],
+    summary: resultSummary = null,
+    retryMeta = null,
     recoveredSubmit = false,
     viewingHistoricalAttempt = false,
     historicalAttemptMode = false,
     immutableAttemptSnapshot = false,
     historicalAttemptId = null,
+    historicalLearningSessionId = null,
+    learningSessionId = null,
     retrySkippedUnavailableCount = 0,
     testAvailable = true,
     testRetired = false,
     testTitle: _testTitle = null,
     returnMainTab = null,
-  } = params || {};
+    practiceRevealed = false,
+  } = reviewParams;
+
+  const isRetry = !!reviewParams.retry;
   const isHistoricalAttempt = viewingHistoricalAttempt || historicalAttemptMode;
 
   const navigateBackFromResult = useCallback(() => {
@@ -402,7 +536,6 @@ export default function ResultScreen() {
       return () => sub.remove();
     }, [navigateBackFromResult])
   );
-  const isRetry = !!retry;
   const isMock = !!testId && !isRetry;
 
   const [attemptsLoading, setAttemptsLoading] = useState(false);
@@ -558,6 +691,21 @@ export default function ResultScreen() {
 
   const displayStats = useMemo(() => {
     const qlen = Array.isArray(questions) ? questions.length : 0;
+    if (isRetry && resultSummary && typeof resultSummary === 'object') {
+      const totalQ = Number(resultSummary.totalQuestions) || qlen;
+      const answeredQ = Number(resultSummary.answeredQ) || 0;
+      const unansweredQ =
+        resultSummary.unanswered != null
+          ? Number(resultSummary.unanswered)
+          : Math.max(0, totalQ - answeredQ);
+      return {
+        totalQ,
+        answeredQ,
+        unansweredQ,
+        skippedQ: null,
+        markedQ: null,
+      };
+    }
     const totalQ = Math.max(Number(totalQuestions) || 0, qlen);
     const answeredQ = Number(attemptedQuestions) || 0;
     const unansweredQ =
@@ -574,6 +722,8 @@ export default function ResultScreen() {
         : null;
     return { totalQ, answeredQ, unansweredQ, skippedQ, markedQ };
   }, [
+    isRetry,
+    resultSummary,
     questions,
     totalQuestions,
     attemptedQuestions,
@@ -588,7 +738,6 @@ export default function ResultScreen() {
         questions: Array.isArray(questions) ? questions : [],
         userAnswers: userAnswers && typeof userAnswers === 'object' ? userAnswers : {},
         correctAnswers: Array.isArray(correctAnswers) ? correctAnswers : [],
-        retry,
         readOnly: true,
       });
     });
@@ -596,12 +745,14 @@ export default function ResultScreen() {
 
   const retryStats = useMemo(() => {
     if (!isRetry) return null;
-    const list = Array.isArray(retryQuestions) ? retryQuestions : [];
+    const fromSummary = buildRetryStatsFromSummary(resultSummary, true);
+    if (fromSummary) return fromSummary;
+    const list = Array.isArray(questions) ? questions : [];
     const total = list.length;
     let correct = 0;
     for (const q of list) {
       const qid = String(q?._id ?? '');
-      const userArr = toIndexArray(retryAnswers ? retryAnswers[qid] : undefined);
+      const userArr = toIndexArray(userAnswers?.[qid]);
       const correctArr = getCorrectSetFor(qid, q);
       if (userArr.length > 0 && correctArr.length > 0 && indexSetsEqual(userArr, correctArr)) {
         correct += 1;
@@ -613,22 +764,17 @@ export default function ResultScreen() {
         : Math.round(((correct / total) * 100 + Number.EPSILON) * 100) / 100;
     return { correct, total, accuracyPct };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRetry, retryQuestions, retryAnswers, correctAnswerMap]);
+  }, [isRetry, resultSummary, questions, userAnswers, correctAnswerMap]);
 
-  const retryWrongQuestions = useMemo(() => {
-    if (!isRetry) return [];
-    const lists = computeRetryListsFromResult({
-      questionsOrdered: Array.isArray(retryQuestions) ? retryQuestions : [],
-      userAnswers: retryAnswers && typeof retryAnswers === 'object' ? retryAnswers : {},
-      getCorrectSetFor,
-    });
-    return lists.wrongQuestions;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRetry, retryQuestions, retryAnswers, correctAnswerMap]);
-
+  /** Retry-session questions still wrong (canonical lists from scored payload). */
   const retryWrongQuestionIds = useMemo(
-    () => questionIdsFromDocs(retryWrongQuestions),
-    [retryWrongQuestions]
+    () => (isRetry ? wrongQuestionIds : []),
+    [isRetry, wrongQuestionIds]
+  );
+
+  const retryWrongQuestions = useMemo(
+    () => (isRetry ? wrongQuestions : []),
+    [isRetry, wrongQuestions]
   );
 
   const retryCtaCopy = useMemo(
@@ -693,14 +839,23 @@ export default function ResultScreen() {
 
   const handleRetryAgain = () => {
     if (!retryWrongQuestionIds.length) return;
+    const histRetry =
+      isHistoricalAttempt || !!(retryMeta && retryMeta.historicalAttemptMode);
+    const sourceId =
+      historicalAttemptId ||
+      (retryMeta && retryMeta.sourceAttemptId != null
+        ? String(retryMeta.sourceAttemptId)
+        : null);
     runOnce(() => {
       navigation.navigate('Test', {
         mode: 'retry',
         questionIds: retryWrongQuestionIds,
         questions: retryWrongQuestions,
+        historicalAttemptMode: histRetry,
+        sourceAttemptId: sourceId || undefined,
         originMainTab: resolveRetryOriginMainTab({
           returnMainTab,
-          isHistoricalAttempt,
+          isHistoricalAttempt: histRetry,
           testId,
         }),
       });
@@ -710,6 +865,7 @@ export default function ResultScreen() {
   const [practiceTopicId, setPracticeTopicId] = useState(null);
   const [practiceError, setPracticeError] = useState(null);
   const [topicMap, setTopicMap] = useState({});
+  const [catalogTopics, setCatalogTopics] = useState([]);
   /** Last good catalog labels — stable fallback when live fetch fails. */
   const [stableCatalogLabels, setStableCatalogLabels] = useState(() =>
     getCachedTopicLabelMap()
@@ -791,6 +947,7 @@ export default function ResultScreen() {
         const list = Array.isArray(data?.topics) ? data.topics : [];
         const map = buildTopicLabelMapFromCatalog(list);
         if (!ac.signal.aborted) {
+          setCatalogTopics(list);
           setTopicMap(map);
           if (Object.keys(map).length > 0) {
             setStableCatalogLabels(map);
@@ -921,7 +1078,7 @@ export default function ResultScreen() {
   const handleWeakPractice = async () => {
     if (weakLoading || practiceTopicId != null) return;
     if (weakTopicIds.length === 0) return;
-    const topicIds = weakTopicIds;
+    const topicIds = weakTopicIds.map((id) => resolvePracticeTopicId(id, catalogTopics));
     await runOnceAsync(async () => {
       setPracticeError(null);
       setWeakLoading(true);
@@ -939,6 +1096,7 @@ export default function ResultScreen() {
         }
         navigation.navigate('Test', {
           mode: 'practice',
+          practiceType: 'weak',
           questions: fetched,
           questionIds,
           originMainTab: resolveRetryOriginMainTab({
@@ -956,7 +1114,7 @@ export default function ResultScreen() {
   };
 
   const handlePractice = async (topicId) => {
-    const id = resolveTopicId(topicId);
+    const id = resolvePracticeTopicId(resolveTopicId(topicId), catalogTopics);
     if (!id || practiceTopicId) return;
     await runOnceAsync(async () => {
       setPracticeError(null);
@@ -972,6 +1130,7 @@ export default function ResultScreen() {
         }
         navigation.navigate('Test', {
           mode: 'practice',
+          practiceType: 'topic',
           questionIds,
           questions: limited,
           originMainTab: resolveRetryOriginMainTab({
@@ -1040,7 +1199,7 @@ export default function ResultScreen() {
     };
   }, [heroAccuracy, isRetry, wrongQuestionIds.length, displayStats.totalQ]);
 
-  const resultAnimKey = `${historicalAttemptId || testId || 'session'}-${isRetry ? 'retry' : 'main'}`;
+  const resultAnimKey = `${historicalAttemptId || historicalLearningSessionId || learningSessionId || testId || 'session'}-${isRetry ? 'retry' : 'main'}`;
 
   useEffect(() => {
     heroOpacity.setValue(0);
@@ -1492,7 +1651,9 @@ export default function ResultScreen() {
     </View>
   );
 
-  if (routeAttemptId) {
+  const mustHydrateFromServer = !!routeAttemptId || needsLearningSessionFetch;
+
+  if (mustHydrateFromServer) {
     if (histLoading) {
       return (
         <View style={styles.histGate}>
@@ -1505,6 +1666,12 @@ export default function ResultScreen() {
       const msg =
         code === 'ATTEMPT_RESULTS_PENDING'
           ? 'Results are still being prepared.'
+          : code === 'SESSION_SNAPSHOT_UNSUPPORTED'
+          ? 'This session uses an older saved format and cannot be opened on this version.'
+          : code === 'SESSION_SNAPSHOT_TOO_LARGE'
+          ? 'This session is too large to restore for review.'
+          : code === 'SESSION_SNAPSHOT_INVALID' || code === 'SESSION_SNAPSHOT_EMPTY'
+          ? 'This saved session is incomplete or no longer available.'
           : getApiErrorMessage(histError) || 'Could not load results.';
       return (
         <View style={styles.histGate}>
@@ -1527,7 +1694,7 @@ export default function ResultScreen() {
     );
   }
 
-  const resultScreenKey = `result-${historicalAttemptId || testId || 'session'}-${isRetry ? 'retry' : 'mock'}`;
+  const resultScreenKey = `result-${historicalAttemptId || historicalLearningSessionId || learningSessionId || testId || 'session'}-${isRetry ? 'retry' : 'mock'}`;
 
   return (
     <ScrollView

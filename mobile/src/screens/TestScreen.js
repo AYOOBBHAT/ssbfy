@@ -18,6 +18,15 @@ import {
 } from '../services/api';
 import { submitTest, saveTestProgress, getQuestionsByIds } from '../services/testService';
 import { completeDailyPractice } from '../services/dailyPracticeService';
+import { pickUserAnswersForQuestions, revealPractice } from '../services/practiceService';
+import { buildResultParamsFromReveal } from '../utils/resultReviewPayload';
+import { putLearningSessionCache } from '../utils/learningSessionCache';
+import {
+  buildRevealReceiptKey,
+  getRevealReceipt,
+  putRevealReceipt,
+} from '../utils/learningSessionRevealReceipt';
+import { getLearningSession } from '../services/learningSessionService';
 import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateView';
@@ -41,7 +50,6 @@ import {
   consumeHardwareBackDuringTransition,
 } from '../navigation/testFlowNavigation';
 import { clearTestSessionTimers } from '../utils/testSessionCleanup';
-import { resolveTopicId, resolveTopicName } from '../utils/topicRef';
 import {
   markTransitionStarted,
   releaseIncompleteTransition,
@@ -74,33 +82,6 @@ function toIndexArray(raw) {
     if (Number.isInteger(n) && n >= 0) cleaned.push(n);
   }
   return Array.from(new Set(cleaned)).sort((a, b) => a - b);
-}
-
-/**
- * Order-independent set equality on two index arrays. Mirrors the backend's
- * scoring rule exactly so daily-practice (scored locally) agrees with what
- * the server would have computed.
- */
-function indexSetsEqual(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b)) return false;
-  if (a.length !== b.length) return false;
-  const sa = [...a].sort((x, y) => x - y);
-  const sb = [...b].sort((x, y) => x - y);
-  for (let i = 0; i < sa.length; i += 1) {
-    if (sa[i] !== sb[i]) return false;
-  }
-  return true;
-}
-
-/** Read a question's canonical correct-index set, handling legacy docs. */
-function getQuestionCorrectSet(q) {
-  if (Array.isArray(q?.correctAnswers) && q.correctAnswers.length > 0) {
-    return [...q.correctAnswers].map(Number).sort((a, b) => a - b);
-  }
-  if (typeof q?.correctAnswerIndex === 'number') {
-    return [q.correctAnswerIndex];
-  }
-  return [];
 }
 
 function isMultiCorrectQuestion(q) {
@@ -222,6 +203,12 @@ export default function TestScreen() {
   const draftSaveTimerRef = useRef(null);
   const serverSyncTimerRef = useRef(null);
   const progressSeqRef = useRef(0);
+  const practiceRevealAbortRef = useRef(null);
+  const practiceRevealSeqRef = useRef(0);
+  /** Stable idempotency key for reveal + immutable session persistence (rapid finish taps). */
+  const clientSessionKeyRef = useRef(
+    `ls-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+  );
 
   const transitionRefs = useMemo(
     () => ({
@@ -250,6 +237,8 @@ export default function TestScreen() {
         transitionStartedAtRef.current = 0;
       }
       clearTestSessionTimers({ draftSaveTimerRef, serverSyncTimerRef });
+      practiceRevealAbortRef.current?.abort();
+      practiceRevealAbortRef.current = null;
     };
   }, []);
 
@@ -946,92 +935,195 @@ export default function TestScreen() {
     ]);
   }, [confirmManualSubmit, attemptedCount]);
 
-  const finishPracticeToResult = useCallback(() => {
-    if (
-      !mountedRef.current ||
-      navigationCommittedRef.current ||
-      submissionCompletedRef.current
-    ) {
-      return;
+  const resolvePracticeType = useCallback(() => {
+    if (isDaily) return 'daily';
+    if (typeof params.practiceType === 'string' && params.practiceType.trim()) {
+      return params.practiceType.trim();
     }
+    if (isPractice) return 'topic';
+    return 'practice';
+  }, [isDaily, isPractice, params.practiceType]);
 
-    const validQuestions = questions.filter((q) => q !== undefined);
-    if (!validQuestions.length) {
-      setSubmitError('No questions in this practice session.');
-      return;
-    }
-
-    const correctAnswers = validQuestions.map((q) => {
-      const correctSet = getQuestionCorrectSet(q);
-      return {
-        questionId: String(q._id),
-        correctAnswers: correctSet,
-        correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
-        questionType: q.questionType || 'single_correct',
-      };
-    });
-
-    let correctCount = 0;
-    const weakTopicsMap = new Map();
-    for (const q of validQuestions) {
-      const qid = String(q._id);
-      const userArr = Array.isArray(answers[qid]) ? answers[qid] : [];
-      const correctSet = getQuestionCorrectSet(q);
-      const isCorrect = correctSet.length > 0 && indexSetsEqual(userArr, correctSet);
-      if (isCorrect) {
-        correctCount += 1;
-      } else if (userArr.length > 0) {
-        const tid = resolveTopicId(q.topicId);
-        if (!tid) continue;
-        const embeddedName = resolveTopicName(q.topicId);
-        const prev = weakTopicsMap.get(tid);
-        weakTopicsMap.set(tid, {
-          mistakeCount: (prev?.mistakeCount || 0) + 1,
-          topicName: prev?.topicName || embeddedName || null,
-        });
+  const finishLocalSessionViaReveal = useCallback(
+    async (practiceType, transitionGen, resultExtras = {}) => {
+      if (
+        !mountedRef.current ||
+        navigationCommittedRef.current ||
+        submissionCompletedRef.current
+      ) {
+        return;
       }
-    }
 
-    const total = validQuestions.length;
-    const attemptedQuestions = Object.keys(answers).filter(
-      (k) => Array.isArray(answers[k]) && answers[k].length > 0
-    ).length;
-    const accuracy =
-      total === 0
-        ? 0
-        : Math.round(((correctCount / total) * 100 + Number.EPSILON) * 100) / 100;
-    const weakTopics = Array.from(weakTopicsMap.entries())
-      .map(([topicId, meta]) => ({
-        topicId,
-        mistakeCount: meta.mistakeCount,
-        ...(meta.topicName ? { topicName: meta.topicName } : {}),
-      }))
-      .sort((a, b) => b.mistakeCount - a.mistakeCount)
-      .slice(0, 10);
+      const validQuestions = questions.filter((q) => q !== undefined);
+      if (!validQuestions.length) {
+        setSubmitError(
+          practiceType === 'retry'
+            ? 'No questions in this retry session.'
+            : 'No questions in this practice session.'
+        );
+        return;
+      }
 
-    const tab = originMainTab || (isPractice ? MAIN_TABS.PRACTICE : MAIN_TABS.HOME);
-    const committed = resetStackToResult(navigation, {
-      originMainTab: tab,
-      resultParams: {
-        score: correctCount,
-        accuracy,
-        timeTaken: 0,
-        weakTopics,
-        totalQuestions: total,
-        attemptedQuestions,
-        unansweredQuestions: Math.max(0, total - attemptedQuestions),
-        questions: validQuestions,
-        userAnswers: answers,
-        correctAnswers,
-      },
-      commitRef: navigationCommittedRef,
-    });
-    if (committed) {
-      submissionCompletedRef.current = true;
-      transitionInFlightRef.current = false;
-      transitionStartedAtRef.current = 0;
-    }
-  }, [navigation, answers, questions, originMainTab, isPractice]);
+      const questionIds = validQuestions
+        .map((q) => String(q?._id ?? ''))
+        .filter(Boolean);
+
+      const sessionAnswers = pickUserAnswersForQuestions(answers, questionIds);
+
+      practiceRevealAbortRef.current?.abort();
+      const revealAc = new AbortController();
+      practiceRevealAbortRef.current = revealAc;
+      const revealSeq = practiceRevealSeqRef.current + 1;
+      practiceRevealSeqRef.current = revealSeq;
+
+      const failLabel =
+        practiceType === 'retry'
+          ? 'Could not score this retry session. Please try again.'
+          : 'Could not score this practice session. Please try again.';
+
+      try {
+        const revealBody = {
+          questionIds,
+          userAnswers: sessionAnswers,
+          practiceType,
+          clientSessionKey: clientSessionKeyRef.current,
+        };
+        if (practiceType === 'retry') {
+          revealBody.retryMeta = {
+            historicalAttemptMode: !!historicalAttemptMode,
+            sourceAttemptId: sourceAttemptId || null,
+            ...(resultExtras.retryMeta && typeof resultExtras.retryMeta === 'object'
+              ? resultExtras.retryMeta
+              : {}),
+          };
+          if (sourceAttemptId) {
+            revealBody.sourceAttemptId = sourceAttemptId;
+          }
+        }
+
+        const receiptKey = buildRevealReceiptKey(practiceType, questionIds);
+        let payload = null;
+
+        const receiptSessionId = await getRevealReceipt(receiptKey);
+        if (receiptSessionId) {
+          try {
+            const recovered = await getLearningSession(receiptSessionId, {
+              signal: revealAc.signal,
+            });
+            if (
+              recovered &&
+              Array.isArray(recovered.questions) &&
+              recovered.questions.length === questionIds.length
+            ) {
+              payload = {
+                practiceType,
+                summary: recovered.summary,
+                correctAnswers: recovered.correctAnswers,
+                weakTopics: recovered.weakTopics,
+                reviewQuestions: recovered.questions,
+                learningSessionId: receiptSessionId,
+                immutableAttemptSnapshot: true,
+              };
+            }
+          } catch {
+            payload = null;
+          }
+        }
+
+        if (!payload) {
+          payload = await revealPractice(revealBody, { signal: revealAc.signal });
+        }
+
+        if (revealSeq !== practiceRevealSeqRef.current) return;
+
+        if (
+          !mountedRef.current ||
+          navigationCommittedRef.current ||
+          submissionCompletedRef.current ||
+          (transitionGen != null &&
+            isStaleTransitionGeneration(transitionGenRef, transitionGen))
+        ) {
+          return;
+        }
+
+        if (!payload) {
+          setSubmitError('Could not load results. Please try again.');
+          return;
+        }
+
+        const reviewQuestions = Array.isArray(payload.reviewQuestions)
+          ? payload.reviewQuestions
+          : [];
+
+        if (reviewQuestions.length !== questionIds.length) {
+          setSubmitError(
+            practiceType === 'retry'
+              ? 'Some questions are no longer available for retry review.'
+              : 'Some questions are no longer available. Start a new practice session.'
+          );
+          return;
+        }
+
+        if (!reviewQuestions.length) {
+          setSubmitError('Could not load results. Please try again.');
+          return;
+        }
+
+        const tab =
+          originMainTab ||
+          (practiceType === 'retry'
+            ? historicalAttemptMode
+              ? MAIN_TABS.PROFILE
+              : MAIN_TABS.HOME
+            : isPractice
+            ? MAIN_TABS.PRACTICE
+            : MAIN_TABS.HOME);
+
+        const resultParams = buildResultParamsFromReveal(payload, sessionAnswers, {
+          practiceRevealed: true,
+          retry: practiceType === 'retry',
+          sessionType: practiceType,
+          ...resultExtras,
+        });
+
+        if (resultParams.learningSessionId) {
+          void putRevealReceipt(receiptKey, resultParams.learningSessionId);
+          void putLearningSessionCache(resultParams.learningSessionId, {
+            ...resultParams,
+            learningSessionId: resultParams.learningSessionId,
+          });
+        }
+
+        const committed = resetStackToResult(navigation, {
+          originMainTab: tab,
+          resultParams,
+          commitRef: navigationCommittedRef,
+        });
+        if (committed) {
+          submissionCompletedRef.current = true;
+          transitionInFlightRef.current = false;
+          transitionStartedAtRef.current = 0;
+        }
+      } catch (e) {
+        if (revealSeq !== practiceRevealSeqRef.current) return;
+        if (isRequestCancelled(e)) return;
+        setSubmitError(getApiErrorMessage(e) || failLabel);
+      } finally {
+        if (practiceRevealAbortRef.current === revealAc) {
+          practiceRevealAbortRef.current = null;
+        }
+      }
+    },
+    [
+      navigation,
+      answers,
+      questions,
+      originMainTab,
+      isPractice,
+      historicalAttemptMode,
+      sourceAttemptId,
+    ]
+  );
 
   /**
    * Local finish (practice / daily / retry).
@@ -1059,27 +1151,22 @@ export default function TestScreen() {
       setSubmitError(null);
       try {
         if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
-        const tab =
-          originMainTab ||
-          (historicalAttemptMode ? MAIN_TABS.PROFILE : MAIN_TABS.HOME);
-        const committed = resetStackToResult(navigation, {
-          originMainTab: tab,
-          resultParams: {
-            retry: true,
-            retryAnswers: answers,
-            retryQuestions: questions.filter((q) => q !== undefined),
+        await finishLocalSessionViaReveal('retry', gen, {
+          retry: true,
+          retryMeta: {
+            historicalAttemptMode: !!historicalAttemptMode,
+            sourceAttemptId: sourceAttemptId || null,
           },
-          commitRef: navigationCommittedRef,
         });
-        if (committed) {
-          submissionCompletedRef.current = true;
-          transitionInFlightRef.current = false;
-          transitionStartedAtRef.current = 0;
-        }
       } catch (e) {
-        if (mountedRef.current) setSubmitError(getApiErrorMessage(e));
+        if (mountedRef.current && !isRequestCancelled(e)) {
+          setSubmitError(getApiErrorMessage(e));
+        }
       } finally {
-        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) {
+          practiceRevealAbortRef.current?.abort();
+          return;
+        }
         setSubmitting(false);
         if (!navigationCommittedRef.current) releaseTransition();
       }
@@ -1101,11 +1188,16 @@ export default function TestScreen() {
       setSubmitError(null);
       try {
         if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
-        finishPracticeToResult();
+        await finishLocalSessionViaReveal(resolvePracticeType(), gen);
       } catch (e) {
-        if (mountedRef.current) setSubmitError(getApiErrorMessage(e));
+        if (mountedRef.current && !isRequestCancelled(e)) {
+          setSubmitError(getApiErrorMessage(e));
+        }
       } finally {
-        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) {
+          practiceRevealAbortRef.current?.abort();
+          return;
+        }
         setSubmitting(false);
         if (!navigationCommittedRef.current) releaseTransition();
       }
@@ -1135,11 +1227,16 @@ export default function TestScreen() {
           }
         }
         if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
-        finishPracticeToResult();
+        await finishLocalSessionViaReveal('daily', gen);
       } catch (e) {
-        if (mountedRef.current) setSubmitError(getApiErrorMessage(e));
+        if (mountedRef.current && !isRequestCancelled(e)) {
+          setSubmitError(getApiErrorMessage(e));
+        }
       } finally {
-        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
+        if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) {
+          practiceRevealAbortRef.current?.abort();
+          return;
+        }
         setSubmitting(false);
         if (!navigationCommittedRef.current) releaseTransition();
       }
@@ -1160,7 +1257,8 @@ export default function TestScreen() {
     isPractice,
     originMainTab,
     historicalAttemptMode,
-    finishPracticeToResult,
+    finishLocalSessionViaReveal,
+    resolvePracticeType,
     releaseTransition,
     transitionRefs,
   ]);

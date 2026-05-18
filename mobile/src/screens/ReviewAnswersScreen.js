@@ -48,15 +48,24 @@ function getOptionStyle(optionIndex, correctSet, userSet) {
   return styles.optionDefault;
 }
 
+const ANSWER_UNAVAILABLE = 'Answer unavailable';
+
 function formatIndexList(indexes, options) {
   const arr = Array.isArray(indexes) ? indexes : [];
-  if (arr.length === 0) return '—';
-  return arr
-    .map((i) => {
-      if (!Number.isInteger(i) || i < 0 || i >= options.length) return '—';
-      return `${String.fromCharCode(65 + i)}. ${options[i] ?? ''}`;
-    })
-    .join('  •  ');
+  const opts = Array.isArray(options) ? options : [];
+  if (arr.length === 0) {
+    return opts.length === 0 ? ANSWER_UNAVAILABLE : '—';
+  }
+  const parts = arr.map((i) => {
+    if (!Number.isInteger(i) || i < 0 || i >= opts.length) {
+      return opts.length === 0 ? ANSWER_UNAVAILABLE : '—';
+    }
+    return `${String.fromCharCode(65 + i)}. ${opts[i] ?? ''}`;
+  });
+  if (parts.every((p) => p === ANSWER_UNAVAILABLE || p === '—')) {
+    return parts[0] === ANSWER_UNAVAILABLE ? ANSWER_UNAVAILABLE : '—';
+  }
+  return parts.join('  •  ');
 }
 
 const styles = StyleSheet.create({
@@ -217,13 +226,7 @@ export default function ReviewAnswersScreen() {
       const userArr = toIndexArray(userAnswers[qid]);
       const fromMap = correctAnswerMap.get(qid);
       const correctArr =
-        Array.isArray(fromMap) && fromMap.length > 0
-          ? fromMap
-          : toIndexArray(
-              Array.isArray(q?.correctAnswers) && q.correctAnswers.length > 0
-                ? q.correctAnswers
-                : q?.correctAnswerIndex
-            );
+        Array.isArray(fromMap) && fromMap.length > 0 ? fromMap : [];
       return { key: qid, question: q, userSet: userArr, correctSet: correctArr };
     });
   }, [questions, userAnswers, correctAnswerMap]);

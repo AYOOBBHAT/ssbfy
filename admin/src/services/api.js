@@ -222,6 +222,35 @@ export async function updateTopic(id, { name, order, isActive } = {}) {
   return unwrap(res);
 }
 
+/** Explicit taxonomy rename (preserves canonicalTopicId). */
+export async function taxonomyRenameTopic(id, name) {
+  const res = await api.post(`/topics/${id}/taxonomy/rename`, { name });
+  return unwrap(res);
+}
+
+export async function taxonomyAliasTopic(id, alias) {
+  const res = await api.post(`/topics/${id}/taxonomy/alias`, { alias });
+  return unwrap(res);
+}
+
+export async function taxonomyMergeTopics(targetTopicId, sourceTopicIds) {
+  const res = await api.post('/topics/taxonomy/merge', {
+    targetTopicId,
+    sourceTopicIds,
+  });
+  return unwrap(res);
+}
+
+export async function taxonomySplitTopic(id, splits) {
+  const res = await api.post(`/topics/${id}/taxonomy/split`, { splits });
+  return unwrap(res);
+}
+
+export async function taxonomyBackfillCanonical() {
+  const res = await api.post('/topics/taxonomy/backfill');
+  return unwrap(res);
+}
+
 /**
  * List questions with optional filters/pagination.
  * @param {object} params  subjectId, topicId, difficulty, year, limit, skip, sort

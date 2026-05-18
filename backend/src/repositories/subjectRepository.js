@@ -46,6 +46,13 @@ export const subjectRepository = {
       .exec();
   },
 
+  /** Lean fetch for display labels (learning session snapshots). */
+  async findNamesByIds(ids) {
+    if (!ids?.length) return [];
+    const unique = [...new Set(ids.map(String))];
+    return Subject.find({ _id: { $in: unique } }, { _id: 1, name: 1 }).lean().exec();
+  },
+
   async findByIdsWithPost(ids) {
     const oids = toOidSet(ids);
     if (!oids.length) return [];

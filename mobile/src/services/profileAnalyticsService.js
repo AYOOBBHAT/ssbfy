@@ -27,6 +27,9 @@ export async function getProfileAnalytics(opts = {}) {
     dailyPracticeCount: toSafeInt(payload.dailyPracticeCount),
     smartPracticeCount: toSafeInt(payload.smartPracticeCount),
     recentAttempts: Array.isArray(payload.recentAttempts) ? payload.recentAttempts : [],
+    recentLearningSessions: Array.isArray(payload.recentLearningSessions)
+      ? payload.recentLearningSessions
+      : [],
   };
 }
 

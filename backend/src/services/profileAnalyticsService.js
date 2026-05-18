@@ -2,6 +2,7 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
+import { learningSessionRepository } from '../repositories/learningSessionRepository.js';
 
 /**
  * Clamp + round a 0–100 accuracy/percent value into a presentable integer.
@@ -36,10 +37,11 @@ export const profileAnalyticsService = {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }
 
-    const [agg, latest, recentAttemptsRaw] = await Promise.all([
+    const [agg, latest, recentAttemptsRaw, recentLearningRaw] = await Promise.all([
       testAttemptRepository.aggregateProfileStats(userId),
       testAttemptRepository.findLatestCompletedByUser(userId),
       testAttemptRepository.findRecentCompletedByUser(userId, 5),
+      learningSessionRepository.listRecentByUser(userId, { limit: 5 }),
     ]);
 
     const totalMocks = Number(agg?.totalMocks) || 0;
@@ -68,6 +70,17 @@ export const profileAnalyticsService = {
       };
     });
 
+    const recentLearningSessions = (
+      Array.isArray(recentLearningRaw) ? recentLearningRaw : []
+    ).map((s) => ({
+      id: String(s?._id ?? ''),
+      sessionType: s?.sessionType ?? s?.snapshot?.sessionType ?? 'practice',
+      accuracy: pctInt(s?.summary?.accuracy),
+      score: Number.isFinite(Number(s?.summary?.score)) ? Number(s.summary.score) : null,
+      totalQuestions: Number(s?.summary?.totalQuestions) || 0,
+      completedAt: s?.completedAt ?? null,
+    }));
+
     return {
       totalMocks,
       bestScore,
@@ -79,6 +92,7 @@ export const profileAnalyticsService = {
       dailyPracticeCount: Math.max(0, Number(user.dailyPracticeTotal) || 0),
       smartPracticeCount: 0,
       recentAttempts,
+      recentLearningSessions,
     };
   },
 };

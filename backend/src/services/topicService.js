@@ -5,13 +5,16 @@ import { subjectRepository } from '../repositories/subjectRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
 import { logger } from '../utils/logger.js';
 import { cachedTopicsList } from '../utils/ttlCache.js';
+import { canonicalTopicService } from './canonicalTopicService.js';
 
 export const topicService = {
   async list(filter = {}) {
-    if (filter.isActive === true) {
-      return cachedTopicsList(filter, () => topicRepository.findAll(filter));
+    const resolved = { ...filter };
+    if (resolved.isActive === true) {
+      resolved.deprecated = { $ne: true };
+      return cachedTopicsList(resolved, () => topicRepository.findAll(resolved));
     }
-    return topicRepository.findAll(filter);
+    return topicRepository.findAll(resolved);
   },
 
   async listBySubject(subjectId) {
@@ -63,7 +66,9 @@ export const topicService = {
     }
 
     try {
-      return await topicRepository.create({ name: trimmedName, subjectId, order });
+      const created = await topicRepository.create({ name: trimmedName, subjectId, order });
+      await canonicalTopicService.onTopicCreated(created);
+      return created;
     } catch (err) {
       if (err && err.code === 11000) {
         throw new AppError(
@@ -88,6 +93,7 @@ export const topicService = {
       throw new AppError('Topic not found', HTTP_STATUS.NOT_FOUND);
     }
 
+    let current = existing;
     const update = {};
 
     if (patch.name !== undefined) {
@@ -106,8 +112,8 @@ export const topicService = {
             HTTP_STATUS.CONFLICT
           );
         }
+        current = await canonicalTopicService.renameTopic(id, trimmedName, actor);
       }
-      update.name = trimmedName;
     }
 
     if (patch.order !== undefined) {
@@ -118,7 +124,7 @@ export const topicService = {
     }
 
     if (Object.keys(update).length === 0) {
-      return existing;
+      return current;
     }
 
     // `updatedAt` is refreshed automatically by Mongoose's `timestamps`
@@ -133,11 +139,11 @@ export const topicService = {
     // Structured audit trail — status flips have their own message so they
     // can be grepped quickly in production logs, independent of renames/
     // reorders which go through the generic "updated" line.
-    if (patch.isActive !== undefined && Boolean(patch.isActive) !== existing.isActive) {
+    if (patch.isActive !== undefined && Boolean(patch.isActive) !== current.isActive) {
       const verb = update.isActive ? 'enabled' : 'disabled';
       logger.info(`[ADMIN] Topic ${verb}:`, {
-        id: String(existing._id),
-        name: existing.name,
+        id: String(current._id),
+        name: current.name,
         userId: actorId,
       });
     }

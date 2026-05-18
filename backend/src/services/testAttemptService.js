@@ -8,7 +8,6 @@ import { resultRepository } from '../repositories/resultRepository.js';
 import { testService } from './testService.js';
 import { isTestDisabled } from '../constants/testStatus.js';
 import {
-  WEAK_TOPIC_LIMIT,
   buildResultSnapshotAtSubmit,
   computeIsCorrect,
   computeRetryListsFromResult,
@@ -18,6 +17,10 @@ import {
   indexSetsEqual,
   normalizeAnswers,
 } from '../utils/attemptResultSnapshot.js';
+import {
+  buildCorrectAnswerPayload,
+  computeWeakTopics,
+} from '../utils/questionScoring.js';
 
 function dedupeQuestionIds(ids) {
   const seen = new Set();
@@ -82,12 +85,7 @@ async function buildRecoverPayloadForSubmitConflict(userId, testId) {
     if (!q) return null;
 
     const correctSet = getCorrectIndexSet(q);
-    correctAnswers.push({
-      questionId: q._id,
-      correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
-      correctAnswers: correctSet,
-      questionType: q.questionType || 'single_correct',
-    });
+    correctAnswers.push(buildCorrectAnswerPayload(q._id, q));
 
     const ans = answerByQ.get(qid.toString());
     const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
@@ -103,13 +101,7 @@ async function buildRecoverPayloadForSubmitConflict(userId, testId) {
     }
   }
 
-  const weakTopics = [...topicMistakes.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, WEAK_TOPIC_LIMIT)
-    .map(([topicIdStr, count]) => ({
-      topicId: new mongoose.Types.ObjectId(topicIdStr),
-      mistakeCount: count,
-    }));
+  const weakTopics = computeWeakTopics(topicMistakes);
 
   if (hasImmutableSnapshot(latest)) {
     const snap = latest.resultSnapshot;
@@ -316,12 +308,7 @@ async function buildHistoricalResultViewPayload(attempt) {
     }
 
     const correctSet = getCorrectIndexSet(q);
-    correctAnswers.push({
-      questionId: q._id,
-      correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
-      correctAnswers: correctSet,
-      questionType: q.questionType || 'single_correct',
-    });
+    correctAnswers.push(buildCorrectAnswerPayload(q._id, q));
 
     const ans = answerByQ.get(qid.toString());
     const optionsLen = Array.isArray(q.options) ? q.options.length : 0;
@@ -334,13 +321,7 @@ async function buildHistoricalResultViewPayload(attempt) {
     }
   }
 
-  const weakTopics = [...topicMistakes.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, WEAK_TOPIC_LIMIT)
-    .map(([topicIdStr, count]) => ({
-      topicId: new mongoose.Types.ObjectId(topicIdStr),
-      mistakeCount: count,
-    }));
+  const weakTopics = computeWeakTopics(topicMistakes);
 
   const totalQ = (attempt.questionIds || []).length;
   const attemptedQs = (attempt.questionIds || []).filter((qid) => {
@@ -606,15 +587,7 @@ export const testAttemptService = {
       const isCorrect =
         correctSet.length > 0 && indexSetsEqual(selectedSet, correctSet);
 
-      correctAnswers.push({
-        questionId: q._id,
-        // Legacy mirror for any client still reading the scalar field.
-        correctAnswerIndex: correctSet.length > 0 ? correctSet[0] : null,
-        // New canonical shape — full set of correct option indexes.
-        correctAnswers: correctSet,
-        // Useful for the result screen so it doesn't have to re-classify.
-        questionType: q.questionType || 'single_correct',
-      });
+      correctAnswers.push(buildCorrectAnswerPayload(q._id, q));
 
       if (isCorrect) {
         correctCount += 1;
@@ -636,13 +609,7 @@ export const testAttemptService = {
       Math.round((endTime.getTime() - new Date(attempt.startTime).getTime()) / 1000)
     );
 
-    const weakTopics = [...topicMistakes.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, WEAK_TOPIC_LIMIT)
-      .map(([topicIdStr, count]) => ({
-        topicId: new mongoose.Types.ObjectId(topicIdStr),
-        mistakeCount: count,
-      }));
+    const weakTopics = computeWeakTopics(topicMistakes);
 
     const weakTopicIds = weakTopics.map((w) => w.topicId);
 

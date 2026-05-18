@@ -21,7 +21,10 @@
     "fix:topic-names-trim": "node scripts/fix-trim-topic-names.mjs",
     "migrate:global-subjects": "node scripts/migrate-global-subjects.mjs",
     "backfill:attempt-snapshots": "node scripts/backfill-attempt-result-snapshots.mjs --dry-run",
-    "backfill:attempt-snapshots:apply": "node scripts/backfill-attempt-result-snapshots.mjs --apply"
+    "backfill:attempt-snapshots:apply": "node scripts/backfill-attempt-result-snapshots.mjs --apply",
+    "verify:practice-scoring": "node scripts/verify-practice-scoring.mjs",
+    "verify:learning-analytics": "node scripts/verify-learning-analytics.mjs",
+    "backfill:canonical-topics": "node scripts/backfill-canonical-topics.mjs"
   },
   "engines": {
     "node": ">=20"

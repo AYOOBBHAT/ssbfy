@@ -1,4 +1,5 @@
 import { topicService } from '../services/topicService.js';
+import { canonicalTopicService } from '../services/canonicalTopicService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 import { ROLES } from '../constants/roles.js';
@@ -37,5 +38,46 @@ export const topicController = {
       req.user
     );
     return sendSuccess(res, { topic }, 'Topic updated');
+  }),
+
+  taxonomyRename: asyncHandler(async (req, res) => {
+    const topic = await canonicalTopicService.renameTopic(
+      req.params.id,
+      req.body.name,
+      req.user
+    );
+    return sendSuccess(res, { topic }, 'Topic renamed');
+  }),
+
+  taxonomyAlias: asyncHandler(async (req, res) => {
+    const topic = await canonicalTopicService.addAlias(
+      req.params.id,
+      req.body.alias,
+      req.user
+    );
+    return sendSuccess(res, { topic }, 'Alias added');
+  }),
+
+  taxonomyMerge: asyncHandler(async (req, res) => {
+    const result = await canonicalTopicService.mergeTopics(
+      req.body.targetTopicId,
+      req.body.sourceTopicIds,
+      req.user
+    );
+    return sendSuccess(res, result, 'Topics merged');
+  }),
+
+  taxonomySplit: asyncHandler(async (req, res) => {
+    const result = await canonicalTopicService.splitTopic(
+      req.params.id,
+      req.body.splits,
+      req.user
+    );
+    return sendSuccess(res, result, 'Topic split');
+  }),
+
+  taxonomyBackfill: asyncHandler(async (req, res) => {
+    const result = await canonicalTopicService.backfillAll(req.user?.id);
+    return sendSuccess(res, result, 'Canonical topics backfilled');
   }),
 };

@@ -155,20 +155,30 @@ export function normalizeWeakTopicRow(item) {
  */
 export function normalizeWeakTopicsList(weakTopics) {
   if (!Array.isArray(weakTopics)) return [];
-  const byId = new Map();
+  const byKey = new Map();
   for (const raw of weakTopics) {
     const row = normalizeWeakTopicRow(raw);
     if (!row) continue;
-    const prev = byId.get(row.topicId);
+    const canonicalKey =
+      raw?.canonicalTopicId != null && String(raw.canonicalTopicId).trim()
+        ? `canonical:${String(raw.canonicalTopicId)}`
+        : row.topicId;
+    const prev = byKey.get(canonicalKey);
     if (!prev) {
-      byId.set(row.topicId, { ...row });
+      byKey.set(canonicalKey, {
+        ...row,
+        ...(raw?.canonicalTopicId ? { canonicalTopicId: String(raw.canonicalTopicId) } : {}),
+      });
       continue;
     }
     prev.mistakeCount += row.mistakeCount;
     if (!prev.topicName && row.topicName) prev.topicName = row.topicName;
     if (!prev.sourceTopicRef && row.sourceTopicRef) prev.sourceTopicRef = row.sourceTopicRef;
+    if (!prev.canonicalTopicId && raw?.canonicalTopicId) {
+      prev.canonicalTopicId = String(raw.canonicalTopicId);
+    }
   }
-  return Array.from(byId.values()).sort((a, b) => b.mistakeCount - a.mistakeCount);
+  return Array.from(byKey.values()).sort((a, b) => b.mistakeCount - a.mistakeCount);
 }
 
 /**

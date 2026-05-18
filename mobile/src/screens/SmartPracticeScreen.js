@@ -201,6 +201,7 @@ export default function SmartPracticeScreen() {
       const questionIds = questionIdsFromDocs(list);
       navigation.navigate('Test', {
         mode: 'practice',
+        practiceType: 'smart',
         questionIds,
         questions: list,
         originMainTab: 'Practice',

@@ -25,6 +25,11 @@ import { useMockQuota } from '../hooks/useMockQuota';
 import { getQuotaProfileLine } from '../utils/mockQuotaCopy';
 import { getSubscriptionStatus, formatPlanDate } from '../utils/subscriptionStatus';
 import { getProfileAnalytics } from '../services/profileAnalyticsService';
+import { getAnalyticsOverview } from '../services/analyticsService';
+import {
+  getAnalyticsOverviewCache,
+  putAnalyticsOverviewCache,
+} from '../utils/analyticsCache';
 import { isRequestCancelled } from '../services/api';
 
 export default function ProfileScreen({ navigation }) {
@@ -36,24 +41,42 @@ export default function ProfileScreen({ navigation }) {
   const mockQuotaLine = showQuota ? getQuotaProfileLine(quota) : null;
 
   const [analytics, setAnalytics] = useState(null);
+  const [overview, setOverview] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
+  const [overviewStale, setOverviewStale] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       const ac = new AbortController();
       (async () => {
         try {
-          setAnalyticsLoading(true);
-          setAnalyticsError(false);
-          const data = await getProfileAnalytics({ signal: ac.signal });
+          const cached = await getAnalyticsOverviewCache();
           if (ac.signal.aborted) return;
-          setAnalytics(data);
+          if (cached?.payload) {
+            setOverview(cached.payload);
+            setOverviewStale(true);
+          }
+
+          setAnalyticsLoading(!cached?.payload);
+          setAnalyticsError(false);
+
+          const [profileData, overviewData] = await Promise.all([
+            getProfileAnalytics({ signal: ac.signal }),
+            getAnalyticsOverview({ signal: ac.signal }).catch(() => null),
+          ]);
+          if (ac.signal.aborted) return;
+          setAnalytics(profileData);
+          if (overviewData) {
+            setOverview(overviewData);
+            setOverviewStale(false);
+            void putAnalyticsOverviewCache(overviewData);
+          }
         } catch (e) {
           if (ac.signal.aborted || isRequestCancelled(e)) return;
           setAnalyticsError(true);
         } finally {
-          setAnalyticsLoading(false);
+          if (!ac.signal.aborted) setAnalyticsLoading(false);
         }
       })();
       return () => {
@@ -95,12 +118,18 @@ export default function ProfileScreen({ navigation }) {
       <Text style={styles.sectionLabel}>Progress & Performance</Text>
       <ProgressSection
         analytics={analytics}
+        overview={overview}
+        overviewStale={overviewStale}
         loading={analyticsLoading}
         error={analyticsError}
         onStart={goToTests}
         onOpenMockAttempt={(attemptId) => {
           const rootNav = navigation.getParent()?.getParent();
           rootNav?.navigate('Result', { attemptId });
+        }}
+        onOpenLearningSession={(learningSessionId) => {
+          const rootNav = navigation.getParent()?.getParent();
+          rootNav?.navigate('Result', { learningSessionId });
         }}
       />
 
@@ -377,8 +406,26 @@ function visualForStatus(status) {
   }
 }
 
-function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt }) {
-  if (loading && !analytics) {
+const LEARNING_SESSION_LABELS = {
+  topic: 'Topic practice',
+  smart: 'Smart practice',
+  weak: 'Weak topics',
+  daily: 'Daily practice',
+  retry: 'Retry session',
+  practice: 'Practice',
+};
+
+function ProgressSection({
+  analytics,
+  overview,
+  overviewStale,
+  loading,
+  error,
+  onStart,
+  onOpenMockAttempt,
+  onOpenLearningSession,
+}) {
+  if (loading && !analytics && !overview) {
     return (
       <View style={[styles.progressCard, styles.progressLoading]}>
         <ActivityIndicator size="small" color={colors.primary} />
@@ -387,7 +434,7 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
     );
   }
 
-  if (error && !analytics) {
+  if (error && !analytics && !overview) {
     return (
       <View style={[styles.progressCard, styles.progressEmpty]}>
         <Ionicons name="cloud-offline-outline" size={26} color={colors.muted} />
@@ -400,8 +447,11 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
   }
 
   const a = analytics || {};
+  const o = overview || {};
   const totalMocks = Number(a.totalMocks) || 0;
-  const isNewUser = totalMocks === 0;
+  const practiceSessions = Number(o.practiceSessions) || Number(o.totalSessions) || 0;
+  const hasPracticeData = o.hasPracticeData === true || practiceSessions > 0;
+  const isNewUser = totalMocks === 0 && !hasPracticeData;
 
   if (isNewUser) {
     return (
@@ -411,7 +461,7 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
         </View>
         <Text style={styles.progressEmptyTitle}>No progress yet</Text>
         <Text style={styles.progressEmptySub}>
-          Start your first mock test to track your progress.
+          Start a mock test or practice session to track your progress.
         </Text>
         <Pressable
           onPress={onStart}
@@ -425,14 +475,30 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
   }
 
   const bestScore = Number(a.bestScore) || 0;
-  const currentStreak = Number(a.currentStreak) || 0;
+  const currentStreak =
+    Number(o.streakDays) || Number(a.currentStreak) || 0;
   const latestScore = Number(a.latestScore) || 0;
   const averageScore = Number(a.averageScore) || 0;
-  const overallAccuracy = Number(a.overallAccuracy) || 0;
+  const overallAccuracy =
+    hasPracticeData && Number(o.averageAccuracy) > 0
+      ? Number(o.averageAccuracy)
+      : Number(a.overallAccuracy) || 0;
+  const trend7 = o.recentTrend?.last7Days;
+  const weeklyAccuracy =
+    trend7?.averageAccuracy != null ? Number(trend7.averageAccuracy) : null;
+  const improvingTopics = Array.isArray(o.weakTopicEvolution?.improving)
+    ? o.weakTopicEvolution.improving
+    : [];
+  const strongestTopics = Array.isArray(o.strongestTopics) ? o.strongestTopics : [];
+  const weakestTopics = Array.isArray(o.weakestTopics) ? o.weakestTopics : [];
+  const retryFx = o.retryEffectiveness;
   const totalQuestionsSolved = Number(a.totalQuestionsSolved) || 0;
   const dailyPracticeCount = Number(a.dailyPracticeCount) || 0;
   const smartPracticeCount = Number(a.smartPracticeCount) || 0;
   const recentAttempts = Array.isArray(a.recentAttempts) ? a.recentAttempts : [];
+  const recentLearningSessions = Array.isArray(a.recentLearningSessions)
+    ? a.recentLearningSessions
+    : [];
 
   const formatMmSs = (totalSeconds) => {
     const s = Math.max(0, Number(totalSeconds) || 0);
@@ -465,9 +531,75 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
       <View style={styles.statGrid}>
         <SmallStat label="Total Mocks" value={String(totalMocks)} />
         <SmallStat label="Latest Score" value={`${latestScore}%`} />
-        <SmallStat label="Average Score" value={`${averageScore}%`} />
-        <SmallStat label="Accuracy" value={`${overallAccuracy}%`} />
+        <SmallStat
+          label="Practice Acc."
+          value={hasPracticeData ? `${overallAccuracy}%` : `${averageScore}%`}
+        />
+        <SmallStat
+          label="7-day trend"
+          value={weeklyAccuracy != null ? `${weeklyAccuracy}%` : '—'}
+        />
       </View>
+
+      {overviewStale ? (
+        <Text style={styles.staleHint}>Showing saved progress — updating when online</Text>
+      ) : null}
+
+      {improvingTopics.length > 0 ? (
+        <View style={styles.insightBlock}>
+          <Text style={styles.insightTitle}>Improving</Text>
+          {improvingTopics.slice(0, 3).map((t, idx) => (
+            <View key={t.topicId || t.topicName || idx} style={styles.insightRow}>
+              <Ionicons name="trending-up" size={14} color={colors.success} />
+              <Text style={styles.insightText} numberOfLines={1}>
+                {t.message || `Improved in ${t.topicName}`}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {strongestTopics.length > 0 || weakestTopics.length > 0 ? (
+        <View style={styles.masteryRow}>
+          {strongestTopics[0] ? (
+            <View style={[styles.masteryChip, styles.masteryChipStrong]}>
+              <Text style={styles.masteryChipLabel}>Strongest</Text>
+              <Text style={styles.masteryChipValue} numberOfLines={1}>
+                {strongestTopics[0].currentDisplayName || strongestTopics[0].topicName} ·{' '}
+                {strongestTopics[0].masteryScore}%
+              </Text>
+              {strongestTopics[0].previousLabel ? (
+                <Text style={styles.masteryChipPrev} numberOfLines={1}>
+                  Previously: {strongestTopics[0].previousLabel}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {weakestTopics[0] ? (
+            <View style={[styles.masteryChip, styles.masteryChipWeak]}>
+              <Text style={styles.masteryChipLabel}>Focus next</Text>
+              <Text style={styles.masteryChipValue} numberOfLines={1}>
+                {weakestTopics[0].currentDisplayName || weakestTopics[0].topicName} ·{' '}
+                {weakestTopics[0].masteryScore}%
+              </Text>
+              {weakestTopics[0].previousLabel ? (
+                <Text style={styles.masteryChipPrev} numberOfLines={1}>
+                  Previously: {weakestTopics[0].previousLabel}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {retryFx?.retrySessions > 0 ? (
+        <Text style={styles.retryInsight}>
+          Retry sessions: {retryFx.retrySessions}
+          {retryFx.avgImprovementDelta != null && retryFx.avgImprovementDelta > 0
+            ? ` · avg +${retryFx.avgImprovementDelta}% vs prior attempt`
+            : ''}
+        </Text>
+      ) : null}
 
       <View style={styles.progressFooter}>
         <View style={styles.progressFooterItem}>
@@ -493,6 +625,50 @@ function ProgressSection({ analytics, loading, error, onStart, onOpenMockAttempt
           </View>
         ) : null}
       </View>
+
+      {recentLearningSessions.length > 0 ? (
+        <View style={styles.recentAttemptsBlock}>
+          <Text style={styles.recentAttemptsTitle}>Recent practice sessions</Text>
+          {recentLearningSessions.slice(0, 5).map((sess, idx) => {
+            const typeKey = String(sess?.sessionType || 'practice').toLowerCase();
+            const title = LEARNING_SESSION_LABELS[typeKey] || 'Practice session';
+            const completedAt = sess?.completedAt
+              ? new Date(sess.completedAt).toLocaleString()
+              : '—';
+            const accuracy = sess?.accuracy != null ? `${String(sess.accuracy)}%` : '—';
+            const totalQ =
+              sess?.totalQuestions != null ? ` • ${String(sess.totalQuestions)} Q` : '';
+            return (
+              <Pressable
+                key={sess?.id || `ls-${idx}`}
+                onPress={() => {
+                  if (sess?.id) onOpenLearningSession?.(sess.id);
+                }}
+                disabled={!sess?.id || !onOpenLearningSession}
+                style={({ pressed }) => [
+                  styles.recentAttemptRow,
+                  pressCardStyle(pressed),
+                  (!sess?.id || !onOpenLearningSession) && styles.recentAttemptRowDisabled,
+                ]}
+              >
+                <View style={styles.recentAttemptLeft}>
+                  <Text style={styles.recentAttemptName} numberOfLines={1}>
+                    {title}
+                  </Text>
+                  <Text style={styles.recentAttemptMeta} numberOfLines={1}>
+                    {completedAt}
+                    {totalQ}
+                  </Text>
+                </View>
+                <View style={styles.recentAttemptRight}>
+                  <Text style={styles.recentAttemptScore}>{accuracy}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       {recentAttempts.length > 0 ? (
         <View style={styles.recentAttemptsBlock}>
@@ -810,6 +986,83 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginTop: 12,
     gap: 8,
+  },
+  staleHint: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  insightBlock: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  insightTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  insightText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  masteryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  masteryChip: {
+    flex: 1,
+    minWidth: '46%',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+  },
+  masteryChipStrong: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.success,
+  },
+  masteryChipWeak: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.border,
+  },
+  masteryChipLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+  },
+  masteryChipValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 2,
+  },
+  masteryChipPrev: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 3,
+  },
+  retryInsight: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 8,
+    lineHeight: 16,
   },
   smallStat: {
     flexBasis: '48%',

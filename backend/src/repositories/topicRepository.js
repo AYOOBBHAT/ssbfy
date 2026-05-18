@@ -28,6 +28,13 @@ export const topicRepository = {
       .exec();
   },
 
+  /** Lean fetch for display labels (practice reveal, etc.). */
+  async findNamesByIds(ids) {
+    if (!ids?.length) return [];
+    const unique = [...new Set(ids.map(String))];
+    return Topic.find({ _id: { $in: unique } }, { _id: 1, name: 1 }).lean().exec();
+  },
+
   async findOneByNameInSubject(name, subjectId) {
     const nameRegex = new RegExp(`^${escapeRegex(name)}$`, 'i');
     return Topic.findOne({ subjectId, name: nameRegex }).lean().exec();
@@ -60,6 +67,8 @@ export const topicRepository = {
       name: data.name,
       subjectId: data.subjectId,
       order: data.order ?? 0,
+      canonicalTopicId: data.canonicalTopicId ?? null,
+      lineageMeta: data.lineageMeta ?? undefined,
     });
     return doc.toObject();
   },

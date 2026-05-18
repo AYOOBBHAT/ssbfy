@@ -7,6 +7,12 @@ import {
   createTopicValidators,
   updateTopicValidators,
 } from '../validators/topicValidators.js';
+import {
+  aliasTopicTaxonomyValidators,
+  mergeTopicsTaxonomyValidators,
+  renameTopicTaxonomyValidators,
+  splitTopicTaxonomyValidators,
+} from '../validators/topicTaxonomyValidators.js';
 
 const router = Router();
 
@@ -27,6 +33,44 @@ router.patch(
   updateTopicValidators,
   validateRequest,
   topicController.update
+);
+
+router.post(
+  '/taxonomy/backfill',
+  ...adminChain,
+  topicController.taxonomyBackfill
+);
+
+router.post(
+  '/taxonomy/merge',
+  ...adminChain,
+  mergeTopicsTaxonomyValidators,
+  validateRequest,
+  topicController.taxonomyMerge
+);
+
+router.post(
+  '/:id/taxonomy/rename',
+  ...adminChain,
+  renameTopicTaxonomyValidators,
+  validateRequest,
+  topicController.taxonomyRename
+);
+
+router.post(
+  '/:id/taxonomy/alias',
+  ...adminChain,
+  aliasTopicTaxonomyValidators,
+  validateRequest,
+  topicController.taxonomyAlias
+);
+
+router.post(
+  '/:id/taxonomy/split',
+  ...adminChain,
+  splitTopicTaxonomyValidators,
+  validateRequest,
+  topicController.taxonomySplit
 );
 
 export default router;
