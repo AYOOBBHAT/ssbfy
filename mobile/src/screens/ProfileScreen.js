@@ -125,11 +125,17 @@ export default function ProfileScreen({ navigation }) {
         onStart={goToTests}
         onOpenMockAttempt={(attemptId) => {
           const rootNav = navigation.getParent()?.getParent();
-          rootNav?.navigate('Result', { attemptId });
+          rootNav?.navigate('Result', {
+            attemptId,
+            learningSessionId: undefined,
+          });
         }}
         onOpenLearningSession={(learningSessionId) => {
           const rootNav = navigation.getParent()?.getParent();
-          rootNav?.navigate('Result', { learningSessionId });
+          rootNav?.navigate('Result', {
+            learningSessionId,
+            attemptId: undefined,
+          });
         }}
       />
 

@@ -9,6 +9,7 @@ import {
   Alert,
   BackHandler,
   Animated,
+  AppState,
 } from 'react-native';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
@@ -21,9 +22,9 @@ import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../servic
 import { getAttemptResult } from '../services/resultService';
 import { getLearningSession } from '../services/learningSessionService';
 import {
-  getLearningSessionCache,
   normalizeLearningSessionCachePayload,
   putLearningSessionCache,
+  removeLearningSessionCache,
 } from '../utils/learningSessionCache';
 import { getCachedTopicLabelMap, getTopics } from '../services/topicService';
 import { resolvePracticeTopicId } from '../utils/canonicalTopicResolve';
@@ -66,6 +67,19 @@ import {
   buildRetryStatsFromSummary,
   normalizeResultReviewParams,
 } from '../utils/resultReviewPayload';
+import {
+  createHydrationPayloadError,
+  validateAndNormalizeHistoricalPayload,
+  ensureRenderSafeReviewParams,
+  HYDRATION_PAYLOAD_ERROR,
+} from '../utils/resultHydrationPayload';
+import {
+  assertHydrationInvariants,
+  classifyHydrationError,
+  createResultHydrationTelemetry,
+  HYDRATION_OUTCOME,
+  resolveHistoricalHydrationErrorMessage,
+} from '../utils/resultHydrationTelemetry';
 
 /*
  * Manual QA — Result screen (mobile):
@@ -246,6 +260,137 @@ function mapLearningSessionToNavExtras(api) {
   };
 }
 
+/** P1: Hard cap so AsyncStorage/cache cannot block historical hydration indefinitely. */
+const HIST_CACHE_READ_TIMEOUT_MS = 5000;
+/** P1: Fail-safe for active historical load ownership (network + cache + parse). */
+const HIST_LOAD_TIMEOUT_MS = 25000;
+
+/**
+ * @param {string} sessionId
+ * @returns {Promise<object|null>}
+ */
+async function getLearningSessionCacheBounded(
+  sessionId,
+  timeoutMs = HIST_CACHE_READ_TIMEOUT_MS
+) {
+  let timer;
+  try {
+    const result = await Promise.race([
+      getLearningSessionCache(sessionId),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('Cache read timed out')),
+          timeoutMs
+        );
+      }),
+    ]);
+    return result;
+  } catch (e) {
+    if (__DEV__) {
+      logger.debug('[Result/historical] cache read failed', {
+        sessionId,
+        message: e?.message,
+      });
+    }
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * P1: Per-cycle historical hydration ownership — only the active loadId may drive UI.
+ * @returns {{ loadId: number, hydrationMode: string, startedAt: number, settled: boolean, uiLoadingReleased: boolean }}
+ */
+function createHistoricalLoadOwnership(loadId, hydrationMode) {
+  return {
+    loadId,
+    hydrationMode,
+    startedAt: Date.now(),
+    settled: false,
+    uiLoadingReleased: false,
+  };
+}
+
+function isActiveHistoricalOwnership(ownership, activeLoadIdRef) {
+  return (
+    !!ownership &&
+    !ownership.settled &&
+    ownership.loadId === activeLoadIdRef.current
+  );
+}
+
+function logHistoricalOwnership(event, ownership, activeLoadIdRef, extra = {}) {
+  if (!__DEV__) return;
+  logger.debug(`[Result/historical] ${event}`, {
+    loadId: ownership?.loadId,
+    hydrationMode: ownership?.hydrationMode,
+    activeLoadId: activeLoadIdRef.current,
+    settled: ownership?.settled,
+    uiLoadingReleased: ownership?.uiLoadingReleased,
+    ...extra,
+  });
+}
+
+/**
+ * P0: Single source of truth for Result server-hydration routing.
+ * `learningSessionId` in params always wins over a merged/stale `attemptId`.
+ * `inline` only when no valid server ids are present (fresh finish / reset stack).
+ */
+function resolveHydrationMode(routeParams) {
+  const p = routeParams && typeof routeParams === 'object' ? routeParams : {};
+  const learningSessionId = resolveMongoId(p.learningSessionId, 'learningSessionId');
+  const attemptId = resolveMongoId(p.attemptId, 'attemptId');
+  const hasQuestions = Array.isArray(p.questions) && p.questions.length > 0;
+  const hasCorrect =
+    Array.isArray(p.correctAnswers) && p.correctAnswers.length > 0;
+  const hasInline =
+    hasQuestions &&
+    hasCorrect &&
+    (p.immutableAttemptSnapshot === true || p.practiceRevealed === true);
+
+  // Learning-session hydration only when the route is not already a full reveal snapshot
+  // (matches legacy `needsLearningSessionFetch = !!learningSessionId && !hasInline`).
+  if (learningSessionId && !hasInline) {
+    return {
+      mode: 'learning-session',
+      learningSessionId,
+      attemptId: null,
+      staleAttemptParamPresent: !!attemptId,
+    };
+  }
+  if (learningSessionId && hasInline) {
+    return {
+      mode: 'inline',
+      learningSessionId: null,
+      attemptId: null,
+      staleAttemptParamPresent: !!attemptId,
+    };
+  }
+  if (attemptId) {
+    return {
+      mode: 'attempt',
+      learningSessionId: null,
+      attemptId,
+      staleAttemptParamPresent: false,
+    };
+  }
+  if (hasInline) {
+    return {
+      mode: 'inline',
+      learningSessionId: null,
+      attemptId: null,
+      staleAttemptParamPresent: !!attemptId,
+    };
+  }
+  return {
+    mode: 'none',
+    learningSessionId: null,
+    attemptId: null,
+    staleAttemptParamPresent: false,
+  };
+}
+
 function mapAttemptResultToNavExtras(api) {
   if (!api || typeof api !== 'object') return null;
   return {
@@ -283,210 +428,435 @@ export default function ResultScreen() {
   const { user } = useAuth();
   const { runOnce, runOnceAsync } = useNavigationActionLock();
   const heroOpacity = useRef(new Animated.Value(0)).current;
-  const routeAttemptId = useMemo(() => {
-    const p = route.params;
-    if (!p || typeof p !== 'object') return null;
-    return resolveMongoId(p.attemptId, 'attemptId');
-  }, [route.params]);
+  const hydration = useMemo(
+    () => resolveHydrationMode(route.params),
+    [route.params]
+  );
+  const hydrationMode = hydration.mode;
+  const hydrationLearningSessionId = hydration.learningSessionId;
+  const hydrationAttemptId = hydration.attemptId;
+  const needsServerHydration =
+    hydrationMode === 'attempt' || hydrationMode === 'learning-session';
 
-  const routeLearningSessionId = useMemo(() => {
-    const p = route.params;
-    if (!p || typeof p !== 'object') return null;
-    return resolveMongoId(p.learningSessionId, 'learningSessionId');
-  }, [route.params]);
-
-  const hasInlineImmutablePayload = useMemo(() => {
-    const p = route.params;
-    if (!p || typeof p !== 'object') return false;
-    const hasQuestions = Array.isArray(p.questions) && p.questions.length > 0;
-    const hasCorrect =
-      Array.isArray(p.correctAnswers) && p.correctAnswers.length > 0;
-    return (
-      hasQuestions &&
-      hasCorrect &&
-      (p.immutableAttemptSnapshot === true || p.practiceRevealed === true)
-    );
-  }, [route.params]);
-
-  const needsLearningSessionFetch =
-    !!routeLearningSessionId && !hasInlineImmutablePayload;
-
-  const loadGenRef = useRef(0);
-  /** In-flight historical fetches; loading clears only when this hits 0. */
+  /** Monotonic load id — active ownership must match this value. */
+  const activeLoadIdRef = useRef(0);
+  /** P1: Active historical hydration ownership (authoritative for histLoading). */
+  const activeOwnershipRef = useRef(null);
+  /** Telemetry only — must not gate histLoading. */
   const histPendingRef = useRef(0);
   const [historicalExtras, setHistoricalExtras] = useState(null);
-  const [histLoading, setHistLoading] = useState(
-    () => !!routeAttemptId || needsLearningSessionFetch
-  );
+  const [histLoading, setHistLoading] = useState(() => {
+    const h = resolveHydrationMode(route.params);
+    return h.mode === 'attempt' || h.mode === 'learning-session';
+  });
   const [histError, setHistError] = useState(null);
   const [retryTick, setRetryTick] = useState(0);
+  /** P3: Skip cache read for this cycle (retry / stale-cache recovery). */
+  const histSkipCacheRef = useRef(false);
+  const histRetryGenerationRef = useRef(0);
+  const histAbortRef = useRef(null);
+  const lastHydrationOutcomeRef = useRef(null);
 
-  const HIST_LOAD_WATCHDOG_MS = 25000;
+  const resetHistoricalHydrationForRetry = useCallback(() => {
+    histRetryGenerationRef.current += 1;
+    histSkipCacheRef.current = true;
+    activeLoadIdRef.current += 1;
+    const prev = activeOwnershipRef.current;
+    if (prev && !prev.settled) {
+      prev.settled = true;
+    }
+    activeOwnershipRef.current = null;
+    histPendingRef.current = 0;
+    if (histAbortRef.current) {
+      histAbortRef.current.abort();
+      histAbortRef.current = null;
+    }
+    if (hydrationLearningSessionId) {
+      void removeLearningSessionCache(hydrationLearningSessionId);
+    }
+    lastHydrationOutcomeRef.current = null;
+    setHistoricalExtras(null);
+    setHistError(null);
+    setHistLoading(true);
+    setRetryTick((t) => t + 1);
+  }, [hydrationLearningSessionId]);
 
   useEffect(() => {
-    if (!routeAttemptId && !needsLearningSessionFetch) {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'background' && nextState !== 'inactive') return;
+      if (histAbortRef.current) {
+        histAbortRef.current.abort();
+      }
+      const owner = activeOwnershipRef.current;
+      if (owner && !owner.settled) {
+        activeLoadIdRef.current += 1;
+        owner.settled = true;
+        activeOwnershipRef.current = null;
+        histPendingRef.current = 0;
+        setHistLoading(false);
+        lastHydrationOutcomeRef.current = HYDRATION_OUTCOME.REQUEST_CANCELLED;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!needsServerHydration) return;
+    assertHydrationInvariants('hist-state', {
+      loadingHasActiveOwner: !histLoading || Boolean(
+        activeOwnershipRef.current && !activeOwnershipRef.current.settled
+      ),
+      settledOwnerNotLoading: !(
+        activeOwnershipRef.current?.settled && histLoading
+      ),
+      extrasHaveQuestions: !historicalExtras ||
+        (Array.isArray(historicalExtras.questions) && historicalExtras.questions.length > 0),
+      noReviewWithoutQuestions: histLoading ||
+        !historicalExtras ||
+        (Array.isArray(historicalExtras.questions) && historicalExtras.questions.length > 0),
+    });
+  }, [needsServerHydration, histLoading, historicalExtras]);
+
+  useEffect(() => {
+    if (!needsServerHydration) {
+      const prev = activeOwnershipRef.current;
+      if (prev && !prev.settled) {
+        prev.settled = true;
+        activeLoadIdRef.current += 1;
+        logHistoricalOwnership('orphan ownership cleared (no server hydration)', prev, activeLoadIdRef);
+      }
+      activeOwnershipRef.current = null;
       histPendingRef.current = 0;
       setHistLoading(false);
       setHistoricalExtras(null);
       setHistError(null);
       return undefined;
     }
-    const gen = ++loadGenRef.current;
+
+    const loadId = ++activeLoadIdRef.current;
+    const ownership = createHistoricalLoadOwnership(loadId, hydrationMode);
+    activeOwnershipRef.current = ownership;
     const ac = new AbortController();
+    histAbortRef.current = ac;
+    const skipCache = histSkipCacheRef.current;
+    histSkipCacheRef.current = false;
+    const telemetry = createResultHydrationTelemetry({
+      loadId,
+      hydrationMode,
+      learningSessionId: hydrationLearningSessionId,
+      attemptId: hydrationAttemptId,
+      retryGeneration: histRetryGenerationRef.current,
+    });
     histPendingRef.current += 1;
     setHistLoading(true);
     setHistError(null);
-    if (routeAttemptId) {
-      setHistoricalExtras(null);
+    setHistoricalExtras(null);
+    lastHydrationOutcomeRef.current = null;
+
+    let fetchBranch = 'none';
+    if (hydrationMode === 'attempt') fetchBranch = 'getAttemptResult';
+    else if (hydrationMode === 'learning-session') fetchBranch = 'getLearningSession';
+
+    telemetry.log('load-start', { fetchBranch, skipCache, pending: histPendingRef.current });
+
+    if (__DEV__) {
+      const rawAttempt = route.params?.attemptId;
+      const rawLs = route.params?.learningSessionId;
+      logger.debug('[ResultScreen] hydration', {
+        hydrationMode,
+        routeAttemptId: rawAttempt,
+        routeLearningSessionId: rawLs,
+        resolvedAttemptId: hydrationAttemptId,
+        resolvedLearningSessionId: hydrationLearningSessionId,
+        fetchBranch,
+        staleAttemptIgnored:
+          hydrationMode === 'learning-session' && hydration.staleAttemptParamPresent,
+        inlineTookPrecedenceOverLearningSessionId:
+          hydrationMode === 'inline' && !!resolveMongoId(rawLs, 'learningSessionId'),
+      });
+      if (hydrationMode === 'learning-session' && hydration.staleAttemptParamPresent) {
+        logger.debug(
+          '[ResultScreen] hydrationMode=learning-session attemptId ignored due to learningSessionId precedence'
+        );
+      } else if (hydrationMode === 'inline' && resolveMongoId(rawLs, 'learningSessionId')) {
+        logger.debug(
+          '[ResultScreen] hydrationMode=inline server hydration skipped due to immutable snapshot (learningSessionId retained on route for receipts only)'
+        );
+      } else if (hydrationMode === 'attempt' && rawAttempt) {
+        logger.debug('[ResultScreen] hydrationMode=attempt using getAttemptResult branch');
+      } else if (hydrationMode === 'inline' && !rawLs) {
+        logger.debug('[ResultScreen] hydrationMode=inline no server hydration');
+      }
     }
 
-    logger.debug('[Result/historical] load start', {
-      gen,
-      attemptId: routeAttemptId,
-      learningSessionId: routeLearningSessionId,
-      pending: histPendingRef.current,
-    });
-
-    let loadSettled = false;
-    const settleHistoricalLoad = (reason) => {
-      if (loadSettled) return;
-      loadSettled = true;
-      histPendingRef.current = Math.max(0, histPendingRef.current - 1);
-      logger.debug('[Result/historical] load settle', {
-        gen,
-        reason,
-        pending: histPendingRef.current,
-        currentGen: loadGenRef.current,
-      });
-      if (histPendingRef.current === 0) {
-        setHistLoading(false);
-      }
+    let timeoutTimer = null;
+    let sessionOutcome = null;
+    let telemetryClosed = false;
+    const closeTelemetry = (outcome) => {
+      if (telemetryClosed) return;
+      telemetryClosed = true;
+      const finished = telemetry.finish({ sessionOutcome: outcome });
+      lastHydrationOutcomeRef.current = finished.outcome || outcome;
     };
+
+    const releaseHistLoadingUi = (reason) => {
+      if (!isActiveHistoricalOwnership(ownership, activeLoadIdRef)) return;
+      if (ownership.uiLoadingReleased) return;
+      ownership.uiLoadingReleased = true;
+      setHistLoading(false);
+      logHistoricalOwnership(`histLoading=false (${reason})`, ownership, activeLoadIdRef);
+    };
+
+    const settleHistoricalOwnership = (reason, { invalidateStale = false } = {}) => {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      if (ownership.settled) {
+        logHistoricalOwnership(`settle ignored (already settled): ${reason}`, ownership, activeLoadIdRef);
+        return;
+      }
+      const wasActive = ownership.loadId === activeLoadIdRef.current;
+      ownership.settled = true;
+      if (invalidateStale && wasActive) {
+        activeLoadIdRef.current += 1;
+      }
+      if (activeOwnershipRef.current?.loadId === ownership.loadId) {
+        activeOwnershipRef.current = null;
+      }
+      histPendingRef.current = Math.max(0, histPendingRef.current - 1);
+      if (wasActive && !ownership.uiLoadingReleased) {
+        ownership.uiLoadingReleased = true;
+        setHistLoading(false);
+        logHistoricalOwnership(`histLoading=false (${reason})`, ownership, activeLoadIdRef);
+      }
+      logHistoricalOwnership(`load settled: ${reason}`, ownership, activeLoadIdRef, {
+        wasActive,
+        pending: histPendingRef.current,
+        invalidated: invalidateStale && wasActive,
+      });
+    };
+
+    const applyIfOwner = (label, fn) => {
+      if (!isActiveHistoricalOwnership(ownership, activeLoadIdRef)) {
+        logHistoricalOwnership(`stale apply ignored (${label})`, ownership, activeLoadIdRef);
+        return false;
+      }
+      fn();
+      return true;
+    };
+
+    timeoutTimer = setTimeout(() => {
+      if (!isActiveHistoricalOwnership(ownership, activeLoadIdRef)) return;
+      telemetry.recordOutcome(HYDRATION_OUTCOME.NETWORK_TIMEOUT, 'watchdog');
+      sessionOutcome = HYDRATION_OUTCOME.NETWORK_TIMEOUT;
+      applyIfOwner('timeout-error', () => {
+        setHistError(
+          (prev) => prev || new Error('Request timed out. Please try again.')
+        );
+      });
+      settleHistoricalOwnership('watchdog-timeout', { invalidateStale: true });
+    }, HIST_LOAD_TIMEOUT_MS);
 
     (async () => {
       let cacheHadPayload = false;
       try {
-        if (needsLearningSessionFetch && routeLearningSessionId) {
-          const cached = normalizeLearningSessionCachePayload(
-            await getLearningSessionCache(routeLearningSessionId)
-          );
-          if (gen === loadGenRef.current && cached) {
+        if (
+          !skipCache &&
+          hydrationMode === 'learning-session' &&
+          hydrationLearningSessionId
+        ) {
+          telemetry.markCacheStart();
+          let cached = null;
+          try {
+            cached = normalizeLearningSessionCachePayload(
+              await getLearningSessionCacheBounded(hydrationLearningSessionId)
+            );
+          } catch {
+            cached = null;
+          }
+          telemetry.markCacheEnd({ hit: !!cached });
+          if (cached) {
+            telemetry.markValidationStart();
             const cachedMapped = mapLearningSessionToNavExtras(cached);
-            if (cachedMapped?.questions?.length) {
+            const cacheValidated = validateAndNormalizeHistoricalPayload(cachedMapped, {
+              source: 'cache',
+              rawApi: cached,
+              requireTestId: false,
+            });
+            telemetry.markValidationEnd();
+            if (cacheValidated.valid && cacheValidated.normalizedPayload?.questions?.length) {
               cacheHadPayload = true;
-              setHistoricalExtras(cachedMapped);
-              setHistError(null);
-              setHistLoading(false);
+              sessionOutcome = cacheValidated.recoverable
+                ? HYDRATION_OUTCOME.HYDRATION_RECOVERED
+                : HYDRATION_OUTCOME.CACHE_HIT;
+              telemetry.recordOutcome(sessionOutcome);
+              applyIfOwner('cache-hit', () => {
+                setHistoricalExtras(cacheValidated.normalizedPayload);
+                setHistError(null);
+              });
+              releaseHistLoadingUi('cache-hit');
+            } else {
+              telemetry.recordOutcome(HYDRATION_OUTCOME.CACHE_INVALID, cacheValidated.errorReason);
+              void removeLearningSessionCache(hydrationLearningSessionId);
             }
           }
+        } else if (skipCache && hydrationMode === 'learning-session') {
+          telemetry.markCacheEnd({ skipped: true });
+        }
+
+        if (!isActiveHistoricalOwnership(ownership, activeLoadIdRef)) {
+          telemetry.recordOutcome(HYDRATION_OUTCOME.STALE_LOAD_IGNORED, 'before-network');
+          sessionOutcome = HYDRATION_OUTCOME.STALE_LOAD_IGNORED;
+          return;
         }
 
         let raw = null;
-        if (routeAttemptId) {
-          raw = await getAttemptResult(routeAttemptId, { signal: ac.signal });
-        } else if (routeLearningSessionId) {
-          raw = await getLearningSession(routeLearningSessionId, { signal: ac.signal });
+        telemetry.markNetworkStart();
+        if (hydrationMode === 'attempt' && hydrationAttemptId) {
+          raw = await getAttemptResult(hydrationAttemptId, { signal: ac.signal });
+        } else if (hydrationMode === 'learning-session' && hydrationLearningSessionId) {
+          raw = await getLearningSession(hydrationLearningSessionId, { signal: ac.signal });
         }
+        telemetry.markNetworkEnd();
 
-        if (gen !== loadGenRef.current) {
-          logger.debug('[Result/historical] stale response ignored', {
-            gen,
-            currentGen: loadGenRef.current,
-          });
+        if (!isActiveHistoricalOwnership(ownership, activeLoadIdRef)) {
+          telemetry.recordOutcome(HYDRATION_OUTCOME.STALE_LOAD_IGNORED, 'after-network');
+          sessionOutcome = HYDRATION_OUTCOME.STALE_LOAD_IGNORED;
           return;
         }
 
-        const mapped = routeAttemptId
-          ? mapAttemptResultToNavExtras(raw)
-          : mapLearningSessionToNavExtras(raw);
+        const mapped =
+          hydrationMode === 'attempt'
+            ? mapAttemptResultToNavExtras(raw)
+            : hydrationMode === 'learning-session'
+            ? mapLearningSessionToNavExtras(raw)
+            : null;
 
-        const valid = routeAttemptId
-          ? !!mapped?.testId
-          : Array.isArray(mapped?.questions) && mapped.questions.length > 0;
+        telemetry.markValidationStart();
+        const validated = validateAndNormalizeHistoricalPayload(mapped, {
+          source: hydrationMode,
+          rawApi: raw,
+          requireTestId: hydrationMode === 'attempt',
+        });
+        telemetry.markValidationEnd();
 
-        if (!valid) {
+        if (!validated.valid) {
+          const failOutcome =
+            validated.errorCode === HYDRATION_PAYLOAD_ERROR.UNSUPPORTED
+              ? HYDRATION_OUTCOME.UNSUPPORTED_SNAPSHOT
+              : HYDRATION_OUTCOME.CORRUPT_PAYLOAD;
+          telemetry.recordOutcome(failOutcome, validated.errorReason);
+          sessionOutcome = failOutcome;
           if (!cacheHadPayload) {
-            setHistError(new Error('Invalid result payload'));
-            setHistoricalExtras(null);
+            applyIfOwner('invalid-payload', () => {
+              setHistoricalExtras(null);
+              setHistError(
+                createHydrationPayloadError(
+                  validated.errorCode || HYDRATION_PAYLOAD_ERROR.INVALID,
+                  validated.errorCode === HYDRATION_PAYLOAD_ERROR.UNSUPPORTED
+                    ? undefined
+                    : 'Invalid result payload'
+                )
+              );
+            });
           }
           return;
         }
 
-        setHistoricalExtras(mapped);
-        setHistError(null);
+        sessionOutcome = validated.recoverable
+          ? HYDRATION_OUTCOME.HYDRATION_RECOVERED
+          : HYDRATION_OUTCOME.SUCCESS;
+        telemetry.recordOutcome(sessionOutcome);
+        applyIfOwner('network-success', () => {
+          setHistoricalExtras(validated.normalizedPayload);
+          setHistError(null);
+        });
 
-        if (routeLearningSessionId && raw) {
-          void putLearningSessionCache(routeLearningSessionId, raw);
+        if (hydrationMode === 'learning-session' && hydrationLearningSessionId && raw) {
+          void putLearningSessionCache(hydrationLearningSessionId, raw);
         }
       } catch (e) {
         if (isRequestCancelled(e)) {
-          logger.debug('[Result/historical] request cancelled', {
-            gen,
-            currentGen: loadGenRef.current,
-          });
+          telemetry.recordOutcome(HYDRATION_OUTCOME.REQUEST_CANCELLED);
+          sessionOutcome = HYDRATION_OUTCOME.REQUEST_CANCELLED;
           return;
         }
-        if (gen !== loadGenRef.current) return;
-        if (needsLearningSessionFetch && cacheHadPayload) {
+        if (!isActiveHistoricalOwnership(ownership, activeLoadIdRef)) {
+          telemetry.recordOutcome(HYDRATION_OUTCOME.STALE_LOAD_IGNORED, 'error-path');
+          sessionOutcome = HYDRATION_OUTCOME.STALE_LOAD_IGNORED;
           return;
         }
-        setHistoricalExtras(null);
-        setHistError(e);
+        if (hydrationMode === 'learning-session' && cacheHadPayload) {
+          return;
+        }
+        const failOutcome = classifyHydrationError(e);
+        telemetry.recordOutcome(failOutcome, e?.message);
+        sessionOutcome = failOutcome;
+        applyIfOwner('error', () => {
+          setHistoricalExtras(null);
+          setHistError(e);
+        });
       } finally {
-        settleHistoricalLoad('finally');
+        if (!sessionOutcome && !ownership.settled) {
+          sessionOutcome = HYDRATION_OUTCOME.HYDRATION_FAILED;
+          telemetry.recordOutcome(sessionOutcome, 'unsettled-exit');
+        }
+        closeTelemetry(sessionOutcome || HYDRATION_OUTCOME.REQUEST_CANCELLED);
+        settleHistoricalOwnership('finally');
+        if (histAbortRef.current === ac) {
+          histAbortRef.current = null;
+        }
       }
     })();
+
     return () => {
-      logger.debug('[Result/historical] cleanup abort', {
-        gen,
-        currentGen: loadGenRef.current,
-      });
+      telemetry.log('effect-cleanup', { loadId });
       ac.abort();
+      if (histAbortRef.current === ac) {
+        histAbortRef.current = null;
+      }
+      if (isActiveHistoricalOwnership(ownership, activeLoadIdRef)) {
+        telemetry.recordOutcome(HYDRATION_OUTCOME.REQUEST_CANCELLED, 'cleanup');
+        closeTelemetry(HYDRATION_OUTCOME.REQUEST_CANCELLED);
+        settleHistoricalOwnership('effect-cleanup', { invalidateStale: true });
+      }
     };
   }, [
-    routeAttemptId,
-    routeLearningSessionId,
-    needsLearningSessionFetch,
+    hydrationMode,
+    hydrationAttemptId,
+    hydrationLearningSessionId,
+    needsServerHydration,
     retryTick,
   ]);
 
-  useEffect(() => {
-    const needsWatchdog = routeAttemptId || needsLearningSessionFetch;
-    if (!needsWatchdog || !histLoading) return undefined;
-
-    const watchdogGen = loadGenRef.current;
-    const id = setTimeout(() => {
-      if (histPendingRef.current <= 0) return;
-      if (loadGenRef.current !== watchdogGen) return;
-      logger.debug('[Result/historical] watchdog fired', {
-        watchdogGen,
-        pending: histPendingRef.current,
-      });
-      histPendingRef.current = 0;
-      loadGenRef.current += 1;
-      setHistLoading(false);
-      setHistError((prev) => {
-        if (prev) return prev;
-        return new Error('Request timed out. Please try again.');
-      });
-    }, HIST_LOAD_WATCHDOG_MS);
-
-    return () => clearTimeout(id);
-  }, [routeAttemptId, needsLearningSessionFetch, histLoading, retryTick]);
-
   const params = useMemo(() => {
     const base = route.params && typeof route.params === 'object' ? route.params : {};
-    if ((!routeAttemptId && !routeLearningSessionId) || !historicalExtras) return base;
+    if (!needsServerHydration || !historicalExtras) return base;
     const { attemptId: _a, learningSessionId: _l, ...rest } = base;
-    return { ...rest, ...historicalExtras };
-  }, [route.params, routeAttemptId, routeLearningSessionId, historicalExtras]);
+    const merged = { ...rest, ...historicalExtras };
+    const validated = validateAndNormalizeHistoricalPayload(merged, {
+      source: hydrationMode,
+      requireTestId: hydrationMode === 'attempt',
+    });
+    if (validated.valid) return validated.normalizedPayload;
+    return rest;
+  }, [route.params, needsServerHydration, historicalExtras, hydrationMode]);
 
   const hasParams = !!params && typeof params === 'object';
 
-  const reviewParams = useMemo(
-    () => normalizeResultReviewParams(params),
-    [params]
-  );
+  const reviewParams = useMemo(() => {
+    const base = normalizeResultReviewParams(params);
+    const needsReviewGuard =
+      needsServerHydration ||
+      base.viewingHistoricalAttempt ||
+      base.historicalAttemptMode ||
+      base.immutableAttemptSnapshot;
+    if (!needsReviewGuard) return base;
+    return ensureRenderSafeReviewParams(base, {
+      source: hydrationMode === 'inline' ? 'inline' : hydrationMode || 'review',
+    });
+  }, [params, needsServerHydration, hydrationMode]);
 
   const {
     testId,
@@ -1651,7 +2021,7 @@ export default function ResultScreen() {
     </View>
   );
 
-  const mustHydrateFromServer = !!routeAttemptId || needsLearningSessionFetch;
+  const mustHydrateFromServer = needsServerHydration;
 
   if (mustHydrateFromServer) {
     if (histLoading) {
@@ -1662,17 +2032,9 @@ export default function ResultScreen() {
       );
     }
     if (histError || !historicalExtras) {
-      const code = getApiErrorCode(histError);
-      const msg =
-        code === 'ATTEMPT_RESULTS_PENDING'
-          ? 'Results are still being prepared.'
-          : code === 'SESSION_SNAPSHOT_UNSUPPORTED'
-          ? 'This session uses an older saved format and cannot be opened on this version.'
-          : code === 'SESSION_SNAPSHOT_TOO_LARGE'
-          ? 'This session is too large to restore for review.'
-          : code === 'SESSION_SNAPSHOT_INVALID' || code === 'SESSION_SNAPSHOT_EMPTY'
-          ? 'This saved session is incomplete or no longer available.'
-          : getApiErrorMessage(histError) || 'Could not load results.';
+      const msg = resolveHistoricalHydrationErrorMessage(histError, {
+        outcome: lastHydrationOutcomeRef.current,
+      });
       return (
         <View style={styles.histGate}>
           <ErrorState
@@ -1680,7 +2042,7 @@ export default function ResultScreen() {
             title={ERROR_TITLES.open}
             message={msg}
             context="results"
-            onRetry={() => setRetryTick((t) => t + 1)}
+            onRetry={resetHistoricalHydrationForRetry}
             retrying={histLoading}
           />
         </View>

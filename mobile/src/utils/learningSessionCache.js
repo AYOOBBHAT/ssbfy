@@ -106,3 +106,22 @@ export async function getLearningSessionCache(sessionId) {
     return null;
   }
 }
+
+/**
+ * Remove a single cached session (corrupt / unsupported / retry refresh).
+ * @param {string} sessionId
+ * @returns {Promise<boolean>} true when an entry was removed
+ */
+export async function removeLearningSessionCache(sessionId) {
+  const id = String(sessionId ?? '').trim();
+  if (!id) return false;
+  try {
+    const store = await readStore();
+    if (!store[id]) return false;
+    delete store[id];
+    await writeStore(store);
+    return true;
+  } catch {
+    return false;
+  }
+}

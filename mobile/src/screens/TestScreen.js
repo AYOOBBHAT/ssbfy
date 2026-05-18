@@ -739,6 +739,8 @@ export default function TestScreen() {
             ? payload.correctAnswers
             : [],
           recoveredSubmit: !!navOptions.recoveredSubmit,
+          attemptId: undefined,
+          learningSessionId: undefined,
         },
         commitRef: navigationCommittedRef,
       });
@@ -1096,7 +1098,10 @@ export default function TestScreen() {
 
         const committed = resetStackToResult(navigation, {
           originMainTab: tab,
-          resultParams,
+          resultParams: {
+            ...resultParams,
+            attemptId: undefined,
+          },
           commitRef: navigationCommittedRef,
         });
         if (committed) {
