@@ -26,10 +26,15 @@ import { getQuotaProfileLine } from '../utils/mockQuotaCopy';
 import { getSubscriptionStatus, formatPlanDate } from '../utils/subscriptionStatus';
 import { getProfileAnalytics } from '../services/profileAnalyticsService';
 import { getAnalyticsOverview } from '../services/analyticsService';
+import ProfileActivitySections from '../components/profile/ProfileActivitySections';
 import {
   getAnalyticsOverviewCache,
   putAnalyticsOverviewCache,
 } from '../utils/analyticsCache';
+import {
+  getProfileAnalyticsCache,
+  putProfileAnalyticsCache,
+} from '../utils/profileAnalyticsCache';
 import { isRequestCancelled } from '../services/api';
 
 export default function ProfileScreen({ navigation }) {
@@ -51,14 +56,20 @@ export default function ProfileScreen({ navigation }) {
       const ac = new AbortController();
       (async () => {
         try {
-          const cached = await getAnalyticsOverviewCache();
+          const [cachedOverview, cachedProfile] = await Promise.all([
+            getAnalyticsOverviewCache(),
+            getProfileAnalyticsCache(),
+          ]);
           if (ac.signal.aborted) return;
-          if (cached?.payload) {
-            setOverview(cached.payload);
+          if (cachedOverview?.payload) {
+            setOverview(cachedOverview.payload);
             setOverviewStale(true);
           }
+          if (cachedProfile?.payload) {
+            setAnalytics(cachedProfile.payload);
+          }
 
-          setAnalyticsLoading(!cached?.payload);
+          setAnalyticsLoading(!cachedOverview?.payload && !cachedProfile?.payload);
           setAnalyticsError(false);
 
           const [profileData, overviewData] = await Promise.all([
@@ -67,6 +78,7 @@ export default function ProfileScreen({ navigation }) {
           ]);
           if (ac.signal.aborted) return;
           setAnalytics(profileData);
+          void putProfileAnalyticsCache(profileData);
           if (overviewData) {
             setOverview(overviewData);
             setOverviewStale(false);
@@ -412,15 +424,6 @@ function visualForStatus(status) {
   }
 }
 
-const LEARNING_SESSION_LABELS = {
-  topic: 'Topic practice',
-  smart: 'Smart practice',
-  weak: 'Weak topics',
-  daily: 'Daily practice',
-  retry: 'Retry session',
-  practice: 'Practice',
-};
-
 function ProgressSection({
   analytics,
   overview,
@@ -502,16 +505,6 @@ function ProgressSection({
   const dailyPracticeCount = Number(a.dailyPracticeCount) || 0;
   const smartPracticeCount = Number(a.smartPracticeCount) || 0;
   const recentAttempts = Array.isArray(a.recentAttempts) ? a.recentAttempts : [];
-  const recentLearningSessions = Array.isArray(a.recentLearningSessions)
-    ? a.recentLearningSessions
-    : [];
-
-  const formatMmSs = (totalSeconds) => {
-    const s = Math.max(0, Number(totalSeconds) || 0);
-    const mm = Math.floor(s / 60);
-    const ss = s % 60;
-    return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
-  };
 
   return (
     <View style={styles.progressCard}>
@@ -632,94 +625,11 @@ function ProgressSection({
         ) : null}
       </View>
 
-      {recentLearningSessions.length > 0 ? (
-        <View style={styles.recentAttemptsBlock}>
-          <Text style={styles.recentAttemptsTitle}>Recent practice sessions</Text>
-          {recentLearningSessions.slice(0, 5).map((sess, idx) => {
-            const typeKey = String(sess?.sessionType || 'practice').toLowerCase();
-            const title = LEARNING_SESSION_LABELS[typeKey] || 'Practice session';
-            const completedAt = sess?.completedAt
-              ? new Date(sess.completedAt).toLocaleString()
-              : '—';
-            const accuracy = sess?.accuracy != null ? `${String(sess.accuracy)}%` : '—';
-            const totalQ =
-              sess?.totalQuestions != null ? ` • ${String(sess.totalQuestions)} Q` : '';
-            return (
-              <Pressable
-                key={sess?.id || `ls-${idx}`}
-                onPress={() => {
-                  if (sess?.id) onOpenLearningSession?.(sess.id);
-                }}
-                disabled={!sess?.id || !onOpenLearningSession}
-                style={({ pressed }) => [
-                  styles.recentAttemptRow,
-                  pressCardStyle(pressed),
-                  (!sess?.id || !onOpenLearningSession) && styles.recentAttemptRowDisabled,
-                ]}
-              >
-                <View style={styles.recentAttemptLeft}>
-                  <Text style={styles.recentAttemptName} numberOfLines={1}>
-                    {title}
-                  </Text>
-                  <Text style={styles.recentAttemptMeta} numberOfLines={1}>
-                    {completedAt}
-                    {totalQ}
-                  </Text>
-                </View>
-                <View style={styles.recentAttemptRight}>
-                  <Text style={styles.recentAttemptScore}>{accuracy}</Text>
-                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {recentAttempts.length > 0 ? (
-        <View style={styles.recentAttemptsBlock}>
-          <Text style={styles.recentAttemptsTitle}>Recent mock attempts</Text>
-          {recentAttempts.slice(0, 5).map((att, idx) => {
-            const title = att?.testTitle ? String(att.testTitle) : 'Mock Test';
-            const attemptNo =
-              att?.attemptNumber != null ? `Attempt #${String(att.attemptNumber)}` : `Attempt ${idx + 1}`;
-            const endTime = att?.endTime ? new Date(att.endTime).toLocaleString() : '—';
-            const accuracy = att?.accuracy != null ? `${String(att.accuracy)}%` : '—';
-            const timeTaken =
-              att?.timeTaken != null && Number.isFinite(Number(att.timeTaken))
-                ? ` • ${formatMmSs(Number(att.timeTaken))}`
-                : '';
-            return (
-              <Pressable
-                key={att?.id || `${idx}`}
-                onPress={() => {
-                  if (att?.id) onOpenMockAttempt?.(att.id);
-                }}
-                disabled={!att?.id || !onOpenMockAttempt}
-                style={({ pressed }) => [
-                  styles.recentAttemptRow,
-                  pressCardStyle(pressed),
-                  (!att?.id || !onOpenMockAttempt) && styles.recentAttemptRowDisabled,
-                ]}
-              >
-                <View style={styles.recentAttemptLeft}>
-                  <Text style={styles.recentAttemptName} numberOfLines={1}>
-                    {title}
-                  </Text>
-                  <Text style={styles.recentAttemptMeta} numberOfLines={1}>
-                    {attemptNo} • {endTime}
-                    {timeTaken}
-                  </Text>
-                </View>
-                <View style={styles.recentAttemptRight}>
-                  <Text style={styles.recentAttemptScore}>{accuracy}</Text>
-                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+      <ProfileActivitySections
+        recentMocksFromAnalytics={recentAttempts}
+        onOpenMockAttempt={onOpenMockAttempt}
+        onOpenLearningSession={onOpenLearningSession}
+      />
     </View>
   );
 }
@@ -1112,39 +1022,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: '500',
   },
-
-  recentAttemptsBlock: {
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  recentAttemptsTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 10,
-  },
-  recentAttemptRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-  },
-  recentAttemptRowDisabled: {
-    opacity: 0.55,
-  },
-  recentAttemptLeft: { flex: 1, paddingRight: 12, minWidth: 0 },
-  recentAttemptName: { fontSize: 14, fontWeight: '700', color: colors.text },
-  recentAttemptMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
-  recentAttemptRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  recentAttemptScore: { fontSize: 14, fontWeight: '800', color: colors.text },
 
   sectionLabel: {
     fontSize: 12,

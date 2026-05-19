@@ -1,12 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = '@ssbfy/analytics_overview_v1';
-const TTL_MS = 6 * 60 * 60 * 1000;
+const KEY = '@ssbfy/profile_analytics_v1';
+const TTL_MS = 60 * 1000;
 
 /**
  * @returns {Promise<{ payload: object, savedAt: number } | null>}
  */
-export async function getAnalyticsOverviewCache() {
+export async function getProfileAnalyticsCache() {
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
@@ -23,7 +23,7 @@ export async function getAnalyticsOverviewCache() {
 /**
  * @param {object} payload
  */
-export async function putAnalyticsOverviewCache(payload) {
+export async function putProfileAnalyticsCache(payload) {
   if (!payload || typeof payload !== 'object') return;
   try {
     await AsyncStorage.setItem(
@@ -35,8 +35,8 @@ export async function putAnalyticsOverviewCache(payload) {
   }
 }
 
-/** Drop cached analytics overview (progress summary on Profile). */
-export async function clearAnalyticsOverviewCache() {
+/** Drop cached profile analytics (stats + recent mock attempts). */
+export async function clearProfileAnalyticsCache() {
   try {
     await AsyncStorage.removeItem(KEY);
   } catch {

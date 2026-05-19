@@ -56,24 +56,24 @@ export function buildRetryCtaCopy({ total, incorrect, unanswered, retryable, exa
   return { title, subtitle, encourage };
 }
 
-/** @param {number} remaining */
+/** @param {number} remaining — tertiary “another recovery round” CTA after retry Result. */
 export function buildRetryAgainCopy(remaining) {
-  if (remaining <= 0) return { title: 'Practice again', subtitle: '' };
+  if (remaining <= 0) return { title: 'Another recovery round', subtitle: '' };
   if (remaining === 1) {
     return {
-      title: 'Try once more',
-      subtitle: 'One question left — small win within reach',
+      title: 'Revisit last question',
+      subtitle: 'One left — short untimed pass',
     };
   }
   if (remaining >= 12) {
     return {
-      title: 'Keep going',
-      subtitle: `${remaining} left — take a breather, then continue in batches`,
+      title: 'Continue recovery',
+      subtitle: `${remaining} left — work in small batches`,
     };
   }
   return {
-    title: 'Practice again',
-    subtitle: `${remaining} to go — each round makes the ideas stick`,
+    title: 'Continue recovery',
+    subtitle: `${remaining} to revisit — optional extra round`,
   };
 }
 

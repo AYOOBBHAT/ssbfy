@@ -32,6 +32,11 @@ import AppButton from '../components/AppButton';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateView';
 import { EMPTY } from '../theme/stateCopy';
 import TestCountdownBar from '../components/TestCountdownBar';
+import RetrySessionBanner from '../components/retry/RetrySessionBanner';
+import {
+  getRetrySessionHint,
+  RETRY_FINISH_LABEL,
+} from '../utils/retrySessionPresentation';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { pressCardStyle } from '../utils/pressFeedback';
@@ -43,6 +48,7 @@ import {
 } from '../utils/testAttemptDraft';
 import { setOpenAttempt, clearOpenAttempt } from '../utils/openTestAttempts';
 import { captureFlowException } from '../monitoring/sentry';
+import { invalidateProfileCachesAfterSessionComplete } from '../utils/invalidateProfileCaches';
 import {
   resetStackToResult,
   MAIN_TABS,
@@ -141,21 +147,39 @@ export default function TestScreen() {
   const preloadedQuestions = isLocal && Array.isArray(params.questions) ? params.questions : null;
   const localHeaderLabel = isPractice
     ? 'Practice Mode'
-    : isRetry
-    ? 'Retry Mode'
     : isDaily
     ? 'Daily Practice'
     : null;
   const localFinishLabel = isRetry
-    ? 'Finish Retry'
+    ? RETRY_FINISH_LABEL
     : isDaily
     ? 'Finish Daily Practice'
     : 'Finish Practice';
+
+  const retryScopeCount =
+    Number(params.retryScopeCount) > 0
+      ? Number(params.retryScopeCount)
+      : questionIds.length;
+  const retrySourceKind =
+    params.retrySourceKind === 'mock' || params.retrySourceKind === 'practice'
+      ? params.retrySourceKind
+      : testId
+      ? 'mock'
+      : 'practice';
 
   const initialSeconds = useMemo(
     () => Math.max(0, Math.floor((Number(durationMinutes) || 0) * 60)),
     [durationMinutes]
   );
+
+  const retrySessionHint = useMemo(() => {
+    if (!isRetry) return null;
+    return getRetrySessionHint({
+      timed: initialSeconds > 0,
+      scopeCount: retryScopeCount,
+      sourceKind: retrySourceKind,
+    });
+  }, [isRetry, initialSeconds, retryScopeCount, retrySourceKind]);
 
   const idsKey = useMemo(() => questionIds.map((id) => String(id)).join(','), [questionIds]);
 
@@ -745,6 +769,7 @@ export default function TestScreen() {
         commitRef: navigationCommittedRef,
       });
       if (committed) {
+        void invalidateProfileCachesAfterSessionComplete();
         submissionCompletedRef.current = true;
         transitionInFlightRef.current = false;
         transitionStartedAtRef.current = 0;
@@ -1105,6 +1130,7 @@ export default function TestScreen() {
           commitRef: navigationCommittedRef,
         });
         if (committed) {
+          void invalidateProfileCachesAfterSessionComplete();
           submissionCompletedRef.current = true;
           transitionInFlightRef.current = false;
           transitionStartedAtRef.current = 0;
@@ -1283,9 +1309,11 @@ export default function TestScreen() {
   const totalQuestionsCount = questionIds.length;
   const skippedVisible = skippedQuestionIds.length;
   const markedVisible = markedForReviewIds.length;
-  const attemptSummaryLabel = `Attempted ${attempted} / ${totalQuestionsCount}${
-    !isLocal ? ` · Skipped ${skippedVisible} · Marked ${markedVisible}` : ''
-  }`;
+  const attemptSummaryLabel = isRetry
+    ? `Recovery ${attempted} / ${totalQuestionsCount} answered`
+    : `Attempted ${attempted} / ${totalQuestionsCount}${
+        !isLocal ? ` · Skipped ${skippedVisible} · Marked ${markedVisible}` : ''
+      }`;
 
   const countdownEl =
     initialSeconds > 0 ? (
@@ -1344,11 +1372,18 @@ export default function TestScreen() {
   if (!question) {
     return (
       <View style={styles.container}>
+        {isRetry && retrySessionHint ? (
+          <RetrySessionBanner
+            scopeLine={retrySessionHint.scope}
+            pacingLine={retrySessionHint.pacing}
+            sourceLine={retrySessionHint.source}
+          />
+        ) : null}
         {localHeaderLabel ? <Text style={styles.retryHeader}>{localHeaderLabel}</Text> : null}
         {countdownEl}
         <Text style={styles.attemptSummary}>{attemptSummaryLabel}</Text>
         <Text style={styles.header}>
-          Question {index + 1} / {total}
+          {isRetry ? 'Recovery' : 'Question'} {index + 1} / {total}
         </Text>
         <View style={styles.centered}>
           <Text>Question not available</Text>
@@ -1400,11 +1435,18 @@ export default function TestScreen() {
 
   return (
     <View key={screenKey} style={styles.container}>
+      {isRetry && retrySessionHint ? (
+        <RetrySessionBanner
+          scopeLine={retrySessionHint.scope}
+          pacingLine={retrySessionHint.pacing}
+          sourceLine={retrySessionHint.source}
+        />
+      ) : null}
       {localHeaderLabel ? <Text style={styles.retryHeader}>{localHeaderLabel}</Text> : null}
       {countdownEl}
       <Text style={styles.attemptSummary}>{attemptSummaryLabel}</Text>
       <Text style={styles.header}>
-        Question {index + 1} / {total}
+        {isRetry ? 'Recovery' : 'Question'} {index + 1} / {total}
       </Text>
       <ScrollView style={styles.scroll}>
         <Text style={styles.question}>

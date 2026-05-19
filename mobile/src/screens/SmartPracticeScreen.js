@@ -1,29 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getPosts } from '../services/pdfService';
-import { getSubjects, getTopicsForSubject } from '../services/noteService';
 import { postSmartPractice } from '../services/testService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
+import PracticeSetupSection from '../components/practice/PracticeSetupSection';
+import PracticeChipGrid from '../components/practice/PracticeChipGrid';
+import PracticeSetupChip from '../components/practice/PracticeSetupChip';
+import QuestionCountSegment from '../components/practice/QuestionCountSegment';
+import PracticeStartFooter from '../components/practice/PracticeStartFooter';
+import { usePracticeTaxonomy } from '../hooks/usePracticeTaxonomy';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
-import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
-import {
-  NAV_TRANSITION_LOCK_MS,
-  releaseLockAfter,
-  tryAcquireLock,
-} from '../utils/navigationGuard';
+import { NAV_TRANSITION_LOCK_MS, tryAcquireLock } from '../utils/navigationGuard';
 import { questionIdsFromDocs, resolveMongoId } from '../utils/mongoId.js';
 import { resolveTopicId } from '../utils/topicRef';
+import { formatTaxonomyLabel } from '../utils/formatTaxonomyLabel';
+import { buildPracticeSetupSummary } from '../utils/practiceSetupSummary';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'all', label: 'All' },
@@ -32,8 +26,6 @@ const DIFFICULTY_OPTIONS = [
   { id: 'hard', label: 'Hard' },
 ];
 
-const MIN_Q = 1;
-const MAX_Q = 50;
 const DEFAULT_Q = 10;
 
 export default function SmartPracticeScreen() {
@@ -47,19 +39,16 @@ export default function SmartPracticeScreen() {
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedTopicId, setSelectedTopicId] = useState('');
 
-  const [subjects, setSubjects] = useState([]);
-  const [subjectsLoading, setSubjectsLoading] = useState(false);
-  const [topics, setTopics] = useState([]);
-  const [topicsLoading, setTopicsLoading] = useState(false);
+  const { subjects, subjectsLoading, topics, topicsLoading } =
+    usePracticeTaxonomy(selectedSubjectId);
 
   const [difficulty, setDifficulty] = useState('all');
-  const [questionCount, setQuestionCount] = useState(String(DEFAULT_Q));
+  const [questionCount, setQuestionCount] = useState(DEFAULT_Q);
 
   const [startError, setStartError] = useState(null);
   const [starting, setStarting] = useState(false);
   const startLockRef = useRef(false);
   const postsLoadRef = useRef(null);
-  const subjectsLoadRef = useRef(null);
 
   const loadPosts = useCallback(async () => {
     postsLoadRef.current?.abort();
@@ -92,95 +81,67 @@ export default function SmartPracticeScreen() {
   }, [loadPosts]);
 
   useEffect(() => {
-    subjectsLoadRef.current?.abort();
-    const ac = new AbortController();
-    subjectsLoadRef.current = ac;
-    (async () => {
-      setSubjectsLoading(true);
-      try {
-        const data = await getSubjects({ signal: ac.signal });
-        if (subjectsLoadRef.current !== ac) return;
-        setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
-      } catch (e) {
-        if (isRequestCancelled(e) || subjectsLoadRef.current !== ac) return;
-        setSubjects([]);
-      } finally {
-        if (subjectsLoadRef.current === ac) {
-          setSubjectsLoading(false);
-        }
-      }
-    })();
-    return () => {
-      subjectsLoadRef.current?.abort();
-      subjectsLoadRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!selectedTopicId) return;
     if (!topics.some((t) => resolveTopicId(t?._id) === selectedTopicId)) {
       setSelectedTopicId('');
     }
   }, [topics, selectedTopicId]);
 
-  useEffect(() => {
-    const ac = new AbortController();
-    if (!selectedSubjectId) {
-      setTopics([]);
-      setSelectedTopicId('');
-      return undefined;
-    }
-    (async () => {
-      setTopicsLoading(true);
-      try {
-        const data = await getTopicsForSubject(selectedSubjectId, { signal: ac.signal });
-        if (ac.signal.aborted) return;
-        setTopics(Array.isArray(data?.topics) ? data.topics : []);
-      } catch (e) {
-        if (ac.signal.aborted || isRequestCancelled(e)) return;
-        setTopics([]);
-      } finally {
-        if (!ac.signal.aborted) setTopicsLoading(false);
-      }
-    })();
-    return () => {
-      ac.abort();
-    };
-  }, [selectedSubjectId]);
-
-  function pickPost(id) {
+  const pickPost = useCallback((id) => {
     const sid = String(id);
     setSelectedPostId((prev) => (String(prev) === sid ? '' : sid));
-  }
+  }, []);
 
-  function pickSubject(id) {
+  const pickSubject = useCallback((id) => {
     setSelectedSubjectId((prev) => (prev === id ? '' : id));
     setSelectedTopicId('');
-  }
+  }, []);
 
-  function pickTopic(id) {
+  const pickTopic = useCallback((id) => {
     setSelectedTopicId((prev) => (prev === id ? '' : id));
-  }
+  }, []);
 
-  const limitNum = useMemo(() => {
-    const n = parseInt(String(questionCount).trim(), 10);
-    if (!Number.isFinite(n)) return DEFAULT_Q;
-    return Math.min(MAX_Q, Math.max(MIN_Q, n));
-  }, [questionCount]);
+  const activePosts = useMemo(
+    () => posts.filter((p) => p?.isActive !== false),
+    [posts]
+  );
+
+  const selectedSubject = useMemo(
+    () => subjects.find((s) => String(s._id) === String(selectedSubjectId)) || null,
+    [subjects, selectedSubjectId]
+  );
+
+  const selectedTopic = useMemo(
+    () => topics.find((t) => resolveTopicId(t?._id) === selectedTopicId) || null,
+    [topics, selectedTopicId]
+  );
+
+  const selectedPost = useMemo(
+    () => activePosts.find((p) => String(p._id) === String(selectedPostId)) || null,
+    [activePosts, selectedPostId]
+  );
+
+  const summary = useMemo(
+    () =>
+      buildPracticeSetupSummary({
+        count: questionCount,
+        difficulty,
+        subject: selectedSubject,
+        topic: selectedTopic,
+        post: selectedPost,
+      }),
+    [questionCount, difficulty, selectedSubject, selectedTopic, selectedPost]
+  );
 
   const canStart = !starting;
 
-  const handleAdjustCount = (delta) => {
-    setQuestionCount(String(Math.min(MAX_Q, Math.max(MIN_Q, limitNum + delta))));
-  };
-
-  const handleStart = async () => {
+  const handleStart = useCallback(async () => {
     if (!canStart || !tryAcquireLock(startLockRef)) return;
     setStartError(null);
     setStarting(true);
     try {
       const body = {
-        limit: limitNum,
+        limit: questionCount,
       };
       const postId = resolveMongoId(selectedPostId, 'postId');
       if (postId) body.postId = postId;
@@ -214,81 +175,15 @@ export default function SmartPracticeScreen() {
         setStarting(false);
       }, NAV_TRANSITION_LOCK_MS);
     }
-  };
-
-  const activePosts = useMemo(
-    () => posts.filter((p) => p?.isActive !== false),
-    [posts]
-  );
-
-  const renderChipRow = (label, items, selectedId, onSelect, loading, emptyHint) => {
-    if (loading) {
-      return (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>{label}</Text>
-          <View style={styles.cardPad}>
-            <LoadingState compact />
-          </View>
-        </View>
-      );
-    }
-    if (!items?.length) {
-      return (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>{label}</Text>
-          <View style={styles.cardPad}>
-            <EmptyState compact title={emptyHint} glyph="filter" />
-          </View>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{label}</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
-          {items.map((it) => {
-            const id = String(it._id);
-            const active = String(selectedId) === id;
-            return (
-              <Pressable
-                key={id}
-                onPress={() => onSelect(it._id)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  active && styles.chipActive,
-                  pressCardStyle(pressed),
-                ]}
-              >
-                <Text
-                  style={[styles.chipText, active && styles.chipTextActive]}
-                  numberOfLines={1}
-                >
-                  {it?.name || it?.slug || '—'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        {label === 'Post (optional filter)' ? (
-          <Text style={styles.hint}>
-            {selectedId
-              ? 'Tap the selected post again to clear this filter.'
-              : 'Optional — tap a post to filter by exam tag only.'}
-          </Text>
-        ) : null}
-        {label === 'Subject' && selectedId ? (
-          <Text style={styles.hint}>Tap again to clear — practice without a subject filter.</Text>
-        ) : null}
-        {label === 'Topic' && selectedId ? (
-          <Text style={styles.hint}>Tap again to clear — practice the whole subject.</Text>
-        ) : null}
-      </View>
-    );
-  };
+  }, [
+    canStart,
+    questionCount,
+    selectedPostId,
+    selectedSubjectId,
+    selectedTopicId,
+    difficulty,
+    navigation,
+  ]);
 
   if (postsLoading) {
     return (
@@ -323,230 +218,164 @@ export default function SmartPracticeScreen() {
     >
       <Text style={styles.title}>Practice by Topic</Text>
       <Text style={styles.subtitle}>
-        Pick optional filters, then start practice. Subject and topic are optional; topics appear
-        after you choose a subject. Questions run with no timer.
+        Choose what to practice — subject, focus, and difficulty. No timer; learn at your pace.
       </Text>
 
-      {renderChipRow(
-        'Post (optional filter)',
-        activePosts,
-        selectedPostId,
-        pickPost,
-        false,
-        'All posts'
-      )}
-
-      {renderChipRow(
-        'Subject',
-        subjects,
-        selectedSubjectId,
-        pickSubject,
-        subjectsLoading,
-        'No subjects available yet'
-      )}
-
-      {selectedSubjectId
-        ? renderChipRow(
-            'Topic (optional)',
-            topics,
-            selectedTopicId,
-            pickTopic,
-            topicsLoading,
-            'No topics yet — practice the whole subject instead'
-          )
-        : null}
-
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Difficulty</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
-          {DIFFICULTY_OPTIONS.map((opt) => {
-            const active = difficulty === opt.id;
-            return (
-              <Pressable
-                key={opt.id}
-                onPress={() => setDifficulty(opt.id)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  active && styles.chipActive,
-                  pressCardStyle(pressed),
-                ]}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Number of questions ({MIN_Q}–{MAX_Q})</Text>
-        <View style={styles.countRow}>
-          <Pressable
-            onPress={() => handleAdjustCount(-1)}
-            style={({ pressed }) => [styles.countBtn, pressCardStyle(pressed)]}
-          >
-            <Text style={styles.countBtnText}>−</Text>
-          </Pressable>
-          <TextInput
-            style={styles.countInput}
-            value={questionCount}
-            onChangeText={setQuestionCount}
-            keyboardType="number-pad"
-            maxLength={2}
+      <PracticeSetupSection
+        step={1}
+        title="Subject"
+        helper="Optional — leave blank to mix across subjects."
+        selectedHint={
+          selectedSubject
+            ? `Selected: ${formatTaxonomyLabel(selectedSubject.name || selectedSubject.slug)}`
+            : null
+        }
+      >
+        {subjectsLoading && subjects.length === 0 ? (
+          <View style={styles.inlineLoading}>
+            <LoadingState compact />
+          </View>
+        ) : subjects.length === 0 ? (
+          <EmptyState compact title="No subjects available yet" glyph="filter" />
+        ) : (
+          <PracticeChipGrid
+            items={subjects}
+            selectedId={selectedSubjectId}
+            onSelect={pickSubject}
+            getId={(it) => it._id}
           />
-          <Pressable
-            onPress={() => handleAdjustCount(1)}
-            style={({ pressed }) => [styles.countBtn, pressCardStyle(pressed)]}
-          >
-            <Text style={styles.countBtnText}>+</Text>
-          </Pressable>
-          <Text style={styles.countHint}>Default {DEFAULT_Q}</Text>
-        </View>
-      </View>
+        )}
+      </PracticeSetupSection>
 
-      {startError ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{startError}</Text>
-        </View>
+      {selectedSubjectId ? (
+        <PracticeSetupSection
+          step={2}
+          title="Topic"
+          helper="Optional — narrow to one topic, or practice the whole subject."
+          selectedHint={
+            selectedTopic
+              ? `Selected: ${formatTaxonomyLabel(selectedTopic.name || selectedTopic.slug)}`
+              : null
+          }
+        >
+          {topicsLoading && topics.length === 0 ? (
+            <View style={styles.inlineLoading}>
+              <LoadingState compact />
+            </View>
+          ) : topics.length === 0 ? (
+            <EmptyState
+              compact
+              title="No topics yet — we'll use the full subject"
+              glyph="filter"
+            />
+          ) : (
+            <PracticeChipGrid
+              items={topics}
+              selectedId={selectedTopicId}
+              onSelect={pickTopic}
+              getId={(it) => resolveTopicId(it._id)}
+            />
+          )}
+        </PracticeSetupSection>
       ) : null}
 
-      <Pressable
-        onPress={handleStart}
-        disabled={!canStart}
-        style={({ pressed }) => [
-          styles.primaryBtn,
-          (!canStart || starting) && styles.primaryBtnDisabled,
-          pressFeedbackStyle(pressed, !canStart || starting),
-        ]}
+      <PracticeSetupSection
+        step={selectedSubjectId ? 3 : 2}
+        title="Difficulty"
+        helper="Filter by question difficulty, or keep All."
       >
-        {starting ? (
-          <ActivityIndicator color={colors.textOnPrimary} />
-        ) : (
-          <Text style={styles.primaryBtnText}>Start Practice</Text>
-        )}
-      </Pressable>
+        <View style={styles.difficultyWrap}>
+          {DIFFICULTY_OPTIONS.map((opt) => (
+            <View key={opt.id} style={styles.difficultyCell}>
+              <PracticeSetupChip
+                label={opt.label}
+                selected={difficulty === opt.id}
+                onPress={() => setDifficulty(opt.id)}
+                compact
+              />
+            </View>
+          ))}
+        </View>
+      </PracticeSetupSection>
+
+      <PracticeSetupSection
+        step={selectedSubjectId ? 4 : 3}
+        title="Number of questions"
+        helper="Quick presets — you can change anytime before starting."
+      >
+        <QuestionCountSegment value={questionCount} onChange={setQuestionCount} />
+      </PracticeSetupSection>
+
+      <PracticeSetupSection
+        step={selectedSubjectId ? 5 : 4}
+        title="Exam filter"
+        optional
+        helper="Filter by recruitment / exam tag. Skip if you want all posts."
+        selectedHint={
+          selectedPost
+            ? `Filter: ${formatTaxonomyLabel(selectedPost.name || selectedPost.slug)}`
+            : null
+        }
+      >
+        <PracticeChipGrid
+          items={activePosts}
+          selectedId={selectedPostId}
+          onSelect={pickPost}
+          getId={(it) => it._id}
+        />
+      </PracticeSetupSection>
+
+      <PracticeStartFooter
+        headline={summary.headline}
+        sublines={summary.sublines}
+        helperText="Tap a selected chip again to clear that filter."
+        error={startError}
+        starting={starting}
+        disabled={!canStart}
+        onStart={handleStart}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 40 },
+  content: { padding: 16, paddingBottom: 36 },
   center: { flex: 1, justifyContent: 'center', backgroundColor: colors.bg },
   centerPad: { flex: 1, padding: 16, backgroundColor: colors.bg },
 
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: colors.text,
+    letterSpacing: -0.4,
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 14,
     color: colors.muted,
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 21,
+    marginBottom: 22,
+    maxWidth: 400,
   },
 
-  section: { marginBottom: 18 },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.muted,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  cardPad: {
+  inlineLoading: {
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  chipsRow: { flexDirection: 'row', flexWrap: 'nowrap', paddingBottom: 4 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 8,
-    maxWidth: 220,
-  },
-  chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  chipTextActive: { color: colors.textOnPrimary },
-  hint: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 6,
-    fontStyle: 'italic',
-  },
-  muted: { fontSize: 13, color: colors.muted },
 
-  countRow: {
+  difficultyWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 10,
+    marginHorizontal: -4,
   },
-  countBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countBtnText: { fontSize: 22, fontWeight: '700', color: colors.text },
-  countInput: {
-    minWidth: 56,
-    height: 44,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  countHint: { fontSize: 13, color: colors.muted },
-
-  errorBanner: {
-    backgroundColor: colors.dangerSoft,
-    borderWidth: 1,
-    borderColor: colors.danger,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-  },
-  errorText: { color: colors.danger, fontSize: 14, fontWeight: '600' },
-
-  primaryBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryBtnDisabled: { opacity: 0.55 },
-  primaryBtnText: {
-    color: colors.textOnPrimary,
-    fontSize: 17,
-    fontWeight: '700',
+  difficultyCell: {
+    width: '25%',
+    minWidth: 72,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
 });

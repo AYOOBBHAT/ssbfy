@@ -10,6 +10,7 @@ import {
   sanitizeSmartPracticeBody,
 } from './mongoId.js';
 import logger from './logger.js';
+import { formatTaxonomyLabel } from './formatTaxonomyLabel.js';
 
 function devWarn(message, meta) {
   if (__DEV__) {
@@ -409,7 +410,7 @@ export function buildRenderableWeakTopics(normalizedRows, labelMapOrContext = {}
       topicId: row.topicId,
       mistakeCount,
       ...(row.topicName ? { topicName: row.topicName } : {}),
-      displayLabel,
+      displayLabel: formatTaxonomyLabel(displayLabel),
       ...(__DEV__ && labelSource ? { labelSource } : {}),
     });
   }
