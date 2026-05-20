@@ -18,6 +18,7 @@ import {
 } from '../navigation/testFlowNavigation';
 import * as WebBrowser from 'expo-web-browser';
 import { getQuestionsByTopic, getWeakPractice, getTestAttempts } from '../services/testService';
+import { issuePracticeSession } from '../services/practiceService';
 import { getAttemptResult } from '../services/resultService';
 import { getLearningSession } from '../services/learningSessionService';
 import {
@@ -1221,26 +1222,50 @@ export default function ResultScreen() {
       );
     }
     const retryableCount = retryable.length;
-    runOnce(() => {
-      navigation.navigate('Test', {
-        mode: 'retry',
-        questionIds: questionIdsFromDocs(retryable),
-        questions: retryable,
-        historicalAttemptMode: isHistoricalAttempt,
-        sourceAttemptId: historicalAttemptId || undefined,
-        retryScopeCount: retryableCount,
-        retrySourceKind: isMock ? 'mock' : 'practice',
-        originMainTab: resolveRetryOriginMainTab({
-          returnMainTab,
-          isHistoricalAttempt,
-          testId,
-        }),
-        // Do not pass testId in historical mode — retry must not touch live test APIs.
-        ...(() => {
-          const tid = !isHistoricalAttempt ? resolveMongoId(testId, 'testId') : null;
-          return tid ? { testId: tid } : {};
-        })(),
-      });
+    const sourceForIssue =
+      historicalAttemptId ||
+      (retryMeta && retryMeta.sourceAttemptId != null ? String(retryMeta.sourceAttemptId) : null);
+    if (!sourceForIssue) {
+      Alert.alert('Unable to start practice', 'Missing attempt reference for retry.');
+      return;
+    }
+    void runOnceAsync(async () => {
+      const qids = questionIdsFromDocs(retryable);
+      try {
+        const issued = await issuePracticeSession({
+          practiceType: 'retry',
+          questionIds: qids,
+          sourceAttemptId: sourceForIssue,
+        });
+        const practiceSessionId = issued?.practiceSessionId;
+        if (!practiceSessionId) {
+          Alert.alert('Unable to start practice', 'Could not authorize this retry session.');
+          return;
+        }
+        navigation.navigate('Test', {
+          mode: 'retry',
+          questionIds: qids,
+          questions: retryable,
+          practiceSessionId,
+          historicalAttemptMode: isHistoricalAttempt,
+          sourceAttemptId: sourceForIssue,
+          retryScopeCount: retryableCount,
+          retrySourceKind: isMock ? 'mock' : 'practice',
+          originMainTab: resolveRetryOriginMainTab({
+            returnMainTab,
+            isHistoricalAttempt,
+            testId,
+          }),
+          ...(() => {
+            const tid = !isHistoricalAttempt ? resolveMongoId(testId, 'testId') : null;
+            return tid ? { testId: tid } : {};
+          })(),
+        });
+      } catch (e) {
+        if (!isRequestCancelled(e)) {
+          Alert.alert('Unable to start practice', getApiErrorMessage(e));
+        }
+      }
     });
   };
 
@@ -1253,25 +1278,46 @@ export default function ResultScreen() {
       (retryMeta && retryMeta.sourceAttemptId != null
         ? String(retryMeta.sourceAttemptId)
         : null);
-    runOnce(() => {
-      navigation.navigate('Test', {
-        mode: 'retry',
-        questionIds: retryWrongQuestionIds,
-        questions: retryWrongQuestions,
-        historicalAttemptMode: histRetry,
-        sourceAttemptId: sourceId || undefined,
-        retryScopeCount: retryWrongQuestionIds.length,
-        retrySourceKind: testId && !histRetry ? 'mock' : 'practice',
-        originMainTab: resolveRetryOriginMainTab({
-          returnMainTab,
-          isHistoricalAttempt: histRetry,
-          testId,
-        }),
-        ...(() => {
-          const tid = !histRetry ? resolveMongoId(testId, 'testId') : null;
-          return tid ? { testId: tid } : {};
-        })(),
-      });
+    if (!sourceId) {
+      Alert.alert('Unable to start practice', 'Missing attempt reference for retry.');
+      return;
+    }
+    void runOnceAsync(async () => {
+      try {
+        const issued = await issuePracticeSession({
+          practiceType: 'retry',
+          questionIds: retryWrongQuestionIds,
+          sourceAttemptId: sourceId,
+        });
+        const practiceSessionId = issued?.practiceSessionId;
+        if (!practiceSessionId) {
+          Alert.alert('Unable to start practice', 'Could not authorize this retry session.');
+          return;
+        }
+        navigation.navigate('Test', {
+          mode: 'retry',
+          questionIds: retryWrongQuestionIds,
+          questions: retryWrongQuestions,
+          practiceSessionId,
+          historicalAttemptMode: histRetry,
+          sourceAttemptId: sourceId,
+          retryScopeCount: retryWrongQuestionIds.length,
+          retrySourceKind: testId && !histRetry ? 'mock' : 'practice',
+          originMainTab: resolveRetryOriginMainTab({
+            returnMainTab,
+            isHistoricalAttempt: histRetry,
+            testId,
+          }),
+          ...(() => {
+            const tid = !histRetry ? resolveMongoId(testId, 'testId') : null;
+            return tid ? { testId: tid } : {};
+          })(),
+        });
+      } catch (e) {
+        if (!isRequestCancelled(e)) {
+          Alert.alert('Unable to start practice', getApiErrorMessage(e));
+        }
+      }
     });
   };
 
@@ -1518,11 +1564,17 @@ export default function ResultScreen() {
           setPracticeError('No practice questions available for this topic.');
           return;
         }
+        const practiceSessionId = data?.practiceSessionId;
+        if (!practiceSessionId) {
+          setPracticeError('Could not start practice session. Please try again.');
+          return;
+        }
         navigation.navigate('Test', {
           mode: 'practice',
           practiceType: 'weak',
           questions: fetched,
           questionIds,
+          practiceSessionId,
           originMainTab: resolveRetryOriginMainTab({
             returnMainTab,
             isHistoricalAttempt,
@@ -1552,11 +1604,21 @@ export default function ResultScreen() {
           setPracticeError('No practice questions available for this topic.');
           return;
         }
+        const issued = await issuePracticeSession({
+          practiceType: 'topic',
+          questionIds,
+        });
+        const practiceSessionId = issued?.practiceSessionId;
+        if (!practiceSessionId) {
+          setPracticeError('Could not start practice session. Please try again.');
+          return;
+        }
         navigation.navigate('Test', {
           mode: 'practice',
           practiceType: 'topic',
           questionIds,
           questions: limited,
+          practiceSessionId,
           originMainTab: resolveRetryOriginMainTab({
             returnMainTab,
             isHistoricalAttempt,

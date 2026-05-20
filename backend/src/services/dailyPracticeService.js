@@ -4,6 +4,7 @@ import { questionRepository } from '../repositories/questionRepository.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { logger } from '../utils/logger.js';
 import { projectPublicQuestions } from './questionService.js';
+import { practiceIssuanceService } from './practiceIssuanceService.js';
 
 const DAILY_PRACTICE_LIMIT = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -15,9 +16,17 @@ function startOfUtcDay(date) {
 }
 
 export const dailyPracticeService = {
-  async getDailyPractice() {
+  async getDailyPractice(userId) {
     const raw = await questionRepository.findRandomActive(DAILY_PRACTICE_LIMIT);
-    return { questions: projectPublicQuestions(raw) };
+    const orderedIds = raw.map((q) => q._id);
+    const issuance = await practiceIssuanceService.createIssuance(userId, 'daily', orderedIds, {
+      allowInactiveScoring: false,
+    });
+    return {
+      questions: projectPublicQuestions(raw),
+      practiceSessionId: String(issuance._id),
+      expiresAt: issuance.expiresAt,
+    };
   },
 
   /**

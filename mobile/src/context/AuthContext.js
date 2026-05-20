@@ -13,6 +13,11 @@ import api, { setAuthToken, clearAuthToken, isRequestCancelled } from '../servic
 import { withSingleAuthNetworkRetry } from '../utils/authNetworkRetry.js';
 import { clearTopicsCache } from '../services/topicService';
 import { setMonitoringUser } from '../monitoring/sentry';
+import {
+  invalidateSensitiveCachesOnLogout,
+  removeLegacySensitiveAsyncKeys,
+  setActiveCacheUserId,
+} from '../utils/authScopedCache';
 
 const STORAGE_KEY = '@ssbfy/auth_session';
 
@@ -46,6 +51,11 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   useEffect(() => {
+    const uid = user?._id ?? user?.id ?? null;
+    setActiveCacheUserId(uid);
+  }, [user?._id, user?.id]);
+
+  useEffect(() => {
     const ac = new AbortController();
     (async () => {
       try {
@@ -68,6 +78,7 @@ export function AuthProvider({ children }) {
               if (ac.signal.aborted) return;
               if (freshUser && typeof freshUser === 'object') {
                 setUser(freshUser);
+                await removeLegacySensitiveAsyncKeys();
                 await persistSession(t, freshUser);
               }
             } catch (e) {
@@ -120,6 +131,7 @@ export function AuthProvider({ children }) {
       setUser(u);
       setToken(t);
       setAuthToken(t);
+      await removeLegacySensitiveAsyncKeys();
       await persistSession(t, u);
       return { user: u };
     } finally {
@@ -148,6 +160,7 @@ export function AuthProvider({ children }) {
       setUser(u);
       setToken(t);
       setAuthToken(t);
+      await removeLegacySensitiveAsyncKeys();
       await persistSession(t, u);
       return { user: u };
     } finally {
@@ -182,13 +195,17 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    const previousUserId = user?._id ?? user?.id ?? null;
     loginAbortRef.current?.abort();
-    setUser(null);
-    setToken(null);
+    refreshUserAbortRef.current?.abort();
     clearAuthToken();
+    setToken(null);
+    setUser(null);
+    setActiveCacheUserId(null);
+    await invalidateSensitiveCachesOnLogout(previousUserId);
     clearTopicsCache();
     await clearStoredSession();
-  }, []);
+  }, [user]);
 
   const value = useMemo(
     () => ({

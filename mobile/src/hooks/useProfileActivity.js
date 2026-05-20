@@ -40,7 +40,7 @@ export function normalizeMockActivityRow(row) {
  * Practice: `/learning-sessions/recent` (limit 3, then 15 on expand).
  * Mocks: sliced from profile analytics payload (no extra request).
  */
-export function useProfileActivity(recentMocksFromAnalytics) {
+export function useProfileActivity(recentMocksFromAnalytics, cacheOwnerUserId) {
   const [ready, setReady] = useState(false);
   const [practice, setPractice] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -58,6 +58,13 @@ export function useProfileActivity(recentMocksFromAnalytics) {
     const source = Array.isArray(recentMocksFromAnalytics) ? recentMocksFromAnalytics : [];
     allMocks.current = source.map(normalizeMockActivityRow).filter(Boolean);
   }, [recentMocksFromAnalytics]);
+
+  /** Prevent cross-account flash: practice rows are local state keyed off scoped cache. */
+  useEffect(() => {
+    setPractice([]);
+    setPracticeExpanded(false);
+    setMocksExpanded(false);
+  }, [cacheOwnerUserId]);
 
   const loadPractice = useCallback(async (practiceLimit, signal, { preferCache = true } = {}) => {
     try {
@@ -92,18 +99,20 @@ export function useProfileActivity(recentMocksFromAnalytics) {
 
   useEffect(() => {
     if (!ready) return undefined;
+    if (cacheOwnerUserId == null || cacheOwnerUserId === '') return undefined;
 
     const ac = new AbortController();
     const practiceLimit = practiceExpanded ? EXPANDED_PRACTICE_LIMIT : PROFILE_ACTIVITY_PREVIEW;
     void loadPractice(practiceLimit, ac.signal, { preferCache: true });
 
     return () => ac.abort();
-  }, [ready, practiceExpanded, loadPractice]);
+  }, [ready, practiceExpanded, loadPractice, cacheOwnerUserId]);
 
   /** Refetch when Profile regains focus after cache invalidation (post-completion). */
   useFocusEffect(
     useCallback(() => {
       if (!ready) return undefined;
+      if (cacheOwnerUserId == null || cacheOwnerUserId === '') return undefined;
 
       const ac = new AbortController();
       let cancelled = false;
@@ -120,7 +129,7 @@ export function useProfileActivity(recentMocksFromAnalytics) {
         cancelled = true;
         ac.abort();
       };
-    }, [ready, practiceExpanded, loadPractice])
+    }, [ready, practiceExpanded, loadPractice, cacheOwnerUserId])
   );
 
   const mocks = mocksExpanded

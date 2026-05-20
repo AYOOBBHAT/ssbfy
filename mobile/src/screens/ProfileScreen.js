@@ -94,7 +94,7 @@ export default function ProfileScreen({ navigation }) {
       return () => {
         ac.abort();
       };
-    }, [])
+    }, [user?._id, user?.id])
   );
 
   const goPremium = (from) => navigation.navigate('Premium', { from });
@@ -134,6 +134,7 @@ export default function ProfileScreen({ navigation }) {
         overviewStale={overviewStale}
         loading={analyticsLoading}
         error={analyticsError}
+        cacheOwnerUserId={user?._id ?? user?.id ?? null}
         onStart={goToTests}
         onOpenMockAttempt={(attemptId) => {
           const rootNav = navigation.getParent()?.getParent();
@@ -430,6 +431,7 @@ function ProgressSection({
   overviewStale,
   loading,
   error,
+  cacheOwnerUserId,
   onStart,
   onOpenMockAttempt,
   onOpenLearningSession,
@@ -626,6 +628,7 @@ function ProgressSection({
       </View>
 
       <ProfileActivitySections
+        cacheOwnerUserId={cacheOwnerUserId}
         recentMocksFromAnalytics={recentAttempts}
         onOpenMockAttempt={onOpenMockAttempt}
         onOpenLearningSession={onOpenLearningSession}

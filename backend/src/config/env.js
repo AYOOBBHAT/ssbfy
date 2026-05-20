@@ -1,4 +1,8 @@
 import dotenv from 'dotenv';
+import {
+  DEFAULT_ADMIN_JWT_EXPIRES_IN,
+  DEFAULT_USER_JWT_EXPIRES_IN,
+} from '../constants/jwtPolicy.js';
 
 dotenv.config();
 
@@ -22,7 +26,9 @@ export const env = {
   port: Number(process.env.PORT) || 5000,
   mongoUri: required('MONGODB_URI'),
   jwtSecret: required('JWT_SECRET'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || DEFAULT_USER_JWT_EXPIRES_IN,
+  /** Shorter TTL for role=admin tokens issued at login (same secret, same verify path). */
+  jwtAdminExpiresIn: process.env.JWT_ADMIN_EXPIRES_IN || DEFAULT_ADMIN_JWT_EXPIRES_IN,
   bcryptSaltRounds: Number(process.env.BCRYPT_SALT_ROUNDS) || 12,
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || '',

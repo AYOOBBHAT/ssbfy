@@ -1,12 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getActiveCacheUserId,
+  sensitiveScopedStorageKey,
+  SENSITIVE_CACHE_KIND,
+} from './authScopedCache';
 
-const KEY = '@ssbfy/profile_analytics_v1';
 const TTL_MS = 60 * 1000;
+
+function storageKey() {
+  const uid = getActiveCacheUserId();
+  return uid ? sensitiveScopedStorageKey(SENSITIVE_CACHE_KIND.PROFILE_ANALYTICS, uid) : null;
+}
 
 /**
  * @returns {Promise<{ payload: object, savedAt: number } | null>}
  */
 export async function getProfileAnalyticsCache() {
+  const KEY = storageKey();
+  if (!KEY) return null;
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
@@ -24,6 +35,8 @@ export async function getProfileAnalyticsCache() {
  * @param {object} payload
  */
 export async function putProfileAnalyticsCache(payload) {
+  const KEY = storageKey();
+  if (!KEY) return;
   if (!payload || typeof payload !== 'object') return;
   try {
     await AsyncStorage.setItem(
@@ -35,8 +48,10 @@ export async function putProfileAnalyticsCache(payload) {
   }
 }
 
-/** Drop cached profile analytics (stats + recent mock attempts). */
+/** Drop cached profile analytics (stats + recent mock attempts) for the active user. */
 export async function clearProfileAnalyticsCache() {
+  const KEY = storageKey();
+  if (!KEY) return;
   try {
     await AsyncStorage.removeItem(KEY);
   } catch {

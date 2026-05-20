@@ -130,7 +130,7 @@ export async function postSmartPractice(body, opts = {}) {
   const { signal } = opts;
   const payload = sanitizeSmartPracticeBody(body);
   const { data } = await api.post('/questions/smart-practice', payload, { signal });
-  return data?.data ?? { questions: [] };
+  return data?.data ?? {};
 }
 
 export async function getWeakPractice(topicIds, opts = {}) {
@@ -145,5 +145,5 @@ export async function getWeakPractice(topicIds, opts = {}) {
     params: { topicIds: ids.join(','), limit },
     signal,
   });
-  return data?.data ?? { questions: [] };
+  return data?.data ?? {};
 }

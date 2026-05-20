@@ -65,14 +65,20 @@ export default function HomeScreen() {
       if (dailyAbortRef.current !== ac) return;
       const questions = Array.isArray(data?.questions) ? data.questions : [];
       const questionIds = questionIdsFromDocs(questions);
+      const practiceSessionId = data?.practiceSessionId;
       if (!questionIds.length) {
         setDailyError('No daily practice questions available.');
+        return;
+      }
+      if (!practiceSessionId) {
+        setDailyError('Could not start daily practice. Please try again.');
         return;
       }
       navigation.navigate('Test', {
         mode: 'daily',
         questionIds,
         questions,
+        practiceSessionId,
         originMainTab: 'Home',
       });
     } catch (e) {

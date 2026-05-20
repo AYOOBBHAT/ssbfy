@@ -1,12 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getActiveCacheUserId,
+  sensitiveScopedStorageKey,
+  SENSITIVE_CACHE_KIND,
+} from './authScopedCache';
 
-const KEY = '@ssbfy/analytics_overview_v1';
 const TTL_MS = 6 * 60 * 60 * 1000;
+
+function storageKey() {
+  const uid = getActiveCacheUserId();
+  return uid ? sensitiveScopedStorageKey(SENSITIVE_CACHE_KIND.ANALYTICS_OVERVIEW, uid) : null;
+}
 
 /**
  * @returns {Promise<{ payload: object, savedAt: number } | null>}
  */
 export async function getAnalyticsOverviewCache() {
+  const KEY = storageKey();
+  if (!KEY) return null;
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
@@ -24,6 +35,8 @@ export async function getAnalyticsOverviewCache() {
  * @param {object} payload
  */
 export async function putAnalyticsOverviewCache(payload) {
+  const KEY = storageKey();
+  if (!KEY) return;
   if (!payload || typeof payload !== 'object') return;
   try {
     await AsyncStorage.setItem(
@@ -35,8 +48,10 @@ export async function putAnalyticsOverviewCache(payload) {
   }
 }
 
-/** Drop cached analytics overview (progress summary on Profile). */
+/** Drop cached analytics overview (progress summary on Profile) for the active user. */
 export async function clearAnalyticsOverviewCache() {
+  const KEY = storageKey();
+  if (!KEY) return;
   try {
     await AsyncStorage.removeItem(KEY);
   } catch {

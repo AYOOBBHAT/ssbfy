@@ -3,9 +3,9 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess } from '../utils/response.js';
 
 export const dailyPracticeController = {
-  list: asyncHandler(async (_req, res) => {
-    const { questions } = await dailyPracticeService.getDailyPractice();
-    return sendSuccess(res, { questions }, 'Daily practice questions');
+  list: asyncHandler(async (req, res) => {
+    const payload = await dailyPracticeService.getDailyPractice(req.user.id);
+    return sendSuccess(res, payload, 'Daily practice questions');
   }),
 
   complete: asyncHandler(async (req, res) => {

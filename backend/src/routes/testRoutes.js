@@ -5,6 +5,13 @@ import { adminChain } from '../middlewares/adminGuard.js';
 import { checkTestAccess } from '../middlewares/checkTestAccess.js';
 import { validateRequest } from '../middlewares/validate.js';
 import {
+  adminMutationLimiter,
+  testsAttemptsReadLimiter,
+  testsLifecycleLimiter,
+  testsProgressLimiter,
+  testsReadLimiter,
+} from '../middlewares/upstashRateLimiter.js';
+import {
   mockQuotaQueryValidators,
   saveProgressValidators,
   startTestValidators,
@@ -17,6 +24,7 @@ const router = Router();
 
 router.post(
   '/:id/start',
+  testsLifecycleLimiter,
   authenticate,
   ...testIdParam,
   startTestValidators,
@@ -27,6 +35,7 @@ router.post(
 
 router.post(
   '/:id/submit',
+  testsLifecycleLimiter,
   authenticate,
   ...testIdParam,
   submitTestValidators,
@@ -36,6 +45,7 @@ router.post(
 
 router.patch(
   '/:id/progress',
+  testsProgressLimiter,
   authenticate,
   ...testIdParam,
   saveProgressValidators,
@@ -46,16 +56,18 @@ router.patch(
 
 router.get(
   '/:id/attempts',
+  testsAttemptsReadLimiter,
   authenticate,
   ...testIdParam,
   validateRequest,
   testController.attemptsHistory
 );
 
-router.get('/status/mine', authenticate, testController.statusMine);
+router.get('/status/mine', testsReadLimiter, authenticate, testController.statusMine);
 
 router.get(
   '/quota/device',
+  testsReadLimiter,
   authenticate,
   mockQuotaQueryValidators,
   validateRequest,
@@ -64,20 +76,18 @@ router.get(
 
 router.post(
   '/',
+  adminMutationLimiter,
   ...adminChain,
   createTestValidators,
   validateRequest,
   testController.create
 );
 
-router.get(
-  '/admin/list',
-  ...adminChain,
-  testController.listAdmin
-);
+router.get('/admin/list', adminMutationLimiter, ...adminChain, testController.listAdmin);
 
 router.patch(
   '/:id/status',
+  adminMutationLimiter,
   ...adminChain,
   ...testIdParam,
   setTestStatusValidators,
@@ -85,7 +95,7 @@ router.patch(
   testController.setStatus
 );
 
-router.get('/', authOptional, testController.list);
-router.get('/:id', ...testIdParam, validateRequest, testController.getById);
+router.get('/', testsReadLimiter, authOptional, testController.list);
+router.get('/:id', testsReadLimiter, ...testIdParam, validateRequest, testController.getById);
 
 export default router;

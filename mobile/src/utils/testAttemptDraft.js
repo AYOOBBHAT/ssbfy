@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getActiveCacheUserId } from './authScopedCache';
 
 export const DRAFT_VERSION = 2;
 
@@ -6,7 +7,11 @@ const PREFIX = 'ssbfy:test_attempt_draft:v2:';
 
 /** @param {string} testId */
 export function draftStorageKey(testId) {
-  return `${PREFIX}${String(testId)}`;
+  const uid = getActiveCacheUserId();
+  if (!uid) {
+    return `${PREFIX}anon:${String(testId)}`;
+  }
+  return `${PREFIX}u_${uid}:${String(testId)}`;
 }
 
 /**

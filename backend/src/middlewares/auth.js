@@ -1,8 +1,8 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { ROLE_VALUES, ROLES } from '../constants/roles.js';
 import { AppError } from '../utils/AppError.js';
-import { verifyToken } from '../utils/jwt.js';
-import { logger } from '../utils/logger.js';
+import { decodeTokenUnsafe, verifyToken } from '../utils/jwt.js';
+import { logger, logSecurityEvent } from '../utils/logger.js';
 
 export function authenticate(req, res, next) {
   const header = req.headers.authorization;
@@ -25,7 +25,17 @@ export function authenticate(req, res, next) {
       role: payload.role,
     };
     next();
-  } catch {
+  } catch (err) {
+    if (err?.name === 'TokenExpiredError') {
+      const decoded = decodeTokenUnsafe(token);
+      if (decoded?.role === ROLES.ADMIN) {
+        logSecurityEvent('admin_token_expired_access', {
+          path: req.originalUrl?.split('?')[0],
+          requestId: req.requestId,
+          userIdSuffix: decoded?.sub ? String(decoded.sub).slice(-8) : undefined,
+        });
+      }
+    }
     next(new AppError('Invalid or expired token', HTTP_STATUS.UNAUTHORIZED));
   }
 }
@@ -61,11 +71,19 @@ export function authOptional(req, res, next) {
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
+      const path = req.originalUrl?.split('?')[0];
+      if (roles.includes(ROLES.ADMIN) && req.user?.role && req.user.role !== ROLES.ADMIN) {
+        logSecurityEvent('admin_auth_forbidden_role', {
+          path,
+          requestId: req.requestId,
+          actualRole: req.user.role,
+        });
+      }
       logger.info(
         {
           requiredRoles: roles,
           actualRole: req.user?.role || 'anonymous',
-          path: req.originalUrl?.split('?')[0],
+          path,
         },
         '[ACCESS] Forbidden role'
       );

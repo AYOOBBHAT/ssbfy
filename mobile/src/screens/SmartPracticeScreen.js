@@ -153,18 +153,24 @@ export default function SmartPracticeScreen() {
         body.difficulty = difficulty;
       }
 
-      const { questions } = await postSmartPractice(body);
-      const list = Array.isArray(questions) ? questions : [];
+      const data = await postSmartPractice(body);
+      const list = Array.isArray(data?.questions) ? data.questions : [];
       if (list.length === 0) {
         setStartError('No questions available for this selection');
         return;
       }
       const questionIds = questionIdsFromDocs(list);
+      const practiceSessionId = data?.practiceSessionId;
+      if (!practiceSessionId) {
+        setStartError('Could not start practice session. Please try again.');
+        return;
+      }
       navigation.navigate('Test', {
         mode: 'practice',
         practiceType: 'smart',
         questionIds,
         questions: list,
+        practiceSessionId,
         originMainTab: 'Practice',
       });
     } catch (e) {

@@ -138,6 +138,8 @@ export default function TestScreen() {
   const historicalAttemptMode = !!params.historicalAttemptMode;
   const sourceAttemptId =
     params.sourceAttemptId != null ? String(params.sourceAttemptId) : null;
+  const practiceSessionId =
+    params.practiceSessionId != null ? String(params.practiceSessionId) : null;
   /** Tab to restore on leave/finish (Practice | Home | Profile). */
   const originMainTab = params.originMainTab || null;
   const isLocal = isRetry || isPractice || isDaily;
@@ -981,6 +983,13 @@ export default function TestScreen() {
         return;
       }
 
+      if (isLocal && !practiceSessionId) {
+        setSubmitError(
+          'This practice session is missing server authorization. Go back and start again.'
+        );
+        return;
+      }
+
       const validQuestions = questions.filter((q) => q !== undefined);
       if (!validQuestions.length) {
         setSubmitError(
@@ -1010,6 +1019,7 @@ export default function TestScreen() {
 
       try {
         const revealBody = {
+          practiceSessionId,
           questionIds,
           userAnswers: sessionAnswers,
           practiceType,
@@ -1151,8 +1161,11 @@ export default function TestScreen() {
       questions,
       originMainTab,
       isPractice,
+      isDaily,
+      isRetry,
       historicalAttemptMode,
       sourceAttemptId,
+      practiceSessionId,
     ]
   );
 

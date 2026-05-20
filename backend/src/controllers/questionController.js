@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { questionService } from '../services/questionService.js';
+import { practiceIssuanceService } from '../services/practiceIssuanceService.js';
 import {
   parseCsvBuffer,
   analyzeRows,
@@ -63,7 +64,21 @@ export const questionController = {
     const topicIds = req.query.topicIdList || [];
     const limit = req.query.limit ?? 10;
     const { questions } = await questionService.weakPractice({ topicIds, limit });
-    return sendSuccess(res, { questions }, 'Weak-topic practice questions');
+    const ids = (questions || []).map((q) => q?._id).filter(Boolean);
+    let practiceSessionId = null;
+    let expiresAt = null;
+    if (ids.length) {
+      const issuance = await practiceIssuanceService.createIssuance(req.user.id, 'weak', ids, {
+        allowInactiveScoring: false,
+      });
+      practiceSessionId = String(issuance._id);
+      expiresAt = issuance.expiresAt;
+    }
+    return sendSuccess(
+      res,
+      { questions, practiceSessionId, expiresAt },
+      'Weak-topic practice questions'
+    );
   }),
 
   smartPractice: asyncHandler(async (req, res) => {
@@ -75,7 +90,21 @@ export const questionController = {
       difficulty,
       limit: limit ?? 10,
     });
-    return sendSuccess(res, { questions }, 'Smart practice questions');
+    const ids = (questions || []).map((q) => q?._id).filter(Boolean);
+    let practiceSessionId = null;
+    let expiresAt = null;
+    if (ids.length) {
+      const issuance = await practiceIssuanceService.createIssuance(req.user.id, 'smart', ids, {
+        allowInactiveScoring: false,
+      });
+      practiceSessionId = String(issuance._id);
+      expiresAt = issuance.expiresAt;
+    }
+    return sendSuccess(
+      res,
+      { questions, practiceSessionId, expiresAt },
+      'Smart practice questions'
+    );
   }),
 
   create: asyncHandler(async (req, res) => {

@@ -1,8 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getActiveCacheUserId,
+  getAuthCacheSessionGeneration,
+  sensitiveScopedStorageKey,
+  SENSITIVE_CACHE_KIND,
+} from './authScopedCache';
+import logger from './logger';
 
-const KEY = '@ssbfy/learning_session_reveal_receipts_v1';
 const TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_RECEIPTS = 40;
+
+function storageKey() {
+  const uid = getActiveCacheUserId();
+  return uid ? sensitiveScopedStorageKey(SENSITIVE_CACHE_KIND.REVEAL_RECEIPTS, uid) : null;
+}
 
 /**
  * Stable fingerprint for idempotent reveal after app kill (same Q set + type).
@@ -25,6 +36,13 @@ export function buildRevealReceiptKey(practiceType, questionIds) {
 }
 
 async function readStore() {
+  const KEY = storageKey();
+  if (!KEY) {
+    if (__DEV__) {
+      logger.debug('[revealReceipt] read skipped — no active cache user');
+    }
+    return {};
+  }
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return {};
@@ -51,12 +69,21 @@ function pruneStore(store, now = Date.now()) {
 export async function getRevealReceipt(receiptKey) {
   const key = String(receiptKey ?? '').trim();
   if (!key) return null;
+  if (!storageKey()) return null;
   try {
     const store = await readStore();
     const row = store[key];
     if (!row?.learningSessionId) return null;
     const savedAt = Number(row.savedAt) || 0;
     if (!savedAt || Date.now() - savedAt > TTL_MS) return null;
+    const gen = getAuthCacheSessionGeneration();
+    const cachedGen = Number(row.cacheSessionGen);
+    if (Number.isFinite(cachedGen) && cachedGen !== gen) {
+      if (__DEV__) {
+        logger.debug('[revealReceipt] stale session generation — miss', { receiptKey: key.slice(0, 24) });
+      }
+      return null;
+    }
     return String(row.learningSessionId);
   } catch {
     return null;
@@ -71,10 +98,20 @@ export async function putRevealReceipt(receiptKey, learningSessionId) {
   const key = String(receiptKey ?? '').trim();
   const sessionId = String(learningSessionId ?? '').trim();
   if (!key || !sessionId) return;
+  if (!storageKey()) {
+    if (__DEV__) {
+      logger.debug('[revealReceipt] put skipped — no active cache user');
+    }
+    return;
+  }
   try {
     const store = pruneStore(await readStore());
-    store[key] = { savedAt: Date.now(), learningSessionId: sessionId };
-    await AsyncStorage.setItem(KEY, JSON.stringify(pruneStore(store)));
+    store[key] = {
+      savedAt: Date.now(),
+      learningSessionId: sessionId,
+      cacheSessionGen: getAuthCacheSessionGeneration(),
+    };
+    await AsyncStorage.setItem(storageKey(), JSON.stringify(pruneStore(store)));
   } catch {
     // best-effort
   }

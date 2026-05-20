@@ -1,11 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getActiveCacheUserId,
+  getAuthCacheSessionGeneration,
+  sensitiveScopedStorageKey,
+  SENSITIVE_CACHE_KIND,
+} from './authScopedCache';
+import logger from './logger';
 
-const KEY = '@ssbfy/learning_session_cache_v1';
 const MAX_ENTRIES = 20;
 /** Per-entry cap — AsyncStorage ~6MB total on some devices; stay conservative. */
 const MAX_ENTRY_BYTES = 400_000;
 /** Drop entries older than this (OS may evict sooner). */
 const TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+function storageKey() {
+  const uid = getActiveCacheUserId();
+  return uid ? sensitiveScopedStorageKey(SENSITIVE_CACHE_KIND.LEARNING_SESSION_CACHE, uid) : null;
+}
 
 function estimateJsonBytes(value) {
   try {
@@ -20,6 +31,13 @@ function estimateJsonBytes(value) {
 }
 
 async function readStore() {
+  const KEY = storageKey();
+  if (!KEY) {
+    if (__DEV__) {
+      logger.debug('[learningSessionCache] read skipped — no active cache user');
+    }
+    return {};
+  }
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return {};
@@ -41,6 +59,8 @@ function pruneStore(store, now = Date.now()) {
 }
 
 async function writeStore(store) {
+  const KEY = storageKey();
+  if (!KEY) return;
   try {
     const pruned = pruneStore(store);
     await AsyncStorage.setItem(KEY, JSON.stringify(pruned));
@@ -79,9 +99,23 @@ export async function putLearningSessionCache(sessionId, payload) {
   const bytes = estimateJsonBytes(normalized);
   if (bytes > MAX_ENTRY_BYTES) return;
 
+  if (!storageKey()) {
+    if (__DEV__) {
+      logger.debug('[learningSessionCache] put skipped — no active cache user', {
+        sessionSuffix: id.slice(-8),
+      });
+    }
+    return;
+  }
+
   try {
     const store = await readStore();
-    store[id] = { savedAt: Date.now(), payload: normalized, bytes };
+    store[id] = {
+      savedAt: Date.now(),
+      payload: normalized,
+      bytes,
+      cacheSessionGen: getAuthCacheSessionGeneration(),
+    };
     await writeStore(store);
   } catch {
     // ignore — API remains source of truth cross-device
@@ -95,12 +129,25 @@ export async function putLearningSessionCache(sessionId, payload) {
 export async function getLearningSessionCache(sessionId) {
   const id = String(sessionId ?? '').trim();
   if (!id) return null;
+  if (!storageKey()) return null;
   try {
     const store = await readStore();
     const row = store[id];
     if (!row?.payload || typeof row.payload !== 'object') return null;
     const savedAt = Number(row.savedAt) || 0;
     if (!savedAt || Date.now() - savedAt > TTL_MS) return null;
+    const gen = getAuthCacheSessionGeneration();
+    const cachedGen = Number(row.cacheSessionGen);
+    if (Number.isFinite(cachedGen) && cachedGen !== gen) {
+      if (__DEV__) {
+        logger.debug('[learningSessionCache] stale generation — treating as miss', {
+          sessionSuffix: id.slice(-8),
+          cachedGen,
+          currentGen: gen,
+        });
+      }
+      return null;
+    }
     return normalizeLearningSessionCachePayload(row.payload);
   } catch {
     return null;
@@ -115,6 +162,8 @@ export async function getLearningSessionCache(sessionId) {
 export async function removeLearningSessionCache(sessionId) {
   const id = String(sessionId ?? '').trim();
   if (!id) return false;
+  const KEY = storageKey();
+  if (!KEY) return false;
   try {
     const store = await readStore();
     if (!store[id]) return false;

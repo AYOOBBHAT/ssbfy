@@ -19,7 +19,7 @@ import savedMaterialRoutes from './savedMaterialRoutes.js';
 import subscriptionPlanRoutes from './subscriptionPlanRoutes.js';
 import adminSubscriptionPlanRoutes from './adminSubscriptionPlanRoutes.js';
 import adminPaymentRoutes from './adminPaymentRoutes.js';
-import { apiLimiter } from '../middlewares/upstashRateLimiter.js';
+import { apiLimiter, adminMutationLimiter } from '../middlewares/upstashRateLimiter.js';
 
 const router = Router();
 
@@ -32,16 +32,16 @@ router.use('/topics', topicRoutes);
 router.use('/questions', apiLimiter, questionRoutes);
 router.use('/tests', testRoutes);
 router.use('/notes', noteRoutes);
-router.use('/results', resultRoutes);
+router.use('/results', apiLimiter, resultRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/daily-practice', dailyPracticeRoutes);
-router.use('/practice', apiLimiter, practiceRoutes);
+router.use('/practice', practiceRoutes);
 router.use('/learning-sessions', apiLimiter, learningSessionRoutes);
 router.use('/analytics', apiLimiter, analyticsRoutes);
 router.use('/leaderboard', leaderboardRoutes);
 router.use('/saved-materials', savedMaterialRoutes);
 router.use('/subscription-plans', subscriptionPlanRoutes);
-router.use('/admin/subscription-plans', adminSubscriptionPlanRoutes);
-router.use('/admin/payments', adminPaymentRoutes);
+router.use('/admin/subscription-plans', adminMutationLimiter, adminSubscriptionPlanRoutes);
+router.use('/admin/payments', adminMutationLimiter, adminPaymentRoutes);
 
 export default router;

@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { ROLES } from '../constants/roles.js';
 import { AppError } from '../utils/AppError.js';
-import { signToken } from '../utils/jwt.js';
+import { signAuthToken } from '../utils/jwt.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { logSecurityEvent } from '../utils/logger.js';
 
@@ -33,7 +33,7 @@ export const authService = {
     });
 
     const publicUser = toPublicUser(user);
-    const token = signToken({
+    const token = signAuthToken({
       sub: publicUser._id.toString(),
       role: publicUser.role,
     });
@@ -55,10 +55,17 @@ export const authService = {
     }
 
     const publicUser = toPublicUser(user);
-    const token = signToken({
+    const token = signAuthToken({
       sub: publicUser._id.toString(),
       role: publicUser.role,
     });
+
+    if (publicUser.role === ROLES.ADMIN) {
+      logSecurityEvent('admin_token_issued', {
+        userIdSuffix: String(publicUser._id).slice(-8),
+        sessionTier: 'privileged',
+      });
+    }
 
     return { user: publicUser, token };
   },

@@ -78,6 +78,7 @@ function ViewAllButton({ onPress }) {
 }
 
 function ProfileActivitySections({
+  cacheOwnerUserId,
   recentMocksFromAnalytics,
   onOpenMockAttempt,
   onOpenLearningSession,
@@ -90,7 +91,7 @@ function ProfileActivitySections({
     mocksHasMore,
     expandPractice,
     expandMocks,
-  } = useProfileActivity(recentMocksFromAnalytics);
+  } = useProfileActivity(recentMocksFromAnalytics, cacheOwnerUserId);
 
   const handleOpenPractice = useCallback(
     (id) => {

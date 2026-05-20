@@ -1,12 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getActiveCacheUserId,
+  sensitiveScopedStorageKey,
+  SENSITIVE_CACHE_KIND,
+} from './authScopedCache';
 
-const KEY = '@ssbfy/profile_activity_v1';
 const TTL_MS = 45 * 1000;
+
+function storageKey() {
+  const uid = getActiveCacheUserId();
+  return uid ? sensitiveScopedStorageKey(SENSITIVE_CACHE_KIND.PROFILE_ACTIVITY, uid) : null;
+}
 
 /**
  * @returns {Promise<{ practice: object[], mocks: object[], savedAt: number } | null>}
  */
 export async function getProfileActivityCache() {
+  const KEY = storageKey();
+  if (!KEY) return null;
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return null;
@@ -27,6 +38,8 @@ export async function getProfileActivityCache() {
  * @param {{ practice: object[], mocks: object[] }} payload
  */
 export async function putProfileActivityCache(payload) {
+  const KEY = storageKey();
+  if (!KEY) return;
   if (!payload || typeof payload !== 'object') return;
   try {
     await AsyncStorage.setItem(
@@ -42,8 +55,10 @@ export async function putProfileActivityCache(payload) {
   }
 }
 
-/** Drop cached recent activity (e.g. after mock / practice / retry completes). */
+/** Drop cached recent activity (e.g. after mock / practice / retry completes) for the active user. */
 export async function clearProfileActivityCache() {
+  const KEY = storageKey();
+  if (!KEY) return;
   try {
     await AsyncStorage.removeItem(KEY);
   } catch {

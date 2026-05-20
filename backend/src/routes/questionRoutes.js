@@ -3,6 +3,7 @@ import { questionController } from '../controllers/questionController.js';
 import { validateRequest } from '../middlewares/validate.js';
 import { authenticate } from '../middlewares/auth.js';
 import { adminChain } from '../middlewares/adminGuard.js';
+import { smartPracticeIssueLimiter } from '../middlewares/upstashRateLimiter.js';
 import { handleCsvUpload } from '../middlewares/upload.js';
 import {
   adminListQuestionsQueryValidators,
@@ -121,6 +122,7 @@ router.get(
 
 router.post(
   '/smart-practice',
+  smartPracticeIssueLimiter,
   authenticate,
   smartPracticeBodyValidators,
   validateRequest,
