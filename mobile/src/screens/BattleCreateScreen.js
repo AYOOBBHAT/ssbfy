@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import {
   createBattle,
@@ -11,16 +10,16 @@ import { usePracticeTaxonomy } from '../hooks/usePracticeTaxonomy';
 import { useBattleQuota } from '../hooks/useBattleQuota';
 import PracticeSetupSection from '../components/practice/PracticeSetupSection';
 import PracticeChipGrid from '../components/practice/PracticeChipGrid';
-import PracticeSetupChip from '../components/practice/PracticeSetupChip';
 import QuestionCountSegment from '../components/practice/QuestionCountSegment';
 import PracticeStartFooter from '../components/practice/PracticeStartFooter';
-import { LoadingState, ErrorState } from '../components/StateView';
+import { LoadingState, EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { NAV_TRANSITION_LOCK_MS, tryAcquireLock } from '../utils/navigationGuard';
 import { resolveTopicId } from '../utils/topicRef';
 import { resolveMongoId } from '../utils/mongoId';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { useAuth } from '../context/AuthContext';
+import logger from '../utils/logger';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'all', label: 'All' },
@@ -60,10 +59,36 @@ export default function BattleCreateScreen() {
   const startLockRef = useRef(false);
   const availAbortRef = useRef(null);
 
+  const selectedSubject = useMemo(
+    () => subjects.find((s) => String(s._id) === String(selectedSubjectId)) || null,
+    [subjects, selectedSubjectId]
+  );
+
   const selectedTopic = useMemo(
     () => topics.find((t) => resolveTopicId(t?._id) === selectedTopicId) || null,
     [topics, selectedTopicId]
   );
+
+  const pickSubject = useCallback((id) => {
+    setSelectedSubjectId((prev) => (String(prev) === String(id) ? '' : String(id)));
+    setSelectedTopicId('');
+  }, []);
+
+  const pickTopic = useCallback((id) => {
+    setSelectedTopicId((prev) => (prev === id ? '' : id));
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    logger.debug('[BattleCreate] taxonomy render state', {
+      subjectsCount: subjects.length,
+      subjectsLoading,
+      topicsCount: topics.length,
+      topicsLoading,
+      selectedSubjectId: selectedSubjectId || null,
+      chipGridWouldRender: subjects.length > 0,
+    });
+  }, [subjects.length, subjectsLoading, topics.length, topicsLoading, selectedSubjectId]);
 
   const loadAvailability = useCallback(async () => {
     const subjectId = resolveMongoId(selectedSubjectId, 'subjectId');
@@ -152,10 +177,6 @@ export default function BattleCreateScreen() {
     reloadQuota,
   ]);
 
-  if (subjectsLoading && !subjects.length) {
-    return <LoadingState message="Loading subjects…" />;
-  }
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.lead}>
@@ -178,57 +199,60 @@ export default function BattleCreateScreen() {
         </View>
       ) : null}
 
-      <PracticeSetupSection title="Subject" loading={subjectsLoading}>
-        <PracticeChipGrid>
-          {subjects.map((s) => (
-            <PracticeSetupChip
-              key={String(s._id)}
-              label={s.name}
-              selected={String(s._id) === String(selectedSubjectId)}
-              onPress={() => {
-                setSelectedSubjectId((prev) =>
-                  String(prev) === String(s._id) ? '' : String(s._id)
-                );
-                setSelectedTopicId('');
-              }}
-            />
-          ))}
-        </PracticeChipGrid>
+      <PracticeSetupSection
+        title="Subject"
+        helper="Choose the subject for this battle."
+        selectedHint={selectedSubject ? `Selected: ${selectedSubject.name}` : null}
+      >
+        {subjectsLoading && subjects.length === 0 ? (
+          <View style={styles.inlineLoading}>
+            <LoadingState compact message="Loading subjects…" />
+          </View>
+        ) : subjects.length === 0 ? (
+          <EmptyState compact title="No subjects available yet" glyph="filter" />
+        ) : (
+          <PracticeChipGrid
+            items={subjects}
+            selectedId={selectedSubjectId}
+            onSelect={pickSubject}
+            getId={(it) => it._id}
+          />
+        )}
       </PracticeSetupSection>
 
       {selectedSubjectId ? (
-        <PracticeSetupSection title="Topic" loading={topicsLoading}>
-          <PracticeChipGrid>
-            {topics.map((t) => {
-              const tid = resolveTopicId(t?._id);
-              return (
-                <PracticeSetupChip
-                  key={tid}
-                  label={t.name}
-                  selected={tid === selectedTopicId}
-                  onPress={() =>
-                    setSelectedTopicId((prev) => (prev === tid ? '' : tid))
-                  }
-                />
-              );
-            })}
-          </PracticeChipGrid>
+        <PracticeSetupSection
+          title="Topic"
+          helper="Pick the topic — both players get questions from this pool."
+          selectedHint={selectedTopic ? `Selected: ${selectedTopic.name}` : null}
+        >
+          {topicsLoading && topics.length === 0 ? (
+            <View style={styles.inlineLoading}>
+              <LoadingState compact message="Loading topics…" />
+            </View>
+          ) : topics.length === 0 ? (
+            <EmptyState compact title="No topics in this subject yet" glyph="filter" />
+          ) : (
+            <PracticeChipGrid
+              items={topics}
+              selectedId={selectedTopicId}
+              onSelect={pickTopic}
+              getId={(it) => resolveTopicId(it._id)}
+            />
+          )}
         </PracticeSetupSection>
       ) : null}
 
       {selectedTopicId ? (
         <>
           <PracticeSetupSection title="Difficulty">
-            <PracticeChipGrid>
-              {DIFFICULTY_OPTIONS.map((d) => (
-                <PracticeSetupChip
-                  key={d.id}
-                  label={d.label}
-                  selected={difficulty === d.id}
-                  onPress={() => setDifficulty(d.id)}
-                />
-              ))}
-            </PracticeChipGrid>
+            <PracticeChipGrid
+              items={DIFFICULTY_OPTIONS}
+              selectedId={difficulty}
+              onSelect={setDifficulty}
+              getId={(d) => d.id}
+              getLabel={(d) => d.label}
+            />
           </PracticeSetupSection>
 
           <PracticeSetupSection title="Questions">
@@ -243,27 +267,21 @@ export default function BattleCreateScreen() {
           </PracticeSetupSection>
 
           <PracticeSetupSection title="Timer">
-            <PracticeChipGrid>
-              {TIMER_OPTIONS.map((t) => (
-                <PracticeSetupChip
-                  key={t.id}
-                  label={t.label}
-                  selected={timerMode === t.id}
-                  onPress={() => setTimerMode(t.id)}
-                />
-              ))}
-            </PracticeChipGrid>
+            <PracticeChipGrid
+              items={TIMER_OPTIONS}
+              selectedId={timerMode}
+              onSelect={setTimerMode}
+              getId={(t) => t.id}
+              getLabel={(t) => t.label}
+            />
             {timerMode === 'total' ? (
-              <PracticeChipGrid>
-                {[10, 15, 20, 30].map((m) => (
-                  <PracticeSetupChip
-                    key={m}
-                    label={`${m} min`}
-                    selected={timerMinutes === m}
-                    onPress={() => setTimerMinutes(m)}
-                  />
-                ))}
-              </PracticeChipGrid>
+              <PracticeChipGrid
+                items={[10, 15, 20, 30].map((m) => ({ id: String(m), label: `${m} min` }))}
+                selectedId={String(timerMinutes)}
+                onSelect={(id) => setTimerMinutes(Number(id))}
+                getId={(t) => t.id}
+                getLabel={(t) => t.label}
+              />
             ) : null}
           </PracticeSetupSection>
         </>
@@ -287,8 +305,15 @@ export default function BattleCreateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
+  inlineLoading: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   lead: { fontSize: 15, color: colors.muted, marginBottom: 16, lineHeight: 22 },
   quotaCard: {
     backgroundColor: colors.card,

@@ -21,12 +21,9 @@ import {
 import { PremiumUpsellCard } from '../components/PremiumUpsellCard';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getPosts } from '../services/pdfService';
-import {
-  getNotes,
-  getSubjects,
-  getTopicsForSubject,
-  previewOf,
-} from '../services/noteService';
+import { getNotes, previewOf } from '../services/noteService';
+import { usePracticeTaxonomy } from '../hooks/usePracticeTaxonomy';
+import { formatTaxonomyLabel } from '../utils/formatTaxonomyLabel';
 import {
   getSavedMaterials,
   toggleSavedMaterial,
@@ -51,9 +48,8 @@ import { useNavigationActionLock } from '../hooks/useNavigationActionLock';
  *
  * Data flow:
  *   1. Load posts on mount (cached in pdfService).
- *   2. Load global subjects on mount.
- *   3. When a subject is selected, load its topics.
- *   4. Whenever any filter changes we call `getNotes(filter)` — the
+ *   2. Subjects + topics via usePracticeTaxonomy (taxonomyCache SWR).
+ *   3. Whenever any filter changes we call `getNotes(filter)` — the
  *      backend does the filtering so this scales to large datasets.
  *
  * Tapping a note pushes `NoteDetail` with the full note object so the
@@ -78,15 +74,14 @@ export default function NotesListScreen() {
     () => resolveTopicId(initial.topicId) || ''
   );
 
-  // ---- Reference data ----
+  const { subjects, subjectsLoading, topics, topicsLoading } =
+    usePracticeTaxonomy(selectedSubjectId);
+
+  // ---- Reference data (posts) ----
   const [posts, setPosts] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [topics, setTopics] = useState([]);
 
   const [postsLoading, setPostsLoading] = useState(true);
   const [postsError, setPostsError] = useState(null);
-  const [subjectsLoading, setSubjectsLoading] = useState(false);
-  const [topicsLoading, setTopicsLoading] = useState(false);
 
   // ---- Notes list ----
   const [notes, setNotes] = useState([]);
@@ -96,7 +91,6 @@ export default function NotesListScreen() {
   const [savingId, setSavingId] = useState(null);
   const postsLoadRef = useRef(null);
   const notesLoadRef = useRef(null);
-  const subjectsLoadRef = useRef(null);
 
   // ---- Load posts once -------------------------------------------------
   const loadPosts = useCallback(async () => {
@@ -128,64 +122,13 @@ export default function NotesListScreen() {
     };
   }, [loadPosts]);
 
-  // ---- Load global subjects once --------------------------------------
-  useEffect(() => {
-    subjectsLoadRef.current?.abort();
-    const ac = new AbortController();
-    subjectsLoadRef.current = ac;
-    (async () => {
-      try {
-        setSubjectsLoading(true);
-        const data = await getSubjects({ signal: ac.signal });
-        if (subjectsLoadRef.current !== ac) return;
-        setSubjects(Array.isArray(data?.subjects) ? data.subjects : []);
-      } catch (e) {
-        if (isRequestCancelled(e) || subjectsLoadRef.current !== ac) return;
-        setSubjects([]);
-      } finally {
-        if (subjectsLoadRef.current === ac) {
-          setSubjectsLoading(false);
-        }
-      }
-    })();
-    return () => {
-      subjectsLoadRef.current?.abort();
-      subjectsLoadRef.current = null;
-    };
-  }, []);
-
-  // ---- Load topics whenever subject changes ---------------------------
+  // ---- Clear stale topic when subject catalog changes ----------------
   useEffect(() => {
     if (!selectedTopicId) return;
     if (!topics.some((t) => resolveTopicId(t?._id) === selectedTopicId)) {
       setSelectedTopicId('');
     }
   }, [topics, selectedTopicId]);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    if (!selectedSubjectId) {
-      setTopics([]);
-      setSelectedTopicId('');
-      return undefined;
-    }
-    (async () => {
-      try {
-        setTopicsLoading(true);
-        const data = await getTopicsForSubject(selectedSubjectId, { signal: ac.signal });
-        if (ac.signal.aborted) return;
-        setTopics(Array.isArray(data?.topics) ? data.topics : []);
-      } catch (e) {
-        if (ac.signal.aborted || isRequestCancelled(e)) return;
-        setTopics([]);
-      } finally {
-        if (!ac.signal.aborted) setTopicsLoading(false);
-      }
-    })();
-    return () => {
-      ac.abort();
-    };
-  }, [selectedSubjectId]);
 
   // ---- Load notes whenever any filter changes -------------------------
   const loadNotes = useCallback(async () => {
@@ -307,7 +250,16 @@ export default function NotesListScreen() {
 
   // ---- Render helpers -------------------------------------------------
 
-  const renderChipRow = ({ label, items, selectedId, onSelect, loading, emptyText }) => {
+  const renderChipRow = ({
+    label,
+    items,
+    selectedId,
+    onSelect,
+    loading,
+    emptyText,
+    getItemId,
+  }) => {
+    const resolveId = getItemId || ((it) => it._id);
     if (loading) {
       return (
         <View style={styles.sectionBlock}>
@@ -342,11 +294,12 @@ export default function NotesListScreen() {
           contentContainerStyle={styles.chipsRow}
         >
           {items.map((it) => {
-            const active = String(it._id) === String(selectedId);
+            const itemId = resolveId(it);
+            const active = String(itemId) === String(selectedId);
             return (
               <Pressable
-                key={it._id}
-                onPress={() => onSelect(it._id)}
+                key={String(itemId)}
+                onPress={() => onSelect(itemId)}
                 style={({ pressed }) => [
                   styles.chip,
                   active && styles.chipActive,
@@ -357,7 +310,7 @@ export default function NotesListScreen() {
                   style={[styles.chipText, active && styles.chipTextActive]}
                   numberOfLines={1}
                 >
-                  {it?.name || it?.slug || 'Untitled'}
+                  {formatTaxonomyLabel(it?.name || it?.slug)}
                 </Text>
               </Pressable>
             );
@@ -511,6 +464,7 @@ export default function NotesListScreen() {
             items: topics,
             selectedId: selectedTopicId,
             onSelect: pickTopic,
+            getItemId: (it) => resolveTopicId(it?._id) || String(it?._id ?? ''),
             loading: topicsLoading,
             emptyText: 'No topics for this subject yet',
           })

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSubjects, getTopicsForSubject } from '../services/noteService';
 import { isRequestCancelled } from '../services/api';
+import logger from '../utils/logger';
 import {
   getCachedSubjects,
   getCachedTopicsForSubject,
@@ -33,19 +34,34 @@ export function usePracticeTaxonomy(selectedSubjectId) {
       if (cached?.length) {
         setSubjects(cached);
         setSubjectsLoading(false);
+        if (__DEV__) {
+          logger.debug('[taxonomy] subjects hydrated from cache', { count: cached.length });
+        }
       } else {
         setSubjectsLoading(true);
       }
 
       try {
-        const data = await getSubjects({ signal: ac.signal });
+        const data = await getSubjects({ signal: ac.signal, __taxonomyHook: true });
         if (subjectsLoadRef.current !== ac) return;
         const list = Array.isArray(data?.subjects) ? data.subjects : [];
         setSubjects(list);
         void putCachedSubjects(list);
+        if (__DEV__) {
+          logger.debug('[taxonomy] subjects fetched', {
+            count: list.length,
+            fromCache: Boolean(cached?.length),
+          });
+        }
       } catch (e) {
         if (isRequestCancelled(e) || subjectsLoadRef.current !== ac) return;
         if (!cached?.length) setSubjects([]);
+        if (__DEV__) {
+          logger.debug('[taxonomy] subjects fetch failed', {
+            hadCache: Boolean(cached?.length),
+            emptyRender: !cached?.length,
+          });
+        }
       } finally {
         if (subjectsLoadRef.current === ac) setSubjectsLoading(false);
       }
@@ -86,7 +102,7 @@ export function usePracticeTaxonomy(selectedSubjectId) {
       }
 
       try {
-        const data = await getTopicsForSubject(subjectKey, { signal: ac.signal });
+        const data = await getTopicsForSubject(subjectKey, { signal: ac.signal, __taxonomyHook: true });
         if (topicsLoadRef.current !== ac) return;
         const list = Array.isArray(data?.topics) ? data.topics : [];
         setTopics(list);

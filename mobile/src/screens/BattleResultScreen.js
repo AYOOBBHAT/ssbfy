@@ -169,7 +169,7 @@ export default function BattleResultScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   title: { fontSize: 24, fontWeight: '800', color: colors.text, marginBottom: 4 },

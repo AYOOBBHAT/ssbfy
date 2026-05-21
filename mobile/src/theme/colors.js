@@ -2,7 +2,9 @@
  * Central theme tokens for SSBFY.
  * Change values here to re-skin the entire app.
  */
-export const colors = {
+import logger from '../utils/logger';
+
+const palette = {
   // Brand
   primary: '#2563eb',       // blue-600 — main brand color
   primaryDark: '#1d4ed8',   // blue-700 — header / pressed
@@ -30,6 +32,23 @@ export const colors = {
   muted: '#6b7280',
   textOnPrimary: '#ffffff',
 };
+
+export const colors = { ...palette };
+
+if (__DEV__) {
+  let backgroundAliasWarned = false;
+  Object.defineProperty(colors, 'background', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      if (!backgroundAliasWarned) {
+        backgroundAliasWarned = true;
+        logger.warn('[theme] colors.background is invalid — use colors.bg');
+      }
+      return palette.bg;
+    },
+  });
+}
 
 export const brand = {
   name: 'SSBFY',

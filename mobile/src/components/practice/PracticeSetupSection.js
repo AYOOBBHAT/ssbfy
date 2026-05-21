@@ -1,6 +1,9 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../theme/colors';
+import logger from '../../utils/logger';
+
+let practiceSetupLoadingWarned = false;
 
 function PracticeSetupSection({
   step,
@@ -9,7 +12,14 @@ function PracticeSetupSection({
   selectedHint,
   optional = false,
   children,
+  loading: _deprecatedLoading,
 }) {
+  if (__DEV__ && _deprecatedLoading !== undefined && !practiceSetupLoadingWarned) {
+    practiceSetupLoadingWarned = true;
+    logger.warn(
+      '[PracticeSetupSection] loading prop is not supported — use inline LoadingState in the section body'
+    );
+  }
   return (
     <View style={styles.section}>
       <View style={styles.headRow}>

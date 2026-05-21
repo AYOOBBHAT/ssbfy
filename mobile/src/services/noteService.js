@@ -1,5 +1,16 @@
 import api from './api.js';
 import { resolveMongoId, sanitizeNotesQueryParams } from '../utils/mongoId.js';
+import logger from '../utils/logger';
+
+const directTaxonomyFetchWarned = new Set();
+
+function warnDirectTaxonomyFetch(fnName) {
+  if (!__DEV__ || directTaxonomyFetchWarned.has(fnName)) return;
+  directTaxonomyFetchWarned.add(fnName);
+  logger.warn(
+    `[taxonomy] ${fnName} called outside usePracticeTaxonomy — prefer the hook for SWR cache reuse`
+  );
+}
 
 /**
  * List notes scoped by any combination of post / subject / topic.
@@ -28,18 +39,24 @@ export async function getNotes(params = {}, opts = {}) {
  * (filters) and must NOT control subject visibility.
  */
 export async function getSubjects(opts = {}) {
-  const { signal } = opts;
-  const { data } = await api.get('/subjects', { signal });
+  if (__DEV__ && !opts.__taxonomyHook) {
+    warnDirectTaxonomyFetch('getSubjects');
+  }
+  const { signal, __taxonomyHook: _hook, ...rest } = opts;
+  const { data } = await api.get('/subjects', { signal, ...rest });
   const payload = data?.data ?? {};
   const subjects = Array.isArray(payload.subjects) ? payload.subjects : [];
   return { subjects };
 }
 
 export async function getTopicsForSubject(subjectId, opts = {}) {
+  if (__DEV__ && !opts.__taxonomyHook) {
+    warnDirectTaxonomyFetch('getTopicsForSubject');
+  }
   const id = resolveMongoId(subjectId, 'subjectId');
   if (!id) return { topics: [] };
-  const { signal } = opts;
-  const { data } = await api.get('/topics', { params: { subjectId: id }, signal });
+  const { signal, __taxonomyHook: _hook, ...rest } = opts;
+  const { data } = await api.get('/topics', { params: { subjectId: id }, signal, ...rest });
   const payload = data?.data ?? {};
   const topics = Array.isArray(payload.topics) ? payload.topics : [];
   return { topics };

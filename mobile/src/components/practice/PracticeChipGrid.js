@@ -2,8 +2,14 @@ import React, { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import PracticeSetupChip from './PracticeSetupChip';
 import { formatTaxonomyLabel } from '../../utils/formatTaxonomyLabel';
+import logger from '../../utils/logger';
 
-function PracticeChipGrid({ items, selectedId, onSelect, getLabel, getId }) {
+function PracticeChipGrid({ items, selectedId, onSelect, getLabel, getId, children }) {
+  if (__DEV__ && children != null) {
+    logger.warn(
+      '[PracticeChipGrid] Deprecated children API — pass items, selectedId, onSelect, getId (see SmartPracticeScreen).'
+    );
+  }
   if (!items?.length) return null;
 
   return (
