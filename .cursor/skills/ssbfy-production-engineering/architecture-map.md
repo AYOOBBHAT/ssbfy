@@ -70,6 +70,19 @@ Canonical ownership — extend these paths; do not fork parallel systems.
 |---------|----------|
 | Canonical map | `backend/src/models/TopicCanonicalMap.js` |
 
+## Payments (Razorpay premium)
+
+| Concern | Location |
+|---------|----------|
+| Payment service (BE) | `backend/src/services/paymentService.js` |
+| Payment routes | `backend/src/routes/paymentRoutes.js` |
+| Payment model | `backend/src/models/Payment.js` |
+| Webhook idempotency | `backend/src/models/WebhookEvent.js` |
+| Premium gate (BE) | `backend/src/utils/freeTierAccess.js` |
+| Mobile checkout | `mobile/src/services/paymentService.js` |
+| Premium screen | `mobile/src/screens/PremiumScreen.js` |
+| Spec | `docs/RAZORPAY_PREMIUM_V1.md` |
+
 ## Navigation
 
 | Concern | Location |

@@ -19,7 +19,13 @@ import {
   formatPaymentError,
   getSubscriptionPlans,
   isPaymentCancelledError,
+  getPremiumOrderStatus,
 } from '../services/paymentService';
+import {
+  savePendingPremiumOrderId,
+  readPendingPremiumOrderId,
+  clearPendingPremiumOrderId,
+} from '../utils/pendingPaymentOrder';
 import { colors } from '../theme/colors';
 import { pressFeedbackStyle } from '../utils/pressFeedback';
 import { isRequestCancelled } from '../services/api';
@@ -102,6 +108,33 @@ export default function PremiumScreen() {
     return userHasPremiumAccess(u);
   }, [refreshUser]);
 
+  /** Resume: pending order may have paid via webhook while app was backgrounded/killed. */
+  useEffect(() => {
+    if (isPremium || busy || verifying) return undefined;
+    let cancelled = false;
+    const recover = async () => {
+      const pendingId = await readPendingPremiumOrderId();
+      if (!pendingId || cancelled) return;
+      try {
+        const status = await getPremiumOrderStatus(pendingId);
+        if (cancelled) return;
+        if (status?.paymentStatus === 'paid' || status?.isPremium) {
+          const ok = await confirmPremiumFromBackend();
+          if (ok && !cancelled) {
+            await clearPendingPremiumOrderId();
+            setSuccess(true);
+          }
+        }
+      } catch {
+        /* ignore — user can retry checkout */
+      }
+    };
+    void recover();
+    return () => {
+      cancelled = true;
+    };
+  }, [isPremium, busy, verifying, confirmPremiumFromBackend]);
+
   const handleUpgrade = useCallback(async () => {
     if (busy || isPremium) return;
     setError(null);
@@ -125,6 +158,7 @@ export default function PremiumScreen() {
         setError('Could not start checkout. Please try again.');
         return;
       }
+      await savePendingPremiumOrderId(order.order_id);
 
       let paymentData = null;
       try {
@@ -158,6 +192,7 @@ export default function PremiumScreen() {
 
       const ok = await confirmPremiumFromBackend();
       if (ok) {
+        await clearPendingPremiumOrderId();
         setSuccess(true);
         return;
       }
@@ -168,6 +203,7 @@ export default function PremiumScreen() {
       try {
         const ok = await confirmPremiumFromBackend();
         if (ok) {
+          await clearPendingPremiumOrderId();
           setSuccess(true);
           return;
         }

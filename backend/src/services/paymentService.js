@@ -93,6 +93,24 @@ function planFromRecord(record) {
   return { type, days };
 }
 
+/** Reject gateway amounts that do not match the server-created order snapshot. */
+function assertAmountMatchesOrder(record, amountPaise, context = {}) {
+  const expected = Number(record?.amount);
+  const received = Number(amountPaise);
+  if (!Number.isFinite(expected) || expected <= 0 || !Number.isFinite(received)) {
+    throw new AppError(VERIFY_FAILED_MESSAGE, HTTP_STATUS.CONFLICT);
+  }
+  if (received !== expected) {
+    logger.info('[PAYMENT] Amount mismatch:', {
+      orderId: record?.razorpay_order_id,
+      expected,
+      received,
+      ...context,
+    });
+    throw new AppError(VERIFY_FAILED_MESSAGE, HTTP_STATUS.CONFLICT);
+  }
+}
+
 function subscriptionEndFromPlan(user, { type, days }) {
   if (type === 'lifetime') {
     return null;
@@ -294,6 +312,12 @@ async function finalizePaidOrderFromTrustedState({
     });
   }
 
+  assertAmountMatchesOrder(record, amountPaise, {
+    userId: String(userId),
+    paymentId,
+    incomeSource,
+  });
+
   const plan = planFromRecord(record);
   const userBefore = await userRepository.findById(userId);
   if (!userBefore) {
@@ -420,6 +444,15 @@ export const paymentService = {
       raw.razorpay_signature
     );
 
+    const orderRow = await paymentRepository.findByOrderId(orderId);
+    if (orderRow && orderRow.userId.toString() !== String(userId)) {
+      logger.info('[PAYMENT] Verify rejected — order belongs to another user:', {
+        userId: String(userId),
+        orderId,
+      });
+      throw new AppError('Payment order does not belong to this user', HTTP_STATUS.FORBIDDEN);
+    }
+
     assertRazorpayConfigured();
     const body = `${orderId}|${paymentId}`;
     const expected = crypto
@@ -448,6 +481,14 @@ export const paymentService = {
     if (!remote || String(remote.order_id) !== orderId) {
       logger.info('[PAYMENT] Order id mismatch:', { userId: String(userId), paymentId });
       throw new AppError('Payment does not match order', HTTP_STATUS.BAD_REQUEST);
+    }
+
+    if (orderRow) {
+      assertAmountMatchesOrder(orderRow, Number(remote.amount), {
+        userId: String(userId),
+        paymentId,
+        incomeSource: 'client',
+      });
     }
 
     // Race: concurrent verify or webhook may have claimed this order while we were in flight.
@@ -623,6 +664,29 @@ export const paymentService = {
       return { handled: true, eventName };
     }
 
+    if (eventName === 'payment.refunded') {
+      const entity = parsedBody?.payload?.payment?.entity;
+      const orderId = entity?.order_id ? String(entity.order_id) : null;
+      const paymentId = entity?.id != null ? String(entity.id) : null;
+      if (orderId) {
+        await paymentRepository.updateByOrderId(orderId, {
+          paymentStatus: 'refunded',
+          status: 'refunded',
+          webhookReceivedAt: new Date(),
+          verifiedByWebhook: true,
+          lastWebhookEventId: eventId || undefined,
+        });
+      }
+      logger.info('Webhook processed', {
+        eventId,
+        eventType: eventName,
+        orderId,
+        paymentId,
+        reason: 'refunded_marked',
+      });
+      return { handled: true, eventName, reason: 'refunded_marked' };
+    }
+
     if (eventName === 'payment.failed') {
       const entity = parsedBody?.payload?.payment?.entity;
       const orderId = entity?.order_id ? String(entity.order_id) : null;
@@ -753,6 +817,38 @@ export const paymentService = {
       ok: true,
       orderId: oid,
       idempotent: out.idempotent,
+    };
+  },
+
+  /**
+   * Mobile recovery: read server-side order + current premium truth for the authenticated user.
+   * Does not trust Razorpay client callbacks.
+   */
+  async getOrderStatusForUser(userId, orderId) {
+    const oid = String(orderId || '').trim();
+    if (!oid || !RAZORPAY_ID_RE.test(oid)) {
+      throw new AppError('Invalid order id', HTTP_STATUS.BAD_REQUEST);
+    }
+    const row = await paymentRepository.findByOrderId(oid);
+    if (!row || row.userId.toString() !== String(userId)) {
+      throw new AppError('Order not found', HTTP_STATUS.NOT_FOUND);
+    }
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+    }
+    return {
+      orderId: oid,
+      paymentStatus: row.paymentStatus || 'pending',
+      status: row.status,
+      razorpay_payment_id: row.razorpay_payment_id || null,
+      planType: row.planType || null,
+      isPremium: isPremiumUser(user),
+      subscriptionEnd: user.subscriptionEnd ?? null,
+      plan: user.plan ?? null,
+      currentPlanType: user.currentPlanType ?? null,
+      verifiedByWebhook: row.verifiedByWebhook === true,
+      verificationSource: row.verificationSource ?? null,
     };
   },
 

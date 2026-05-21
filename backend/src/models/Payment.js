@@ -31,10 +31,12 @@ const paymentSchema = new mongoose.Schema(
     status: { type: String, required: true, trim: true },
     /**
      * Payment lifecycle for support/reconciliation.
+     * - created: Razorpay order issued (legacy rows may use status=created)
      * - pending: order row created locally, not successfully paid
      * - paid: gateway reported success (authorized/captured) and we recorded it
      * - failed: payment failed
      * - expired: order expired / cancelled (no successful capture tracked here)
+     * - refunded: Razorpay refund webhook recorded (premium revocation is manual/admin in v1)
      *
      * `status` holds the raw Razorpay payment status when applicable (e.g. captured).
      */

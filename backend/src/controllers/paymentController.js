@@ -85,6 +85,12 @@ export const paymentController = {
     return sendCreated(res, payload, 'Order created');
   }),
 
+  getOrderStatus: asyncHandler(async (req, res) => {
+    const orderId = String(req.params.orderId || '').trim();
+    const payload = await paymentService.getOrderStatusForUser(req.user.id, orderId);
+    return sendSuccess(res, payload, 'Order status');
+  }),
+
   verify: asyncHandler(async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
     const { user, subscriptionEnd, plan, idempotent } = await paymentService.verifyAndActivatePremium(

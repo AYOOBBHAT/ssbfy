@@ -2,7 +2,11 @@ import { Router } from 'express';
 import { paymentController } from '../controllers/paymentController.js';
 import { authenticate } from '../middlewares/auth.js';
 import { validateRequest } from '../middlewares/validate.js';
-import { createOrderValidators, verifyPaymentValidators } from '../validators/paymentValidators.js';
+import {
+  createOrderValidators,
+  verifyPaymentValidators,
+  orderIdParamValidators,
+} from '../validators/paymentValidators.js';
 import { paymentLimiter, webhookLimiter } from '../middlewares/upstashRateLimiter.js';
 
 const router = Router();
@@ -25,6 +29,14 @@ router.post(
   verifyPaymentValidators,
   validateRequest,
   paymentController.verify
+);
+
+router.get(
+  '/orders/:orderId/status',
+  paymentLimiter,
+  orderIdParamValidators,
+  validateRequest,
+  paymentController.getOrderStatus
 );
 
 export default router;

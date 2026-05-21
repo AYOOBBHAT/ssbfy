@@ -35,6 +35,19 @@ export async function verifyPremiumPayment(payload) {
 }
 
 /**
+ * Server-side order + premium truth (recovery after app kill / delayed webhook).
+ * @param {string} orderId
+ */
+export async function getPremiumOrderStatus(orderId) {
+  const id = orderId != null ? String(orderId).trim() : '';
+  if (!id) {
+    throw new Error('Invalid order id');
+  }
+  const { data } = await api.get(`/payments/orders/${encodeURIComponent(id)}/status`);
+  return data?.data ?? {};
+}
+
+/**
  * Opens Razorpay checkout for a server-created order.
  * @returns {Promise<object>} Success payload (includes razorpay_payment_id, razorpay_order_id, razorpay_signature)
  */
@@ -47,6 +60,15 @@ export async function openRazorpayForOrder(order, user) {
     name: 'SSBFY',
     order_id: order.order_id,
     theme: { color: '#2563eb' },
+    /** UPI + wallets (GPay / PhonePe / Paytm) — no card-first UX. */
+    method: {
+      upi: true,
+      wallet: true,
+      card: false,
+      netbanking: false,
+      paylater: false,
+      emi: false,
+    },
     prefill: {
       email: user?.email ? String(user.email) : '',
       name: user?.name ? String(user.name) : '',
