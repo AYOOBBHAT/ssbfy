@@ -147,7 +147,9 @@ export const practiceRevealService = {
   async reveal(userId, body) {
     const practiceSessionId = String(body?.practiceSessionId ?? '').trim();
     if (!mongoose.Types.ObjectId.isValid(practiceSessionId)) {
-      logSecurityEvent('practice_reveal_missing_session', { reason: 'invalid_id' });
+      logSecurityEvent('practice_reveal_provenance_failure', {
+        reason: 'missing_practice_session',
+      });
       throw new AppError(
         'practiceSessionId is required',
         HTTP_STATUS.BAD_REQUEST,
@@ -158,7 +160,8 @@ export const practiceRevealService = {
 
     const issuance = await practiceIssuanceRepository.findByIdForUser(practiceSessionId, userId);
     if (!issuance) {
-      logSecurityEvent('practice_reveal_issuance_not_found', {
+      logSecurityEvent('practice_reveal_provenance_failure', {
+        reason: 'issuance_not_found',
         userIdSuffix: String(userId).slice(-8),
       });
       throw new AppError('Practice session not found or expired', HTTP_STATUS.NOT_FOUND, null, {
@@ -167,7 +170,8 @@ export const practiceRevealService = {
     }
 
     if (!issuance.expiresAt || new Date(issuance.expiresAt).getTime() < Date.now()) {
-      logSecurityEvent('practice_reveal_issuance_expired', {
+      logSecurityEvent('practice_reveal_provenance_failure', {
+        reason: 'issuance_expired',
         userIdSuffix: String(userId).slice(-8),
       });
       throw new AppError('Practice session has expired. Start a new session.', HTTP_STATUS.GONE, null, {
@@ -196,7 +200,8 @@ export const practiceRevealService = {
     const rawBodyIds = Array.isArray(body?.questionIds) ? body.questionIds : [];
     const bodyQuestionIds = rawBodyIds.map((id) => String(id).trim()).filter(Boolean);
     if (!orderedIdsEqual(issuance.questionIds, bodyQuestionIds)) {
-      logSecurityEvent('practice_reveal_question_mismatch', {
+      logSecurityEvent('practice_reveal_provenance_failure', {
+        reason: 'question_order_mismatch',
         userIdSuffix: String(userId).slice(-8),
         issuanceSuffix: String(issuance._id).slice(-8),
         issuedLen: issuance.questionIds?.length ?? 0,
@@ -220,9 +225,11 @@ export const practiceRevealService = {
         ? body.practiceType.trim().toLowerCase()
         : null;
     if (bodyTypeRaw && bodyTypeRaw !== issuedType) {
-      logSecurityEvent('practice_reveal_type_mismatch', {
+      logSecurityEvent('practice_reveal_provenance_failure', {
+        reason: 'practice_type_mismatch',
         userIdSuffix: String(userId).slice(-8),
         issuedType,
+        bodyType: bodyTypeRaw,
       });
       throw new AppError('practiceType does not match the issued practice session', HTTP_STATUS.BAD_REQUEST);
     }

@@ -19,6 +19,7 @@ import {
 import { submitTest, saveTestProgress, getQuestionsByIds } from '../services/testService';
 import { completeDailyPractice } from '../services/dailyPracticeService';
 import { pickUserAnswersForQuestions, revealPractice } from '../services/practiceService';
+import { filterValidMongoIds } from '../utils/mongoId.js';
 import { buildResultParamsFromReveal } from '../utils/resultReviewPayload';
 import { putLearningSessionCache } from '../utils/learningSessionCache';
 import {
@@ -998,8 +999,13 @@ export default function TestScreen() {
         return;
       }
 
-      const validQuestions = questions.filter((q) => q !== undefined);
-      if (!validQuestions.length) {
+      // Reveal must use route/issuance order — NOT `questions.filter(undefined)` order,
+      // which drops unloaded slots and causes provenance 400/422 mismatches.
+      const sessionQuestionIds = filterValidMongoIds(
+        Array.isArray(questionIds) ? questionIds : [],
+        'questionIds'
+      );
+      if (!sessionQuestionIds.length) {
         setSubmitError(
           practiceType === 'retry'
             ? 'No questions in this retry session.'
@@ -1008,11 +1014,20 @@ export default function TestScreen() {
         return;
       }
 
-      const questionIds = validQuestions
-        .map((q) => String(q?._id ?? ''))
-        .filter(Boolean);
+      const loadedById = new Map(
+        questions
+          .filter((q) => q != null && q._id != null)
+          .map((q) => [String(q._id), q])
+      );
+      const missingLoaded = sessionQuestionIds.filter((id) => !loadedById.has(id));
+      if (missingLoaded.length > 0) {
+        setSubmitError(
+          'Some questions did not load. Go back and start this practice again.'
+        );
+        return;
+      }
 
-      const sessionAnswers = pickUserAnswersForQuestions(answers, questionIds);
+      const sessionAnswers = pickUserAnswersForQuestions(answers, sessionQuestionIds);
 
       practiceRevealAbortRef.current?.abort();
       const revealAc = new AbortController();
@@ -1028,7 +1043,7 @@ export default function TestScreen() {
       try {
         const revealBody = {
           practiceSessionId,
-          questionIds,
+          questionIds: sessionQuestionIds,
           userAnswers: sessionAnswers,
           practiceType,
           clientSessionKey: clientSessionKeyRef.current,
@@ -1046,7 +1061,7 @@ export default function TestScreen() {
           }
         }
 
-        const receiptKey = buildRevealReceiptKey(practiceType, questionIds);
+        const receiptKey = buildRevealReceiptKey(practiceType, sessionQuestionIds);
         let payload = null;
 
         const receiptSessionId = await getRevealReceipt(receiptKey);
@@ -1058,7 +1073,7 @@ export default function TestScreen() {
             if (
               recovered &&
               Array.isArray(recovered.questions) &&
-              recovered.questions.length === questionIds.length
+              recovered.questions.length === sessionQuestionIds.length
             ) {
               payload = {
                 practiceType,
@@ -1100,7 +1115,7 @@ export default function TestScreen() {
           ? payload.reviewQuestions
           : [];
 
-        if (reviewQuestions.length !== questionIds.length) {
+        if (reviewQuestions.length !== sessionQuestionIds.length) {
           setSubmitError(
             practiceType === 'retry'
               ? 'Some questions are no longer available for retry review.'

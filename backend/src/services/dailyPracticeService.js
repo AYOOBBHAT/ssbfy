@@ -24,6 +24,8 @@ export const dailyPracticeService = {
     });
     return {
       questions: projectPublicQuestions(raw),
+      /** Canonical issuance order — client must send this exact list on /practice/reveal. */
+      questionIds: orderedIds.map((id) => String(id)),
       practiceSessionId: String(issuance._id),
       expiresAt: issuance.expiresAt,
     };
