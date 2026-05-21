@@ -1,8 +1,5 @@
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   Text,
   useWindowDimensions,
   View,
@@ -11,10 +8,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '../../theme/colors';
 import { authStyles, getAuthScrollInsets } from '../../theme/authUi';
+import { KEYBOARD_OFFSET_PRESETS } from '../../utils/keyboardConfig';
+import KeyboardSafeScrollView from '../layout/KeyboardSafeScrollView';
+import ScreenKeyboardContainer from '../layout/ScreenKeyboardContainer';
 import AuthAmbientBackground from './AuthAmbientBackground';
 
 /**
- * Immersive auth layout — ambient background + balanced vertical spacing.
+ * Immersive auth layout — ambient background + balanced vertical spacing + keyboard-safe scroll.
  */
 export default function AuthScreenShell({
   children,
@@ -30,12 +30,11 @@ export default function AuthScreenShell({
     <View style={authStyles.safeRoot}>
       <AuthAmbientBackground />
       <SafeAreaView style={authStyles.safe} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
+        <ScreenKeyboardContainer
           style={authStyles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 4 : 0}
+          offsetPreset={KEYBOARD_OFFSET_PRESETS.auth}
         >
-          <ScrollView
+          <KeyboardSafeScrollView
             contentContainerStyle={[
               flow ? authStyles.scrollFlow : authStyles.scroll,
               {
@@ -44,9 +43,8 @@ export default function AuthScreenShell({
                 minHeight: insets.minScrollHeight,
               },
             ]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
             bounces={false}
+            extraBottomPadding={insets.paddingBottom}
           >
             {showBack ? (
               <Pressable
@@ -65,8 +63,8 @@ export default function AuthScreenShell({
             ) : null}
             {children}
             {footer}
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardSafeScrollView>
+        </ScreenKeyboardContainer>
       </SafeAreaView>
     </View>
   );

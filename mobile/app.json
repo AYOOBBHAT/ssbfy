@@ -15,15 +15,31 @@
     "ios": {
       "supportsTablet": true
     },
+    "scheme": "ssbfy",
     "android": {
       "package": "com.ayoobbhat.ssbfy",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "ssbfy.app",
+              "pathPrefix": "/battle"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "versionCode": 14,
       "permissions": [],
       "adaptiveIcon": {
         "foregroundImage": "./assets/new_icon.png",
         "backgroundColor": "#fafbff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "favicon": "./assets/new_icon.png"

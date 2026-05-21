@@ -48,6 +48,18 @@ export function getSessionActivityVisual(kind) {
         chipBg: colors.primarySoft,
         chipText: colors.primaryText,
       };
+    case 'battle':
+    case 'win':
+    case 'loss':
+    case 'tie':
+    case 'pending':
+      return {
+        icon: 'flash-outline',
+        iconBg: '#fff7ed',
+        iconColor: colors.primary,
+        chipBg: colors.primarySoft,
+        chipText: colors.primaryText,
+      };
     case 'topic':
       return {
         icon: 'book-outline',

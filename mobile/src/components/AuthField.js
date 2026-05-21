@@ -1,4 +1,4 @@
-import { forwardRef, useState } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
 } from 'react-native';
+import { useKeyboardSafeField } from './layout/KeyboardSafeScrollView';
 import { colors } from '../theme/colors';
 
 /**
@@ -41,11 +42,28 @@ const AuthField = forwardRef(function AuthField(
     rightAdornment = null,
     inputRowStyle = null,
     maxLength,
+    onFocus: onFocusProp,
+    onBlur: onBlurProp,
     ...inputRest
   },
   ref
 ) {
   const [focused, setFocused] = useState(false);
+  const inputRef = useRef(null);
+  const keyboardForm = useKeyboardSafeField();
+
+  useImperativeHandle(ref, () => inputRef.current);
+
+  const handleFocus = (e) => {
+    setFocused(true);
+    keyboardForm?.registerScrollToField(inputRef);
+    onFocusProp?.(e);
+  };
+
+  const handleBlur = (e) => {
+    setFocused(false);
+    onBlurProp?.(e);
+  };
 
   return (
     <View style={styles.wrap}>
@@ -62,7 +80,7 @@ const AuthField = forwardRef(function AuthField(
           <View style={styles.leftAdornment}>{leftAdornment}</View>
         ) : null}
         <TextInput
-          ref={ref}
+          ref={inputRef}
           style={[styles.input, leftAdornment && styles.inputWithLeft]}
           value={value}
           onChangeText={onChangeText}
@@ -77,10 +95,11 @@ const AuthField = forwardRef(function AuthField(
           autoComplete={autoComplete}
           returnKeyType={returnKeyType}
           onSubmitEditing={onSubmitEditing}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           selectionColor={colors.primary}
           maxLength={maxLength}
+          blurOnSubmit={returnKeyType === 'go' || returnKeyType === 'done'}
           {...inputRest}
         />
         {rightAdornment ? (

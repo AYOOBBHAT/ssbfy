@@ -1,6 +1,10 @@
 import { useMemo, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import {
+  useBottomSafeInsets,
+  useBottomSafeInsetsDevLog,
+} from '../hooks/useBottomSafeInsets';
 import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
@@ -70,7 +74,7 @@ function formatIndexList(indexes, options) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
-  content: { padding: 16, paddingBottom: 32 },
+  content: { padding: 16 },
 
   readOnlyBanner: {
     backgroundColor: colors.primarySoft,
@@ -201,6 +205,8 @@ const ReviewAnswerRow = memo(function ReviewAnswerRow({ item, index }) {
 
 export default function ReviewAnswersScreen() {
   const route = useRoute();
+  const bottomInsets = useBottomSafeInsets({ extraScrollPadding: 16 });
+  useBottomSafeInsetsDevLog('ReviewAnswers', bottomInsets);
   const params = route.params || {};
   /** Completed-test review from Result is read-only; default true so navigation bugs can't mutate answers. */
   const readOnly = params.readOnly !== false;
@@ -252,7 +258,7 @@ export default function ReviewAnswersScreen() {
   return (
     <FlatList
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, bottomInsets.scrollContentStyle]}
       data={reviewItems}
       keyExtractor={keyExtractor}
       renderItem={renderItem}

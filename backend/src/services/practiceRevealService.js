@@ -9,6 +9,7 @@ import { learningSessionService } from './learningSessionService.js';
 import { getCanonicalTopicResolver } from './canonicalTopicResolver.js';
 import { scoreQuestionSession } from '../utils/questionScoring.js';
 import { practiceIssuanceRepository } from '../repositories/practiceIssuanceRepository.js';
+import { battleService } from './battleService.js';
 import { logSecurityEvent } from '../utils/logger.js';
 
 const PRACTICE_REVEAL_MAX_QUESTIONS = 50;
@@ -20,6 +21,7 @@ const ALLOWED_PRACTICE_TYPES = new Set([
   'daily',
   'practice',
   'retry',
+  'battle',
 ]);
 
 function normalizeRef(ref) {
@@ -244,6 +246,12 @@ export const practiceRevealService = {
       }
     }
 
+    if (issuedType === 'battle') {
+      if (!issuance.battleSessionId) {
+        throw new AppError('Invalid battle practice session', HTTP_STATUS.BAD_REQUEST);
+      }
+    }
+
     if (!wasFinalized) {
       const incOk = await practiceIssuanceRepository.incrementScratchAttempts(issuance._id, {
         maxScratch: PRACTICE_ISSUANCE_MAX_SCRATCH_REVEALS,
@@ -385,6 +393,17 @@ export const practiceRevealService = {
       });
     }
 
+    let battleOutcome = null;
+    if (issuedType === 'battle' && issuance.battleSessionId && !wasFinalized) {
+      battleOutcome = await battleService.onRevealComplete({
+        userId,
+        battleSessionId: String(issuance.battleSessionId),
+        learningSessionId,
+        summary,
+        startedAt: null,
+      });
+    }
+
     return {
       practiceType: issuedType,
       summary,
@@ -393,6 +412,10 @@ export const practiceRevealService = {
       reviewQuestions,
       learningSessionId,
       immutableAttemptSnapshot: true,
+      ...(battleOutcome?.battle ? { battle: battleOutcome.battle } : {}),
+      ...(battleOutcome?.winnerUserId != null
+        ? { battleWinnerUserId: battleOutcome.winnerUserId }
+        : {}),
     };
   },
 };

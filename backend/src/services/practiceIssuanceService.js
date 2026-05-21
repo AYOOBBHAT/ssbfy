@@ -10,7 +10,7 @@ import { testAttemptRepository } from '../repositories/testAttemptRepository.js'
 import { practiceIssuanceRepository } from '../repositories/practiceIssuanceRepository.js';
 import { logSecurityEvent } from '../utils/logger.js';
 
-const ALLOWED_TYPES = new Set(['topic', 'smart', 'weak', 'daily', 'practice', 'retry']);
+const ALLOWED_TYPES = new Set(['topic', 'smart', 'weak', 'daily', 'practice', 'retry', 'battle']);
 
 function normalizePracticeType(raw) {
   const t = String(raw ?? 'practice')
@@ -41,7 +41,7 @@ export const practiceIssuanceService = {
    * @param {string} userId
    * @param {string} practiceType
    * @param {import('mongoose').Types.ObjectId[]} orderedQuestionIds
-   * @param {{ sourceAttemptId?: string|null, allowInactiveScoring?: boolean }} [opts]
+   * @param {{ sourceAttemptId?: string|null, allowInactiveScoring?: boolean, battleSessionId?: string|null }} [opts]
    */
   async createIssuance(userId, practiceType, orderedQuestionIds, opts = {}) {
     const type = normalizePracticeType(practiceType);
@@ -50,6 +50,9 @@ export const practiceIssuanceService = {
     }
     if (type === 'retry' && !opts.sourceAttemptId) {
       throw new AppError('sourceAttemptId is required for retry issuance', HTTP_STATUS.BAD_REQUEST);
+    }
+    if (type === 'battle' && !opts.battleSessionId) {
+      throw new AppError('battleSessionId is required for battle issuance', HTTP_STATUS.BAD_REQUEST);
     }
     if (!Array.isArray(orderedQuestionIds) || orderedQuestionIds.length === 0) {
       throw new AppError('questionIds must be a non-empty ordered list', HTTP_STATUS.BAD_REQUEST);
@@ -71,6 +74,9 @@ export const practiceIssuanceService = {
       questionIds: oids,
       sourceAttemptId: opts.sourceAttemptId
         ? new mongoose.Types.ObjectId(String(opts.sourceAttemptId))
+        : null,
+      battleSessionId: opts.battleSessionId
+        ? new mongoose.Types.ObjectId(String(opts.battleSessionId))
         : null,
       allowInactiveScoring: Boolean(opts.allowInactiveScoring),
       expiresAt: expiresAtFromNow(),
@@ -205,6 +211,9 @@ export const practiceIssuanceService = {
         sourceAttemptId: body.sourceAttemptId,
         questionIds: body.questionIds,
       });
+    }
+    if (practiceType === 'battle') {
+      throw new AppError('Battle sessions are started via POST /battles/:id/start', HTTP_STATUS.BAD_REQUEST);
     }
     return this.issueFromClientQuestionIds(userId, {
       practiceType,

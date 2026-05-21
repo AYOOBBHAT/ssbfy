@@ -22,6 +22,10 @@ import NotesListScreen from '../screens/NotesListScreen';
 import NoteDetailScreen from '../screens/NoteDetailScreen';
 import PremiumScreen from '../screens/PremiumScreen';
 import SmartPracticeScreen from '../screens/SmartPracticeScreen';
+import BattleCreateScreen from '../screens/BattleCreateScreen';
+import BattleJoinScreen from '../screens/BattleJoinScreen';
+import BattleLobbyScreen from '../screens/BattleLobbyScreen';
+import BattleResultScreen from '../screens/BattleResultScreen';
 import SavedMaterialsScreen from '../screens/SavedMaterialsScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import { colors, brand } from '../theme/colors';
@@ -214,7 +218,10 @@ export default function AppNavigator() {
             options={({ route }) => {
               const mode = route.params?.mode;
               const blockSwipe =
-                mode === 'practice' || mode === 'daily' || mode === 'retry';
+                mode === 'practice' ||
+                mode === 'daily' ||
+                mode === 'retry' ||
+                mode === 'battle';
               return {
                 title: 'Test',
                 gestureEnabled: !blockSwipe,
@@ -261,6 +268,26 @@ export default function AppNavigator() {
             name="ChangePassword"
             component={ChangePasswordScreen}
             options={{ title: 'Change Password', ...stackMotion.defaultPush }}
+          />
+          <RootStack.Screen
+            name="BattleCreate"
+            component={BattleCreateScreen}
+            options={{ title: 'Challenge a friend', ...stackMotion.defaultPush }}
+          />
+          <RootStack.Screen
+            name="BattleJoin"
+            component={BattleJoinScreen}
+            options={{ title: 'Join battle', ...stackMotion.defaultPush }}
+          />
+          <RootStack.Screen
+            name="BattleLobby"
+            component={BattleLobbyScreen}
+            options={{ title: 'Battle', ...stackMotion.defaultPush }}
+          />
+          <RootStack.Screen
+            name="BattleResult"
+            component={BattleResultScreen}
+            options={{ title: 'Battle results', ...stackMotion.resultReveal }}
           />
         </>
       ) : (

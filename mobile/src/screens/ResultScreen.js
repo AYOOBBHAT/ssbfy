@@ -49,6 +49,10 @@ import logger from '../utils/logger';
 import { EmptyState, ErrorState, InlineLoading, LoadingState } from '../components/StateView';
 import { pressFeedbackStyle } from '../utils/pressFeedback';
 import { useNavigationActionLock } from '../hooks/useNavigationActionLock';
+import {
+  useBottomSafeInsets,
+  useBottomSafeInsetsDevLog,
+} from '../hooks/useBottomSafeInsets';
 import { isGlobalOpening } from '../utils/navigationGuard';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
@@ -449,6 +453,8 @@ export default function ResultScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { runOnce, runOnceAsync } = useNavigationActionLock();
+  const bottomInsets = useBottomSafeInsets({ extraScrollPadding: 16 });
+  useBottomSafeInsetsDevLog('Result', bottomInsets);
   const heroOpacity = useRef(new Animated.Value(0)).current;
   const hydration = useMemo(
     () => resolveHydrationMode(route.params),
@@ -2492,7 +2498,7 @@ export default function ResultScreen() {
     <ScrollView
       key={resultScreenKey}
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, bottomInsets.scrollContentStyle]}
       showsVerticalScrollIndicator={false}
     >
       {renderHeader()}
@@ -2503,7 +2509,7 @@ export default function ResultScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
-  content: { padding: 16, paddingBottom: 32 },
+  content: { padding: 16 },
 
   heroCard: {
     borderRadius: 16,

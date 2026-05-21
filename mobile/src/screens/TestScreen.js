@@ -29,6 +29,7 @@ import {
 import { getLearningSession } from '../services/learningSessionService';
 import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
+import SafeBottomActionBar from '../components/layout/SafeBottomActionBar';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateView';
 import { EMPTY } from '../theme/stateCopy';
 import TestCountdownBar from '../components/TestCountdownBar';
@@ -134,6 +135,8 @@ export default function TestScreen() {
   const isRetry = params.mode === 'retry';
   const isPractice = params.mode === 'practice';
   const isDaily = params.mode === 'daily';
+  const isBattle = params.mode === 'battle';
+  const battleId = params.battleId != null ? String(params.battleId) : null;
   /** Retry from Profile historical attempt — must use preloaded snapshot only. */
   const historicalAttemptMode = !!params.historicalAttemptMode;
   const sourceAttemptId =
@@ -142,7 +145,7 @@ export default function TestScreen() {
     params.practiceSessionId != null ? String(params.practiceSessionId) : null;
   /** Tab to restore on leave/finish (Practice | Home | Profile). */
   const originMainTab = params.originMainTab || null;
-  const isLocal = isRetry || isPractice || isDaily;
+  const isLocal = isRetry || isPractice || isDaily || isBattle;
   const questionIds = isLocal
     ? (Array.isArray(params.questionIds) ? params.questionIds : [])
     : (attempt?.questionIds ?? []);
@@ -151,11 +154,15 @@ export default function TestScreen() {
     ? 'Practice Mode'
     : isDaily
     ? 'Daily Practice'
+    : isBattle
+    ? 'Battle'
     : null;
   const localFinishLabel = isRetry
     ? RETRY_FINISH_LABEL
     : isDaily
     ? 'Finish Daily Practice'
+    : isBattle
+    ? 'Finish battle'
     : 'Finish Practice';
 
   const retryScopeCount =
@@ -969,9 +976,10 @@ export default function TestScreen() {
     if (typeof params.practiceType === 'string' && params.practiceType.trim()) {
       return params.practiceType.trim();
     }
+    if (isBattle) return 'battle';
     if (isPractice) return 'topic';
     return 'practice';
-  }, [isDaily, isPractice, params.practiceType]);
+  }, [isDaily, isPractice, isBattle, params.practiceType]);
 
   const finishLocalSessionViaReveal = useCallback(
     async (practiceType, transitionGen, resultExtras = {}) => {
@@ -1120,6 +1128,7 @@ export default function TestScreen() {
           practiceRevealed: true,
           retry: practiceType === 'retry',
           sessionType: practiceType,
+          battleId: battleId || undefined,
           ...resultExtras,
         });
 
@@ -1131,14 +1140,28 @@ export default function TestScreen() {
           });
         }
 
-        const committed = resetStackToResult(navigation, {
-          originMainTab: tab,
-          resultParams: {
-            ...resultParams,
-            attemptId: undefined,
-          },
-          commitRef: navigationCommittedRef,
-        });
+        let committed = false;
+        if (practiceType === 'battle' && battleId) {
+          if (navigationCommittedRef.current) return;
+          navigationCommittedRef.current = true;
+          navigation.reset({
+            index: 1,
+            routes: [
+              buildMainReturnRoute(tab),
+              { name: 'BattleResult', params: { battleId } },
+            ],
+          });
+          committed = true;
+        } else {
+          committed = resetStackToResult(navigation, {
+            originMainTab: tab,
+            resultParams: {
+              ...resultParams,
+              attemptId: undefined,
+            },
+            commitRef: navigationCommittedRef,
+          });
+        }
         if (committed) {
           void invalidateProfileCachesAfterSessionComplete();
           submissionCompletedRef.current = true;
@@ -1166,6 +1189,7 @@ export default function TestScreen() {
       historicalAttemptMode,
       sourceAttemptId,
       practiceSessionId,
+      battleId,
     ]
   );
 
@@ -1217,7 +1241,7 @@ export default function TestScreen() {
       return;
     }
 
-    if (isPractice) {
+    if (isBattle || isPractice) {
       if (
         submitLockRef.current ||
         navigationCommittedRef.current ||
@@ -1232,7 +1256,7 @@ export default function TestScreen() {
       setSubmitError(null);
       try {
         if (!mountedRef.current || isStaleTransitionGeneration(transitionGenRef, gen)) return;
-        await finishLocalSessionViaReveal(resolvePracticeType(), gen);
+        await finishLocalSessionViaReveal(isBattle ? 'battle' : resolvePracticeType(), gen);
       } catch (e) {
         if (mountedRef.current && !isRequestCancelled(e)) {
           setSubmitError(getApiErrorMessage(e));
@@ -1328,6 +1352,59 @@ export default function TestScreen() {
         !isLocal ? ` · Skipped ${skippedVisible} · Marked ${markedVisible}` : ''
       }`;
 
+  const renderBottomActions = () => (
+    <SafeBottomActionBar screenKey="Test">
+      {submitError ? <Text style={styles.err}>{submitError}</Text> : null}
+      <View style={styles.nav}>
+        <AppButton
+          title="Previous"
+          variant="secondary"
+          onPress={goPrev}
+          disabled={index === 0 || submitting}
+          style={styles.navBtn}
+        />
+        <AppButton
+          title="Next"
+          variant="secondary"
+          onPress={goNext}
+          disabled={index >= total - 1 || submitting}
+          style={styles.navBtn}
+        />
+      </View>
+      {!isLocal && currentId ? (
+        <View style={styles.secondaryActions}>
+          <AppButton
+            title={markedForReviewIds.includes(currentId) ? '★ Review' : '☆ Mark review'}
+            variant="secondary"
+            onPress={toggleMarkForReview}
+            disabled={submitting}
+            style={styles.secondaryBtn}
+          />
+          <AppButton
+            title="Skip"
+            variant="secondary"
+            onPress={skipCurrentQuestion}
+            disabled={submitting}
+            style={styles.secondaryBtn}
+          />
+        </View>
+      ) : null}
+      {isLocal ? (
+        <AppButton
+          title={(isDaily || isPractice || isRetry || isBattle) && submitting ? 'Finishing…' : localFinishLabel}
+          onPress={handleFinishLocal}
+          disabled={(isDaily || isPractice || isRetry || isBattle) && submitting}
+        />
+      ) : (
+        <AppButton
+          title={submitting ? 'Submitting...' : 'Submit Test'}
+          onPress={handleSubmitPress}
+          disabled={submitting || submissionCompletedRef.current}
+        />
+      )}
+    </SafeBottomActionBar>
+  );
+
   const countdownEl =
     initialSeconds > 0 ? (
       <TestCountdownBar
@@ -1401,36 +1478,7 @@ export default function TestScreen() {
         <View style={styles.centered}>
           <Text>Question not available</Text>
         </View>
-        {submitError ? <Text style={styles.err}>{submitError}</Text> : null}
-        <View style={styles.nav}>
-          <AppButton
-            title="Previous"
-            variant="secondary"
-            onPress={goPrev}
-            disabled={index === 0 || submitting}
-            style={styles.navBtn}
-          />
-          <AppButton
-            title="Next"
-            variant="secondary"
-            onPress={goNext}
-            disabled={index >= total - 1 || submitting}
-            style={styles.navBtn}
-          />
-        </View>
-        {isLocal ? (
-          <AppButton
-            title={(isDaily || isPractice || isRetry) && submitting ? 'Finishing…' : localFinishLabel}
-            onPress={handleFinishLocal}
-            disabled={(isDaily || isPractice || isRetry) && submitting}
-          />
-        ) : (
-          <AppButton
-            title={submitting ? 'Submitting...' : 'Submit Test'}
-            onPress={handleSubmitPress}
-            disabled={submitting}
-          />
-        )}
+        {renderBottomActions()}
       </View>
     );
   }
@@ -1461,7 +1509,7 @@ export default function TestScreen() {
       <Text style={styles.header}>
         {isRetry ? 'Recovery' : 'Question'} {index + 1} / {total}
       </Text>
-      <ScrollView style={styles.scroll}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.question}>
           {question?.questionText || '(question unavailable)'}
         </Text>
@@ -1506,65 +1554,25 @@ export default function TestScreen() {
             );
           })}
       </ScrollView>
-      {submitError ? <Text style={styles.err}>{submitError}</Text> : null}
-      <View style={styles.nav}>
-        <AppButton
-          title="Previous"
-          variant="secondary"
-          onPress={goPrev}
-          disabled={index === 0 || submitting}
-          style={styles.navBtn}
-        />
-        <AppButton
-          title="Next"
-          variant="secondary"
-          onPress={goNext}
-          disabled={index >= total - 1 || submitting}
-          style={styles.navBtn}
-        />
-      </View>
-      {!isLocal && currentId ? (
-        <View style={styles.secondaryActions}>
-          <AppButton
-            title={markedForReviewIds.includes(currentId) ? '★ Review' : '☆ Mark review'}
-            variant="secondary"
-            onPress={toggleMarkForReview}
-            disabled={submitting}
-            style={styles.secondaryBtn}
-          />
-          <AppButton
-            title="Skip"
-            variant="secondary"
-            onPress={skipCurrentQuestion}
-            disabled={submitting}
-            style={styles.secondaryBtn}
-          />
-        </View>
-      ) : null}
-      {isLocal ? (
-        <AppButton
-          title={(isDaily || isPractice || isRetry) && submitting ? 'Finishing…' : localFinishLabel}
-          onPress={handleFinishLocal}
-          disabled={(isDaily || isPractice || isRetry) && submitting}
-        />
-      ) : (
-        <AppButton
-          title={submitting ? 'Submitting...' : 'Submit Test'}
-          onPress={handleSubmitPress}
-          disabled={submitting || submissionCompletedRef.current}
-        />
-      )}
+      {renderBottomActions()}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: colors.bg },
+  container: {
+    flex: 1,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 0,
+    backgroundColor: colors.bg,
+  },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   attemptSummary: { fontSize: 14, marginBottom: 8, color: colors.muted },
   retryHeader: { fontSize: 16, fontWeight: '700', marginBottom: 8, color: colors.primary },
   header: { fontSize: 16, marginBottom: 12, fontWeight: '600', color: colors.text },
   scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 8 },
   question: { ...typography.questionText, marginBottom: 12 },
   optionRow: {
     flexDirection: 'row',

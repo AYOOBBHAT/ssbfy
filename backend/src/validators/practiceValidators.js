@@ -1,6 +1,6 @@
 import { body } from 'express-validator';
 
-const PRACTICE_TYPES = ['topic', 'smart', 'weak', 'daily', 'practice', 'retry'];
+const PRACTICE_TYPES = ['topic', 'smart', 'weak', 'daily', 'practice', 'retry', 'battle'];
 const ISSUE_TYPES = ['topic', 'smart', 'weak', 'daily', 'practice', 'retry'];
 
 export const practiceIssueValidators = [

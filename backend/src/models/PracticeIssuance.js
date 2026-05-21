@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const PRACTICE_TYPES = ['topic', 'smart', 'weak', 'daily', 'practice', 'retry'];
+const PRACTICE_TYPES = ['topic', 'smart', 'weak', 'daily', 'practice', 'retry', 'battle'];
 
 const practiceIssuanceSchema = new mongoose.Schema(
   {
@@ -23,6 +23,13 @@ const practiceIssuanceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TestAttempt',
       default: null,
+    },
+    /** Battle friend-challenge — frozen question set from BattleSession. */
+    battleSessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BattleSession',
+      default: null,
+      index: true,
     },
     /**
      * When true, reveal may load questions via scoring fetch that includes inactive

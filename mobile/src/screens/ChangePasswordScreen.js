@@ -3,14 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AppButton from '../components/AppButton';
 import AuthField, { PasswordToggle } from '../components/AuthField';
+import FormScreenShell from '../components/layout/FormScreenShell';
 import { colors } from '../theme/colors';
 import { changePassword } from '../services/authService';
 import { getApiErrorMessage } from '../services/api';
@@ -75,114 +73,102 @@ export default function ChangePasswordScreen({ navigation }) {
     !submitting;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.title}>Change password</Text>
-        <Text style={styles.subtitle}>
-          Keep your account secure. Use a strong password you do not use anywhere else.
-        </Text>
+    <FormScreenShell contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Change password</Text>
+      <Text style={styles.subtitle}>
+        Keep your account secure. Use a strong password you do not use anywhere else.
+      </Text>
 
-        {error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
 
-        <AuthField
-          label="Current password"
-          placeholder="Current password"
-          value={currentPassword}
-          onChangeText={setCurrentPassword}
-          editable={!submitting}
-          secureTextEntry={!showCurrent}
-          autoCapitalize="none"
-          autoCorrect={false}
-          textContentType="password"
-          autoComplete="password"
-          returnKeyType="next"
-          onSubmitEditing={() => newRef.current?.focus()}
-          leftAdornment={<Ionicons name="lock-closed-outline" size={20} color={colors.primary} />}
-          rightAdornment={
-            <PasswordToggle
-              visible={showCurrent}
-              onPress={() => setShowCurrent((v) => !v)}
-              disabled={submitting}
-            />
-          }
-        />
+      <AuthField
+        label="Current password"
+        placeholder="Current password"
+        value={currentPassword}
+        onChangeText={setCurrentPassword}
+        editable={!submitting}
+        secureTextEntry={!showCurrent}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        autoComplete="password"
+        returnKeyType="next"
+        onSubmitEditing={() => newRef.current?.focus()}
+        leftAdornment={<Ionicons name="lock-closed-outline" size={20} color={colors.primary} />}
+        rightAdornment={
+          <PasswordToggle
+            visible={showCurrent}
+            onPress={() => setShowCurrent((v) => !v)}
+            disabled={submitting}
+          />
+        }
+      />
 
-        <AuthField
-          ref={newRef}
-          label="New password"
-          placeholder="At least 8 characters"
-          value={newPassword}
-          onChangeText={setNewPassword}
-          editable={!submitting}
-          secureTextEntry={!showNew}
-          autoCapitalize="none"
-          autoCorrect={false}
-          textContentType="newPassword"
-          autoComplete="password-new"
-          returnKeyType="next"
-          onSubmitEditing={() => confirmRef.current?.focus()}
-          leftAdornment={<Ionicons name="key-outline" size={20} color={colors.primary} />}
-          rightAdornment={
-            <PasswordToggle
-              visible={showNew}
-              onPress={() => setShowNew((v) => !v)}
-              disabled={submitting}
-            />
-          }
-        />
+      <AuthField
+        ref={newRef}
+        label="New password"
+        placeholder="At least 8 characters"
+        value={newPassword}
+        onChangeText={setNewPassword}
+        editable={!submitting}
+        secureTextEntry={!showNew}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="newPassword"
+        autoComplete="password-new"
+        returnKeyType="next"
+        onSubmitEditing={() => confirmRef.current?.focus()}
+        leftAdornment={<Ionicons name="key-outline" size={20} color={colors.primary} />}
+        rightAdornment={
+          <PasswordToggle
+            visible={showNew}
+            onPress={() => setShowNew((v) => !v)}
+            disabled={submitting}
+          />
+        }
+      />
 
-        <AuthField
-          ref={confirmRef}
-          label="Confirm new password"
-          placeholder="Confirm new password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          editable={!submitting}
-          secureTextEntry={!showConfirm}
-          autoCapitalize="none"
-          autoCorrect={false}
-          textContentType="newPassword"
-          autoComplete="password-new"
-          returnKeyType="go"
-          onSubmitEditing={handleSubmit}
-          leftAdornment={<Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />}
-          rightAdornment={
-            <PasswordToggle
-              visible={showConfirm}
-              onPress={() => setShowConfirm((v) => !v)}
-              disabled={submitting}
-            />
-          }
-        />
+      <AuthField
+        ref={confirmRef}
+        label="Confirm new password"
+        placeholder="Confirm new password"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        editable={!submitting}
+        secureTextEntry={!showConfirm}
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="newPassword"
+        autoComplete="password-new"
+        returnKeyType="go"
+        onSubmitEditing={handleSubmit}
+        leftAdornment={<Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />}
+        rightAdornment={
+          <PasswordToggle
+            visible={showConfirm}
+            onPress={() => setShowConfirm((v) => !v)}
+            disabled={submitting}
+          />
+        }
+      />
 
-        <AppButton
-          title="Update password"
-          loading={submitting}
-          onPress={handleSubmit}
-          disabled={!canSubmit}
-          style={styles.cta}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <AppButton
+        title="Update password"
+        loading={submitting}
+        onPress={handleSubmit}
+        disabled={!canSubmit}
+        style={styles.cta}
+      />
+    </FormScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.bg },
-  container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, paddingBottom: 32 },
+  content: { paddingBottom: 40 },
   title: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 8 },
   subtitle: { fontSize: 14, color: colors.muted, lineHeight: 20, marginBottom: 16 },
   errorBanner: {

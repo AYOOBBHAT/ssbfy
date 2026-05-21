@@ -158,6 +158,33 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
+      <Text style={styles.sectionTitle}>Battle</Text>
+      <Pressable
+        onPress={() => navigation.navigate('BattleCreate')}
+        style={({ pressed }) => [styles.linkCard, pressCardStyle(pressed)]}
+      >
+        <View style={[styles.linkIcon, styles.battleIcon]}>
+          <Ionicons name="flash" size={22} color={colors.primary} />
+        </View>
+        <View style={styles.linkBody}>
+          <Text style={styles.linkTitle}>Challenge a friend</Text>
+          <Text style={styles.linkSub}>
+            Same questions, async play — share a code and see who wins.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color={colors.muted} />
+      </Pressable>
+      <Pressable
+        onPress={() => navigation.navigate('BattleJoin')}
+        style={({ pressed }) => [styles.linkCard, pressCardStyle(pressed), styles.joinCard]}
+      >
+        <View style={styles.linkBody}>
+          <Text style={styles.linkTitle}>Join a battle</Text>
+          <Text style={styles.linkSub}>Have an invite code? Enter it here.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color={colors.muted} />
+      </Pressable>
+
       <Text style={styles.sectionTitle}>Practice</Text>
       <Pressable
         onPress={() => navigation.navigate('Practice')}
@@ -371,6 +398,13 @@ const styles = StyleSheet.create({
     marginRight: 14,
     borderWidth: 1,
     borderColor: colors.primary,
+  },
+  battleIcon: {
+    backgroundColor: '#fff7ed',
+    borderColor: colors.primary,
+  },
+  joinCard: {
+    marginBottom: 20,
   },
   linkBody: { flex: 1 },
   linkTitle: { fontSize: 16, fontWeight: '700', color: colors.text },

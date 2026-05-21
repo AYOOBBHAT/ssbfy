@@ -27,6 +27,7 @@ import { getSubscriptionStatus, formatPlanDate } from '../utils/subscriptionStat
 import { getProfileAnalytics } from '../services/profileAnalyticsService';
 import { getAnalyticsOverview } from '../services/analyticsService';
 import ProfileActivitySections from '../components/profile/ProfileActivitySections';
+import BattleHistorySection from '../components/profile/BattleHistorySection';
 import {
   getAnalyticsOverviewCache,
   putAnalyticsOverviewCache,
@@ -137,20 +138,27 @@ export default function ProfileScreen({ navigation }) {
         cacheOwnerUserId={user?._id ?? user?.id ?? null}
         onStart={goToTests}
         onOpenMockAttempt={(attemptId) => {
-          const rootNav = navigation.getParent()?.getParent();
-          rootNav?.navigate('Result', {
+          navigation.getParent()?.getParent()?.navigate('Result', {
             attemptId,
             learningSessionId: undefined,
           });
         }}
         onOpenLearningSession={(learningSessionId) => {
-          const rootNav = navigation.getParent()?.getParent();
-          rootNav?.navigate('Result', {
+          navigation.getParent()?.getParent()?.navigate('Result', {
             learningSessionId,
             attemptId: undefined,
           });
         }}
       />
+
+      <View style={styles.progressCard}>
+        <BattleHistorySection
+          rootNavigation={navigation.getParent()?.getParent()}
+          onCreateBattle={() =>
+            navigation.getParent()?.getParent()?.navigate('BattleCreate')
+          }
+        />
+      </View>
 
       <Text style={styles.sectionLabel}>Account</Text>
       <View style={styles.card}>

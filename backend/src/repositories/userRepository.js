@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { User } from '../models/User.js';
 import { FREE_TEST_ATTEMPTS } from '../constants/access.js';
 
@@ -25,6 +26,19 @@ export const userRepository = {
 
   async findById(id) {
     return User.findById(id).lean().exec();
+  },
+
+  /** Lightweight display names for battle history / social rows. */
+  async findDisplayNamesByIds(ids) {
+    if (!ids?.length) return [];
+    const oids = [...new Set(ids.map(String))]
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    if (!oids.length) return [];
+    return User.find({ _id: { $in: oids } })
+      .select('name email')
+      .lean()
+      .exec();
   },
 
   async findByIdWithPassword(id) {

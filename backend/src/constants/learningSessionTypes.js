@@ -5,6 +5,7 @@ export const LEARNING_SESSION_TYPES = Object.freeze([
   'daily',
   'practice',
   'retry',
+  'battle',
 ]);
 
 export const LEARNING_SESSION_SNAPSHOT_VERSION = 1;

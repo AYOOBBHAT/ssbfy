@@ -434,6 +434,11 @@ export const questionRepository = {
     return rows;
   },
 
+  /** Count active questions matching smart-practice / battle filters. */
+  async countActiveByMatch(match) {
+    return Question.countDocuments(match).exec();
+  },
+
   /**
    * Bulk-append Post ids to `postIds` (exam tags). Per-document dedupe via `$addToSet`.
    */
