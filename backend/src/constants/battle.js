@@ -25,6 +25,6 @@ export const BATTLE_STATUSES = Object.freeze([
 
 export const BATTLE_TIMER_MODES = Object.freeze(['none', 'per_question', 'total']);
 
-/** Deep link / universal link path prefix (mobile registers scheme). */
+/** Deep link scheme + HTTPS App Links host (api.jkssbfy.in, served via backend /.well-known). */
 export const BATTLE_DEEP_LINK_SCHEME = 'ssbfy';
-export const BATTLE_WEB_INVITE_BASE = 'https://ssbfy.app/battle';
+export const BATTLE_WEB_INVITE_BASE = 'https://api.jkssbfy.in/battle';

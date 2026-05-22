@@ -86,7 +86,7 @@ sequenceDiagram
 ## Invite flow
 
 - **Code:** 6-char uppercase (no ambiguous `0/O/1/I`)
-- **Links:** `ssbfy://battle/{code}` and `https://ssbfy.app/battle/{code}`
+- **Links:** `ssbfy://battle/{code}` and `https://api.jkssbfy.in/battle/{code}` (Android App Links + `/.well-known/assetlinks.json` on `api.jkssbfy.in`)
 - **Mobile:** `app.json` scheme + Android intent filter; `NavigationContainer` linking → `BattleJoin`
 - **V1:** Manual share only (no push)
 

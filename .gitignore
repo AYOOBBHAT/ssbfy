@@ -41,6 +41,14 @@ Thumbs.db
 .idea/
 
 # =========================
+# ANDROID SIGNING (never commit)
+# =========================
+*.jks
+*.keystore
+android/keystores/*
+**/android/keystores/*
+
+# =========================
 # EXPO / REACT NATIVE
 # =========================
 .expo-shared/

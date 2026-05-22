@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import compression from 'compression';
 import helmet from 'helmet';
@@ -30,6 +32,9 @@ const corsOptions = {
     return callback(new Error(CORS_DENIED_MESSAGE));
   },
 };
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const wellKnownDir = path.join(__dirname, '..', 'public', '.well-known');
 
 const app = express();
 
@@ -68,6 +73,19 @@ app.use(httpLogger);
 
 /** Same payload as `GET /api/health` — many monitors ping `/health` at root. */
 app.get('/health', healthHandler);
+
+/** Android App Links — must be public HTTPS JSON on api.jkssbfy.in (no auth, no redirect). */
+app.use(
+  '/.well-known',
+  express.static(wellKnownDir, {
+    index: false,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('assetlinks.json')) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      }
+    },
+  })
+);
 
 app.get('/api', (req, res) => {
   res.json({

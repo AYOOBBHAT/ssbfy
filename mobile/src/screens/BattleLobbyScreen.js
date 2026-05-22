@@ -10,6 +10,10 @@ import { NAV_TRANSITION_LOCK_MS, tryAcquireLock } from '../utils/navigationGuard
 import { pressCardStyle } from '../utils/pressFeedback';
 import { MAIN_TABS } from '../navigation/testFlowNavigation';
 import { battleHistoryDevLog } from '../utils/battleHistoryDevLog';
+import {
+  formatBattleShareMessage,
+  normalizeBattleWebLink,
+} from '../utils/battleInviteLinks';
 
 async function copyToClipboard(text) {
   try {
@@ -69,11 +73,10 @@ export default function BattleLobbyScreen() {
   );
 
   const shareInvite = useCallback(async () => {
-    if (!battle) return;
-    const link = battle.webLink || battle.deepLink || battle.inviteCode;
+    if (!battle?.inviteCode) return;
     try {
       await Share.share({
-        message: `Challenge me on SSBFY! Battle code: ${battle.inviteCode}\n${link}`,
+        message: formatBattleShareMessage(battle.inviteCode, battle.webLink),
       });
     } catch {
       /* user dismissed */
@@ -82,7 +85,7 @@ export default function BattleLobbyScreen() {
 
   const handleCopy = useCallback(async () => {
     if (!battle?.inviteCode) return;
-    await copyToClipboard(battle.webLink || battle.deepLink || battle.inviteCode);
+    await copyToClipboard(normalizeBattleWebLink(battle.webLink, battle.inviteCode));
   }, [battle]);
 
   const myAttemptDone =
