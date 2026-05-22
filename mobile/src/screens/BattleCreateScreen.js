@@ -8,10 +8,13 @@ import {
 } from '../services/battleService';
 import { usePracticeTaxonomy } from '../hooks/usePracticeTaxonomy';
 import { useBattleQuota } from '../hooks/useBattleQuota';
+import BattleFramingBanner from '../components/battle/BattleFramingBanner';
 import PracticeSetupSection from '../components/practice/PracticeSetupSection';
 import PracticeChipGrid from '../components/practice/PracticeChipGrid';
 import QuestionCountSegment from '../components/practice/QuestionCountSegment';
 import PracticeStartFooter from '../components/practice/PracticeStartFooter';
+import { SETUP_MODE, battleSetupSections } from '../theme/setupPresentation';
+import { setupPresentationDevLog } from '../utils/setupPresentationDevLog';
 import { LoadingState, EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { NAV_TRANSITION_LOCK_MS, tryAcquireLock } from '../utils/navigationGuard';
@@ -76,6 +79,10 @@ export default function BattleCreateScreen() {
 
   const pickTopic = useCallback((id) => {
     setSelectedTopicId((prev) => (prev === id ? '' : id));
+  }, []);
+
+  useEffect(() => {
+    setupPresentationDevLog('battle_create_screen', { mode: SETUP_MODE.BATTLE });
   }, []);
 
   useEffect(() => {
@@ -177,12 +184,17 @@ export default function BattleCreateScreen() {
     reloadQuota,
   ]);
 
+  const footerHeadline = selectedTopic
+    ? `${questionCount} questions · ${selectedTopic.name}`
+    : 'Select subject and topic for the challenge';
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.lead}>
-        Challenge a friend with the same random questions. You choose the topic — the server picks
-        the questions.
-      </Text>
+      <BattleFramingBanner
+        title="Create a head-to-head challenge"
+        subtitle="You set the rules. Your friend gets the same questions — first to finish isn't the only factor; score and accuracy decide the winner."
+        icon="trophy-outline"
+      />
 
       {!premium && !quotaLoading && quota ? (
         <View style={styles.quotaCard}>
@@ -200,8 +212,9 @@ export default function BattleCreateScreen() {
       ) : null}
 
       <PracticeSetupSection
-        title="Subject"
-        helper="Choose the subject for this battle."
+        mode={SETUP_MODE.BATTLE}
+        title={battleSetupSections.subject.title}
+        helper={battleSetupSections.subject.helper}
         selectedHint={selectedSubject ? `Selected: ${selectedSubject.name}` : null}
       >
         {subjectsLoading && subjects.length === 0 ? (
@@ -212,6 +225,7 @@ export default function BattleCreateScreen() {
           <EmptyState compact title="No subjects available yet" glyph="filter" />
         ) : (
           <PracticeChipGrid
+            mode={SETUP_MODE.BATTLE}
             items={subjects}
             selectedId={selectedSubjectId}
             onSelect={pickSubject}
@@ -222,8 +236,9 @@ export default function BattleCreateScreen() {
 
       {selectedSubjectId ? (
         <PracticeSetupSection
-          title="Topic"
-          helper="Pick the topic — both players get questions from this pool."
+          mode={SETUP_MODE.BATTLE}
+          title={battleSetupSections.topic.title}
+          helper={battleSetupSections.topic.helper}
           selectedHint={selectedTopic ? `Selected: ${selectedTopic.name}` : null}
         >
           {topicsLoading && topics.length === 0 ? (
@@ -234,6 +249,7 @@ export default function BattleCreateScreen() {
             <EmptyState compact title="No topics in this subject yet" glyph="filter" />
           ) : (
             <PracticeChipGrid
+              mode={SETUP_MODE.BATTLE}
               items={topics}
               selectedId={selectedTopicId}
               onSelect={pickTopic}
@@ -245,8 +261,13 @@ export default function BattleCreateScreen() {
 
       {selectedTopicId ? (
         <>
-          <PracticeSetupSection title="Difficulty">
+          <PracticeSetupSection
+            mode={SETUP_MODE.BATTLE}
+            title={battleSetupSections.difficulty.title}
+            helper={battleSetupSections.difficulty.helper}
+          >
             <PracticeChipGrid
+              mode={SETUP_MODE.BATTLE}
               items={DIFFICULTY_OPTIONS}
               selectedId={difficulty}
               onSelect={setDifficulty}
@@ -255,19 +276,28 @@ export default function BattleCreateScreen() {
             />
           </PracticeSetupSection>
 
-          <PracticeSetupSection title="Questions">
+          <PracticeSetupSection
+            mode={SETUP_MODE.BATTLE}
+            title={battleSetupSections.questions.title}
+            helper={battleSetupSections.questions.helper}
+          >
             {availLoading ? (
-              <Text style={styles.availHint}>Checking pool…</Text>
+              <Text style={styles.availHint}>Checking challenge pool…</Text>
             ) : (
               <Text style={styles.availHint}>
-                {availableCount} questions available in this pool
+                {availableCount} questions available for this match
               </Text>
             )}
             <QuestionCountSegment value={questionCount} onChange={setQuestionCount} />
           </PracticeSetupSection>
 
-          <PracticeSetupSection title="Timer">
+          <PracticeSetupSection
+            mode={SETUP_MODE.BATTLE}
+            title={battleSetupSections.timer.title}
+            helper={battleSetupSections.timer.helper}
+          >
             <PracticeChipGrid
+              mode={SETUP_MODE.BATTLE}
               items={TIMER_OPTIONS}
               selectedId={timerMode}
               onSelect={setTimerMode}
@@ -276,6 +306,7 @@ export default function BattleCreateScreen() {
             />
             {timerMode === 'total' ? (
               <PracticeChipGrid
+                mode={SETUP_MODE.BATTLE}
                 items={[10, 15, 20, 30].map((m) => ({ id: String(m), label: `${m} min` }))}
                 selectedId={String(timerMinutes)}
                 onSelect={(id) => setTimerMinutes(Number(id))}
@@ -287,14 +318,16 @@ export default function BattleCreateScreen() {
         </>
       ) : null}
 
-      {startError ? <Text style={styles.err}>{startError}</Text> : null}
-
       <PracticeStartFooter
-        summary={
+        mode={SETUP_MODE.BATTLE}
+        headline={footerHeadline}
+        sublines={
           selectedTopic
-            ? `${questionCount} questions · ${selectedTopic.name} · Battle`
-            : 'Select subject and topic'
+            ? ['Share the invite after creating — your opponent plays the same locked rules.']
+            : []
         }
+        helperText="Questions are randomized server-side when the battle is created."
+        error={startError}
         onStart={handleCreate}
         starting={creating}
         disabled={!canStart}
@@ -314,7 +347,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  lead: { fontSize: 15, color: colors.muted, marginBottom: 16, lineHeight: 22 },
   quotaCard: {
     backgroundColor: colors.card,
     borderRadius: 12,

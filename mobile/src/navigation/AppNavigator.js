@@ -272,17 +272,17 @@ export default function AppNavigator() {
           <RootStack.Screen
             name="BattleCreate"
             component={BattleCreateScreen}
-            options={{ title: 'Challenge a friend', ...stackMotion.defaultPush }}
+            options={{ title: 'Create battle', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="BattleJoin"
             component={BattleJoinScreen}
-            options={{ title: 'Join battle', ...stackMotion.defaultPush }}
+            options={{ title: 'Accept challenge', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="BattleLobby"
             component={BattleLobbyScreen}
-            options={{ title: 'Battle', ...stackMotion.defaultPush }}
+            options={{ title: 'Battle lobby', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="BattleResult"

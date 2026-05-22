@@ -40,6 +40,8 @@ import {
   RETRY_FINISH_LABEL,
 } from '../utils/retrySessionPresentation';
 import { colors } from '../theme/colors';
+import { battleAccent } from '../theme/setupPresentation';
+import { setupPresentationDevLog } from '../utils/setupPresentationDevLog';
 import { typography } from '../theme/typography';
 import { pressCardStyle } from '../utils/pressFeedback';
 import {
@@ -156,15 +158,28 @@ export default function TestScreen() {
     : isDaily
     ? 'Daily Practice'
     : isBattle
-    ? 'Battle'
+    ? 'Battle in progress'
+    : null;
+  const localHeaderSubline = isBattle
+    ? `Head-to-head · ${questionIds.length} questions`
     : null;
   const localFinishLabel = isRetry
     ? RETRY_FINISH_LABEL
     : isDaily
     ? 'Finish Daily Practice'
     : isBattle
-    ? 'Finish battle'
+    ? 'Submit battle'
     : 'Finish Practice';
+
+  useEffect(() => {
+    if (!isBattle) return;
+    setupPresentationDevLog('test_screen_battle', {
+      battleId,
+      questionCount: questionIds.length,
+      finishCta: localFinishLabel,
+      header: localHeaderLabel,
+    });
+  }, [isBattle, battleId, questionIds.length, localFinishLabel, localHeaderLabel]);
 
   const retryScopeCount =
     Number(params.retryScopeCount) > 0
@@ -1484,7 +1499,10 @@ export default function TestScreen() {
             sourceLine={retrySessionHint.source}
           />
         ) : null}
-        {localHeaderLabel ? <Text style={styles.retryHeader}>{localHeaderLabel}</Text> : null}
+        {localHeaderLabel ? (
+          <Text style={[styles.retryHeader, isBattle && styles.battleHeader]}>{localHeaderLabel}</Text>
+        ) : null}
+        {localHeaderSubline ? <Text style={styles.battleHeaderSub}>{localHeaderSubline}</Text> : null}
         {countdownEl}
         <Text style={styles.attemptSummary}>{attemptSummaryLabel}</Text>
         <Text style={styles.header}>
@@ -1518,7 +1536,10 @@ export default function TestScreen() {
           sourceLine={retrySessionHint.source}
         />
       ) : null}
-      {localHeaderLabel ? <Text style={styles.retryHeader}>{localHeaderLabel}</Text> : null}
+      {localHeaderLabel ? (
+        <Text style={[styles.retryHeader, isBattle && styles.battleHeader]}>{localHeaderLabel}</Text>
+      ) : null}
+      {localHeaderSubline ? <Text style={styles.battleHeaderSub}>{localHeaderSubline}</Text> : null}
       {countdownEl}
       <Text style={styles.attemptSummary}>{attemptSummaryLabel}</Text>
       <Text style={styles.header}>
@@ -1585,6 +1606,14 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   attemptSummary: { fontSize: 14, marginBottom: 8, color: colors.muted },
   retryHeader: { fontSize: 16, fontWeight: '700', marginBottom: 8, color: colors.primary },
+  battleHeader: { color: battleAccent.text },
+  battleHeaderSub: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.muted,
+    marginBottom: 8,
+    marginTop: -4,
+  },
   header: { fontSize: 16, marginBottom: 12, fontWeight: '600', color: colors.text },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 8 },

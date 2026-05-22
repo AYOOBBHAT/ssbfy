@@ -4,7 +4,15 @@ import PracticeSetupChip from './PracticeSetupChip';
 import { formatTaxonomyLabel } from '../../utils/formatTaxonomyLabel';
 import logger from '../../utils/logger';
 
-function PracticeChipGrid({ items, selectedId, onSelect, getLabel, getId, children }) {
+function PracticeChipGrid({
+  mode = 'practice',
+  items,
+  selectedId,
+  onSelect,
+  getLabel,
+  getId,
+  children,
+}) {
   if (__DEV__ && children != null) {
     logger.warn(
       '[PracticeChipGrid] Deprecated children API — pass items, selectedId, onSelect, getId (see SmartPracticeScreen).'
@@ -21,6 +29,7 @@ function PracticeChipGrid({ items, selectedId, onSelect, getLabel, getId, childr
         return (
           <View key={String(id)} style={styles.cell}>
             <PracticeSetupChip
+              mode={mode}
               label={label}
               selected={active}
               onPress={() => onSelect(id)}

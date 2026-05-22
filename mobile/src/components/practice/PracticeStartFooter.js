@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,21 +8,42 @@ import {
   Platform,
 } from 'react-native';
 import { colors } from '../../theme/colors';
+import { battleAccent, resolveSetupPresentation } from '../../theme/setupPresentation';
+import { setupPresentationDevLog } from '../../utils/setupPresentationDevLog';
 import { pressFeedbackStyle } from '../../utils/pressFeedback';
 
 function PracticeStartFooter({
+  mode = 'practice',
+  summaryTitle,
   headline,
   sublines = [],
   helperText,
+  startLabel,
   error,
   starting,
   disabled,
   onStart,
 }) {
+  const presentation = useMemo(() => resolveSetupPresentation(mode), [mode]);
+  const resolvedSummaryTitle = summaryTitle ?? presentation.footerSummaryTitle;
+  const resolvedStartLabel = startLabel ?? presentation.footerStartLabel;
+  const battle = presentation.mode === 'battle';
+
+  useEffect(() => {
+    setupPresentationDevLog('footer_cta_resolved', {
+      mode: presentation.mode,
+      summaryTitle: resolvedSummaryTitle,
+      startLabel: resolvedStartLabel,
+      battle,
+    });
+  }, [presentation.mode, resolvedSummaryTitle, resolvedStartLabel, battle]);
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.card}>
-        <Text style={styles.summaryTitle}>Ready to practice</Text>
+      <View style={[styles.card, battle && styles.cardBattle]}>
+        <Text style={[styles.summaryTitle, battle && styles.summaryTitleBattle]}>
+          {resolvedSummaryTitle}
+        </Text>
         <Text style={styles.summaryHeadline}>{headline}</Text>
         {sublines.map((line) => (
           <Text key={line} style={styles.summarySub}>
@@ -40,6 +61,7 @@ function PracticeStartFooter({
           disabled={disabled || starting}
           style={({ pressed }) => [
             styles.primaryBtn,
+            battle && styles.primaryBtnBattle,
             (disabled || starting) && styles.primaryBtnDisabled,
             pressFeedbackStyle(pressed, disabled || starting),
           ]}
@@ -47,7 +69,7 @@ function PracticeStartFooter({
           {starting ? (
             <ActivityIndicator color={colors.textOnPrimary} />
           ) : (
-            <Text style={styles.primaryBtnText}>Start Practice</Text>
+            <Text style={styles.primaryBtnText}>{resolvedStartLabel}</Text>
           )}
         </Pressable>
       </View>
@@ -77,6 +99,10 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
+  cardBattle: {
+    borderColor: battleAccent.border,
+    backgroundColor: '#fffdfb',
+  },
   summaryTitle: {
     fontSize: 11,
     fontWeight: '700',
@@ -84,6 +110,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 6,
+  },
+  summaryTitleBattle: {
+    color: battleAccent.text,
   },
   summaryHeadline: {
     fontSize: 17,
@@ -123,6 +152,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginTop: 14,
+  },
+  primaryBtnBattle: {
+    backgroundColor: battleAccent.primary,
   },
   primaryBtnDisabled: {
     opacity: 0.55,

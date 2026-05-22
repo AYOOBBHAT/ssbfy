@@ -1,11 +1,13 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../theme/colors';
+import { isBattleSetupMode } from '../../theme/setupPresentation';
 import logger from '../../utils/logger';
 
 let practiceSetupLoadingWarned = false;
 
 function PracticeSetupSection({
+  mode = 'practice',
   step,
   title,
   helper,
@@ -14,6 +16,22 @@ function PracticeSetupSection({
   children,
   loading: _deprecatedLoading,
 }) {
+  const battle = isBattleSetupMode(mode);
+  const accentStyles = useMemo(
+    () =>
+      battle
+        ? {
+            stepBadge: styles.stepBadgeBattle,
+            stepText: styles.stepTextBattle,
+            selectedHint: styles.selectedHintBattle,
+          }
+        : {
+            stepBadge: styles.stepBadge,
+            stepText: styles.stepText,
+            selectedHint: styles.selectedHint,
+          },
+    [battle]
+  );
   if (__DEV__ && _deprecatedLoading !== undefined && !practiceSetupLoadingWarned) {
     practiceSetupLoadingWarned = true;
     logger.warn(
@@ -24,8 +42,8 @@ function PracticeSetupSection({
     <View style={styles.section}>
       <View style={styles.headRow}>
         {step != null ? (
-          <View style={styles.stepBadge}>
-            <Text style={styles.stepText}>{step}</Text>
+          <View style={accentStyles.stepBadge}>
+            <Text style={accentStyles.stepText}>{step}</Text>
           </View>
         ) : null}
         <View style={styles.headText}>
@@ -36,7 +54,7 @@ function PracticeSetupSection({
           {helper ? <Text style={styles.helper}>{helper}</Text> : null}
         </View>
       </View>
-      {selectedHint ? <Text style={styles.selectedHint}>{selectedHint}</Text> : null}
+      {selectedHint ? <Text style={accentStyles.selectedHint}>{selectedHint}</Text> : null}
       <View style={styles.body}>{children}</View>
     </View>
   );
@@ -95,6 +113,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.primaryText,
+    marginBottom: 8,
+  },
+  stepBadgeBattle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#fff4e6',
+    borderWidth: 1,
+    borderColor: '#fde3c4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  stepTextBattle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#9a3412',
+  },
+  selectedHintBattle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9a3412',
     marginBottom: 8,
   },
   body: {},

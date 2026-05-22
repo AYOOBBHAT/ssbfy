@@ -184,8 +184,8 @@ export default function HomeScreen() {
         style={({ pressed }) => [styles.linkCard, pressCardStyle(pressed), styles.joinCard]}
       >
         <View style={styles.linkBody}>
-          <Text style={styles.linkTitle}>Join a battle</Text>
-          <Text style={styles.linkSub}>Have an invite code? Enter it here.</Text>
+          <Text style={styles.linkTitle}>Accept a challenge</Text>
+          <Text style={styles.linkSub}>Have a battle code or invite link? Join here.</Text>
         </View>
         <Ionicons name="chevron-forward" size={22} color={colors.muted} />
       </Pressable>

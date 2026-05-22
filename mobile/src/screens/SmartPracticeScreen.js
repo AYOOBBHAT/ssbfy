@@ -332,6 +332,7 @@ export default function SmartPracticeScreen() {
       </PracticeSetupSection>
 
       <PracticeStartFooter
+        mode="practice"
         headline={summary.headline}
         sublines={summary.sublines}
         helperText="Tap a selected chip again to clear that filter."

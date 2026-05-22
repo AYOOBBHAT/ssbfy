@@ -2,16 +2,18 @@ import React, { memo } from 'react';
 import { Pressable, Text, StyleSheet, Platform, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '../../theme/colors';
+import { battleAccent, isBattleSetupMode } from '../../theme/setupPresentation';
 import { pressCardStyle } from '../../utils/pressFeedback';
 
-function PracticeSetupChip({ label, selected, onPress, compact = false }) {
+function PracticeSetupChip({ mode = 'practice', label, selected, onPress, compact = false }) {
+  const battle = isBattleSetupMode(mode);
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
         compact && styles.chipCompact,
-        selected && styles.chipSelected,
+        selected && (battle ? styles.chipSelectedBattle : styles.chipSelected),
         pressCardStyle(pressed),
       ]}
       accessibilityRole="button"
@@ -66,6 +68,19 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  chipSelectedBattle: {
+    backgroundColor: battleAccent.primary,
+    borderColor: battleAccent.primary,
+    ...Platform.select({
+      ios: {
+        shadowColor: battleAccent.primary,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 4,

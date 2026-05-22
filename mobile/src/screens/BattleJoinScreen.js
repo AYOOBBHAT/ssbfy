@@ -10,10 +10,13 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import FormScreenShell from '../components/layout/FormScreenShell';
+import BattleFramingBanner from '../components/battle/BattleFramingBanner';
 import { useKeyboardSafeField } from '../components/layout/KeyboardSafeScrollView';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { joinBattle, previewBattleInvite } from '../services/battleService';
+import { battleAccent, formatBattleRulesSummary } from '../theme/setupPresentation';
 import { colors } from '../theme/colors';
+import { setupPresentationDevLog } from '../utils/setupPresentationDevLog';
 import { tryAcquireLock } from '../utils/navigationGuard';
 import { pressCardStyle } from '../utils/pressFeedback';
 
@@ -43,6 +46,7 @@ export default function BattleJoinScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const initialCode = String(route.params?.inviteCode ?? '').trim().toUpperCase();
+  const fromInviteLink = !!initialCode;
 
   const [code, setCode] = useState(initialCode);
   const [preview, setPreview] = useState(null);
@@ -51,6 +55,13 @@ export default function BattleJoinScreen() {
   const [error, setError] = useState(null);
   const lockRef = useRef(false);
   const previewRef = useRef(null);
+
+  useEffect(() => {
+    setupPresentationDevLog('battle_join_screen', {
+      fromInviteLink,
+      inviteCode: initialCode || null,
+    });
+  }, [fromInviteLink, initialCode]);
 
   const loadPreview = useCallback(async (inviteCode) => {
     const c = String(inviteCode).trim().toUpperCase();
@@ -94,7 +105,7 @@ export default function BattleJoinScreen() {
         setError('Could not join battle.');
         return;
       }
-      navigation.replace('BattleLobby', { battleId: battle.id });
+      navigation.replace('BattleLobby', { battleId: battle.id, joined: true });
     } catch (e) {
       if (!isRequestCancelled(e)) setError(getApiErrorMessage(e));
     } finally {
@@ -104,7 +115,21 @@ export default function BattleJoinScreen() {
 
   return (
     <FormScreenShell backgroundColor={colors.bg}>
-      <Text style={styles.lead}>Enter a friend&apos;s battle code or open their invite link.</Text>
+      {fromInviteLink ? (
+        <BattleFramingBanner
+          title="You were challenged"
+          subtitle="A friend invited you to a head-to-head battle. Rules are set by them — review below, then accept to join."
+          icon="mail-open-outline"
+        />
+      ) : (
+        <BattleFramingBanner
+          title="Join a challenge"
+          subtitle="Enter your friend's battle code or open their invite link. You cannot change match settings."
+          icon="enter-outline"
+        />
+      )}
+
+      <Text style={styles.fieldLabel}>Battle code</Text>
       <BattleCodeInput
         value={code}
         onChangeText={(t) => setCode(t.toUpperCase())}
@@ -112,13 +137,16 @@ export default function BattleJoinScreen() {
         editable={!joining}
       />
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={styles.spinner} />
+        <ActivityIndicator color={battleAccent.primary} style={styles.spinner} />
       ) : preview ? (
         <View style={styles.previewCard}>
-          <Text style={styles.previewTitle}>Battle found</Text>
-          <Text style={styles.previewMeta}>
-            {preview.questionCount} questions · {preview.difficulty || 'all'} ·{' '}
-            {preview.status}
+          <View style={styles.previewHead}>
+            <Ionicons name="lock-closed" size={18} color={battleAccent.text} />
+            <Text style={styles.previewTitle}>Battle rules (locked)</Text>
+          </View>
+          <Text style={styles.previewRules}>{formatBattleRulesSummary(preview)}</Text>
+          <Text style={styles.previewHint}>
+            Same questions for both players · settings chosen by the creator
           </Text>
         </View>
       ) : null}
@@ -126,19 +154,28 @@ export default function BattleJoinScreen() {
       <Pressable
         onPress={handleJoin}
         disabled={joining || !code.trim()}
-        style={({ pressed }) => [styles.btn, pressCardStyle(pressed), joining && styles.btnDisabled]}
+        style={({ pressed }) => [
+          styles.btn,
+          pressCardStyle(pressed),
+          (joining || !code.trim()) && styles.btnDisabled,
+        ]}
         accessibilityRole="button"
-        accessibilityLabel="Join battle"
+        accessibilityLabel="Accept challenge"
       >
-        <Ionicons name="people" size={20} color={colors.textOnPrimary} />
-        <Text style={styles.btnText}>{joining ? 'Joining…' : 'Join battle'}</Text>
+        <Ionicons name="shield-checkmark" size={20} color={colors.textOnPrimary} />
+        <Text style={styles.btnText}>{joining ? 'Joining…' : 'Accept challenge'}</Text>
       </Pressable>
     </FormScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  lead: { fontSize: 15, color: colors.muted, marginBottom: 16, lineHeight: 22 },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
   input: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -153,20 +190,29 @@ const styles = StyleSheet.create({
   },
   spinner: { marginVertical: 12 },
   previewCard: {
-    backgroundColor: colors.card,
+    backgroundColor: battleAccent.soft,
     borderRadius: 12,
     padding: 14,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: battleAccent.border,
   },
-  previewTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  previewMeta: { fontSize: 13, color: colors.muted, marginTop: 4 },
+  previewHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  previewTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
+  previewRules: { fontSize: 15, fontWeight: '600', color: colors.text, lineHeight: 22 },
+  previewHint: { fontSize: 13, color: colors.muted, marginTop: 8, lineHeight: 18 },
   err: { color: colors.danger, marginBottom: 12 },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: battleAccent.primary,
     borderRadius: 12,
     padding: 14,
     marginTop: 8,

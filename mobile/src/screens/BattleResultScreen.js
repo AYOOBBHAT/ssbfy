@@ -122,6 +122,7 @@ export default function BattleResultScreen() {
   const { comparison, battle } = data;
   const winnerId = comparison.winnerUserId;
   const tie = battle?.status === 'completed' && !winnerId;
+  const youWon = winnerId && String(winnerId) === String(myUid);
   const creator = comparison.creator;
   const opponent = comparison.opponent;
 
@@ -130,11 +131,13 @@ export default function BattleResultScreen() {
       style={styles.container}
       contentContainerStyle={[styles.content, bottomInsets.scrollContentStyle]}
     >
-      <Text style={styles.title}>{tie ? "It's a tie!" : winnerId ? 'Battle results' : 'Battle standings'}</Text>
+      <Text style={styles.title}>
+        {tie ? "It's a tie!" : youWon ? 'You won the battle!' : winnerId ? 'Battle results' : 'Match standings'}
+      </Text>
       <Text style={styles.sub}>
         {battle?.status === 'completed'
-          ? 'Both players finished'
-          : 'Scores update when both players finish'}
+          ? 'Head-to-head match complete — both attempts scored.'
+          : 'Scores update when both players finish their attempts.'}
       </Text>
 
       <PlayerRow
@@ -162,7 +165,7 @@ export default function BattleResultScreen() {
       )}
 
       <Pressable onPress={goHome} style={({ pressed }) => [styles.homeBtn, pressCardStyle(pressed)]}>
-        <Text style={styles.homeBtnText}>Done</Text>
+        <Text style={styles.homeBtnText}>Back to Home</Text>
       </Pressable>
     </ScrollView>
   );
