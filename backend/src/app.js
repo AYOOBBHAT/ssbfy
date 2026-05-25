@@ -93,6 +93,16 @@ app.get('/api', (req, res) => {
     message: 'SSBFY API is running 🚀',
   });
 });
+/** Android App Link validation routes */
+app.get('/battle', (req, res) => {
+  res.status(200).send('Battle deep link OK');
+});
+
+app.get('/battle/:inviteCode', (req, res) => {
+  res
+    .status(200)
+    .send(`Battle invite ${String(req.params.inviteCode || '').toUpperCase()}`);
+});
 
 app.use('/api', apiRoutes);
 
