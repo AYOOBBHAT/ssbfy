@@ -1,11 +1,15 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.ayoobbhat.ssbfy",
       "sha256_cert_fingerprints": [
-        "FB:2A:7B:91:B9:59:2B:8D:C4:71:7F:04:BE:E6:F8:0F:41:12:6D:A0:BF:6A:3B:E8:D9:53:A6:2C:5A:ED:4E:51"
+        "FB:2A:7B:91:B9:59:2B:8D:C4:71:7F:04:BE:E6:F8:0F:41:12:6D:A0:BF:6A:3B:E8:D9:53:A6:2C:5A:ED:4E:51",
+        "D8:0E:8D:75:2D:98:8F:20:22:67:4A:A1:F4:C7:61:EC:EE:5D:DD:E0:C8:28:41:67:65:47:C9:34:86:B3:92:3D"
       ]
     }
   }
