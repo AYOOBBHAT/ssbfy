@@ -11,6 +11,7 @@ import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 import { requestContext } from './middlewares/requestContext.js';
 import { httpLogger } from './middlewares/httpLogger.js';
 import { healthHandler } from './routes/healthRoutes.js';
+import { installDevPerfInstrumentation, requestPerfMiddleware } from './utils/devPerf.js';
 
 const CORS_DENIED_MESSAGE = 'Not allowed by CORS';
 
@@ -38,9 +39,12 @@ const wellKnownDir = path.join(__dirname, '..', 'public', '.well-known');
 
 const app = express();
 
+installDevPerfInstrumentation();
+
 app.set('trust proxy', 1);
 
 app.use(requestContext);
+app.use(requestPerfMiddleware);
 
 app.use(helmet());
 

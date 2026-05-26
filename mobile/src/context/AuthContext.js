@@ -18,6 +18,7 @@ import {
   removeLegacySensitiveAsyncKeys,
   setActiveCacheUserId,
 } from '../utils/authScopedCache';
+import { markStartup } from '../utils/startupTiming';
 
 const STORAGE_KEY = '@ssbfy/auth_session';
 
@@ -58,38 +59,73 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
+      const clearInvalidBootstrapSession = async () => {
+        await clearStoredSession();
+        if (ac.signal.aborted) return;
+        setToken(null);
+        setUser(null);
+        clearAuthToken();
+      };
+
+      const restoreBootstrapUser = async (sessionToken, { background = false } = {}) => {
+        try {
+          const res = await withSingleAuthNetworkRetry(
+            () => api.get('/users/me', { signal: ac.signal }),
+            { signal: ac.signal, label: 'bootstrap_me' }
+          );
+          const freshUser = res?.data?.data?.user;
+          if (ac.signal.aborted) return false;
+          if (freshUser && typeof freshUser === 'object') {
+            setUser(freshUser);
+            await Promise.allSettled([
+              removeLegacySensitiveAsyncKeys(),
+              persistSession(sessionToken, freshUser),
+            ]);
+            markStartup('auth_refresh_complete', { background });
+            return true;
+          }
+        } catch (e) {
+          if (ac.signal.aborted || isRequestCancelled(e)) return false;
+          await clearInvalidBootstrapSession();
+          markStartup('auth_refresh_failed', { background });
+        }
+        return false;
+      };
+
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (ac.signal.aborted) {
           return;
         }
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const t = parsed?.token;
-          if (typeof t === 'string' && t.length > 0) {
-            setToken(t);
-            setAuthToken(t);
-            try {
-              const res = await withSingleAuthNetworkRetry(
-                () => api.get('/users/me', { signal: ac.signal }),
-                { signal: ac.signal, label: 'bootstrap_me' }
-              );
-              const freshUser = res?.data?.data?.user;
-              if (ac.signal.aborted) return;
-              if (freshUser && typeof freshUser === 'object') {
-                setUser(freshUser);
-                await removeLegacySensitiveAsyncKeys();
-                await persistSession(t, freshUser);
-              }
-            } catch (e) {
-              if (ac.signal.aborted || isRequestCancelled(e)) return;
-              await clearStoredSession();
-              setToken(null);
-              setUser(null);
-              clearAuthToken();
-            }
-          }
+        if (!raw) {
+          void removeLegacySensitiveAsyncKeys();
+          return;
         }
+
+        const parsed = JSON.parse(raw);
+        const t = parsed?.token;
+        const cachedUser = parsed?.user;
+
+        if (typeof t !== 'string' || t.length === 0) {
+          await clearStoredSession();
+          return;
+        }
+
+        setToken(t);
+        setAuthToken(t);
+
+        if (cachedUser && typeof cachedUser === 'object') {
+          setUser(cachedUser);
+          markStartup('auth_cache_restored');
+          void Promise.allSettled([
+            removeLegacySensitiveAsyncKeys(),
+            restoreBootstrapUser(t, { background: true }),
+          ]);
+          return;
+        }
+
+        await Promise.allSettled([removeLegacySensitiveAsyncKeys()]);
+        await restoreBootstrapUser(t, { background: false });
       } catch {
         await AsyncStorage.removeItem(STORAGE_KEY);
       } finally {

@@ -1,10 +1,8 @@
-import { Animated, Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
-import { useStartupSplash } from '../hooks/useStartupSplash';
-import StartupSplashScreen from '../components/splash/StartupSplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
@@ -30,6 +28,7 @@ import SavedMaterialsScreen from '../screens/SavedMaterialsScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import { colors, brand } from '../theme/colors';
 import { authScreenBg } from '../theme/authUi';
+import { splashTheme } from '../theme/splash';
 import { stackContentStyle, stackMotion, tabSceneStyle } from '../theme/motion';
 
 const RootStack = createNativeStackNavigator();
@@ -181,22 +180,11 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { isAuthenticated, initializing } = useAuth();
-  const {
-    overlayVisible,
-    appRevealed,
-    splashOpacity,
-    appOpacity,
-    showBootstrapLoader,
-    onAnimationComplete,
-    rootStyle,
-  } = useStartupSplash(initializing);
+  const { isAuthenticated } = useAuth();
 
   return (
-    <View style={rootStyle}>
-      {appRevealed ? (
-        <Animated.View style={[styles.appLayer, { opacity: appOpacity }]}>
-          <RootStack.Navigator
+    <View style={styles.root}>
+      <RootStack.Navigator
       key={isAuthenticated ? 'app' : 'auth'}
       screenOptions={{
         ...themedHeader,
@@ -319,22 +307,14 @@ export default function AppNavigator() {
           />
         </>
       )}
-          </RootStack.Navigator>
-        </Animated.View>
-      ) : null}
-      {overlayVisible ? (
-        <StartupSplashScreen
-          onAnimationComplete={onAnimationComplete}
-          showBootstrapLoader={showBootstrapLoader}
-          overlayOpacity={splashOpacity}
-        />
-      ) : null}
+      </RootStack.Navigator>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  appLayer: {
+  root: {
     flex: 1,
+    backgroundColor: splashTheme.background,
   },
 });

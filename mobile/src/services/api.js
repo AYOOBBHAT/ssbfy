@@ -2,6 +2,7 @@ import axios from 'axios';
 import logger from '../utils/logger';
 import { isRequestCancelled } from '../utils/requestCancel.js';
 import { recordHttpFailure } from '../monitoring/apiTrack';
+import { apiPerfDevLog } from '../utils/apiPerfDevLog';
 
 export { isRequestCancelled };
 
@@ -55,7 +56,28 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const cfg = response.config || {};
+    const start = cfg.metadata?.startTime ?? Date.now();
+    const latencyMs = Date.now() - start;
+    const method = String(cfg.method || 'get').toUpperCase();
+    const path = String(cfg.url || '').split('?')[0];
+    let payloadBytes = 0;
+    try {
+      const serialized = JSON.stringify(response.data ?? null);
+      payloadBytes = typeof serialized === 'string' ? serialized.length : 0;
+    } catch {
+      payloadBytes = 0;
+    }
+    apiPerfDevLog('response', {
+      method,
+      path,
+      status: response.status,
+      latencyMs,
+      payloadBytes,
+    });
+    return response;
+  },
   (error) => {
     if (isRequestCancelled(error)) {
       if (__DEV__) {
