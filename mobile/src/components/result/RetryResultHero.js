@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors } from '../../theme/colors';
 import { RETRY_SESSION_BADGE } from '../../utils/retrySessionPresentation';
+import { resultPalette, resultShadows } from './resultTheme';
 
 /**
  * Calmer hero for focused retry completion on ResultScreen.
@@ -21,14 +21,12 @@ function RetryResultHero({
 }) {
   return (
     <Animated.View
-      style={[
-        styles.heroCard,
-        { borderColor: tierColor, backgroundColor: tierBg, opacity },
-      ]}
+      style={[styles.heroCard, { opacity }]}
     >
+      <View style={[styles.heroAccent, { backgroundColor: tierBg }]} />
       <View style={styles.badgeRow}>
         <View style={styles.badge}>
-          <Ionicons name="checkmark-done-outline" size={12} color={colors.primaryText} />
+          <Ionicons name="checkmark-done-outline" size={12} color={resultPalette.navy800} />
           <Text style={styles.badgeText}>{RETRY_SESSION_BADGE}</Text>
         </View>
         <Text style={styles.sessionLabel}>Second attempt complete</Text>
@@ -50,15 +48,17 @@ function RetryResultHero({
             </>
           ) : null}
         </Text>
-        <View style={[styles.scorePill, { borderColor: tierColor }]}>
-          <Text style={[styles.scoreValue, { color: tierColor }]}>{String(heroAccuracy)}%</Text>
+        <View style={styles.scorePill}>
+          <Text style={styles.scoreEyebrow}>Accuracy</Text>
+          <Text style={styles.scoreValue}>{String(heroAccuracy)}%</Text>
           <Text style={styles.scoreLabel}>this round</Text>
         </View>
       </View>
 
-      {progressLine ? <Text style={styles.progressLine}>{progressLine}</Text> : null}
-
-      <Text style={[styles.encourage, { color: tierColor }]}>{tierMessage}</Text>
+      <View style={styles.metaBlock}>
+        {progressLine ? <Text style={styles.progressLine}>{progressLine}</Text> : null}
+        <Text style={[styles.encourage, { color: tierColor }]}>{tierMessage}</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -67,9 +67,18 @@ export default memo(RetryResultHero);
 
 const styles = StyleSheet.create({
   heroCard: {
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: resultPalette.surface,
+    borderColor: resultPalette.border,
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
+    marginBottom: 16,
+    ...resultShadows.hero,
+  },
+  heroAccent: {
+    width: 84,
+    height: 6,
+    borderRadius: 999,
     marginBottom: 12,
   },
   badgeRow: {
@@ -83,77 +92,92 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: resultPalette.surfaceAlt,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: resultPalette.border,
   },
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: colors.primaryText,
-    letterSpacing: 0.35,
+    color: resultPalette.navy800,
+    letterSpacing: 0.75,
     textTransform: 'uppercase',
   },
   sessionLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.muted,
+    color: resultPalette.textLight,
     textTransform: 'uppercase',
-    letterSpacing: 0.45,
+    letterSpacing: 0.8,
   },
   sessionHint: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 8,
-    lineHeight: 19,
+    fontSize: 20,
+    fontWeight: '700',
+    color: resultPalette.text,
+    marginTop: 10,
+    lineHeight: 27,
   },
   summaryRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 12,
+    gap: 14,
+    marginTop: 18,
   },
   summaryMain: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
-    color: colors.text,
-    lineHeight: 22,
+    color: resultPalette.text,
+    lineHeight: 25,
   },
   summaryEmphasis: {
     fontWeight: '800',
-    fontSize: 17,
+    fontSize: 22,
   },
   scorePill: {
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 11,
-    borderRadius: 12,
-    borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: resultPalette.navy900,
     minWidth: 64,
+    ...resultShadows.badge,
   },
   scoreValue: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: '800',
+    color: resultPalette.white,
+  },
+  scoreEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.72)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.75,
+    marginBottom: 4,
   },
   scoreLabel: {
     fontSize: 10,
     fontWeight: '600',
-    color: colors.muted,
+    color: 'rgba(255,255,255,0.72)',
     marginTop: 2,
     textTransform: 'uppercase',
   },
+  metaBlock: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: resultPalette.border,
+  },
   progressLine: {
     fontSize: 12,
-    color: colors.muted,
-    marginTop: 10,
-    fontWeight: '500',
+    color: resultPalette.textMid,
+    fontWeight: '600',
   },
   encourage: {
     fontSize: 14,
