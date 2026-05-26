@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import api, { API_BASE_URL, isOfflineError, isTimeoutError } from './api.js';
 import logger from '../utils/logger.js';
@@ -67,41 +68,137 @@ export function formatFileSize(bytes) {
 
 /**
  * Fetch the list of available posts so the user can pick which exam's
- * PDFs they want to browse. Cached in-memory for the session — posts
- * change rarely and refetching on every screen open wastes bandwidth.
+ * PDFs they want to browse.
+ *
+ * Cache policy:
+ * - memory snapshot for instant same-session renders
+ * - AsyncStorage hydration for cold-start reuse
+ * - short TTL + stale-while-revalidate, because admin changes are infrequent
+ *   but should still propagate without manual app restarts
  */
+const POSTS_CACHE_KEY = '@ssbfy/posts_catalog_v1';
+const POSTS_TTL_MS = 10 * 60 * 1000;
+
 let postsCache = null;
 let postsInFlight = null;
+let postsHydrationInFlight = null;
 
-export async function getPosts(opts = {}) {
-  const { force = false, signal } = opts;
-  if (!force && !signal && postsCache) return postsCache;
-  if (!force && !signal && postsInFlight) return postsInFlight;
+function buildPostsValue(payload) {
+  const list = Array.isArray(payload?.posts) ? payload.posts : [];
+  return { posts: list };
+}
 
-  const exec = async () => {
-    const { data } = await api.get('/posts', { signal });
-    const payload = data?.data ?? {};
-    const list = Array.isArray(payload.posts) ? payload.posts : [];
-    const result = { posts: list };
-    if (!signal) {
-      postsCache = result;
-    }
-    return result;
+function setPostsCacheEntry(value, fetchedAt = Date.now()) {
+  postsCache = {
+    value,
+    fetchedAt,
+    expiresAt: fetchedAt + POSTS_TTL_MS,
   };
+  return postsCache;
+}
 
-  if (signal) {
-    return exec();
+function hasUsablePostsCache(entry = postsCache) {
+  return Array.isArray(entry?.value?.posts);
+}
+
+function isFreshPostsCache(entry = postsCache) {
+  return Boolean(entry?.expiresAt && entry.expiresAt > Date.now() && hasUsablePostsCache(entry));
+}
+
+async function persistPostsCache(entry) {
+  if (!hasUsablePostsCache(entry)) return;
+  try {
+    await AsyncStorage.setItem(
+      POSTS_CACHE_KEY,
+      JSON.stringify({
+        fetchedAt: entry.fetchedAt,
+        posts: entry.value.posts,
+      })
+    );
+  } catch {
+    // best-effort
   }
+}
 
+async function hydratePostsCache() {
+  if (hasUsablePostsCache()) return postsCache;
+  if (postsHydrationInFlight) return postsHydrationInFlight;
+
+  postsHydrationInFlight = (async () => {
+    try {
+      const raw = await AsyncStorage.getItem(POSTS_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed?.posts)) return null;
+      return setPostsCacheEntry(buildPostsValue(parsed), Number(parsed.fetchedAt) || 0);
+    } catch {
+      return null;
+    } finally {
+      postsHydrationInFlight = null;
+    }
+  })();
+
+  return postsHydrationInFlight;
+}
+
+async function fetchPostsFresh() {
+  const { data } = await api.get('/posts');
+  const entry = setPostsCacheEntry(buildPostsValue(data?.data ?? {}));
+  void persistPostsCache(entry);
+  return entry.value;
+}
+
+function ensurePostsFetch() {
+  if (postsInFlight) return postsInFlight;
   postsInFlight = (async () => {
     try {
-      return await exec();
+      return await fetchPostsFresh();
     } finally {
       postsInFlight = null;
     }
   })();
-
   return postsInFlight;
+}
+
+function shouldRevalidatePosts(entry, swr = true) {
+  if (!swr || !hasUsablePostsCache(entry)) return false;
+  if (!isFreshPostsCache(entry)) return true;
+  return Date.now() - Number(entry?.fetchedAt || 0) > POSTS_TTL_MS * 0.45;
+}
+
+function schedulePostsSwrRefresh() {
+  void ensurePostsFetch().catch(() => {
+    /* ignore background failures; callers still have cached data */
+  });
+}
+
+export function getCachedPostsSnapshot() {
+  return hasUsablePostsCache() ? postsCache.value : null;
+}
+
+export async function getPosts(opts = {}) {
+  const { force = false, swr = true } = opts;
+
+  if (force) {
+    return ensurePostsFetch();
+  }
+
+  if (hasUsablePostsCache()) {
+    if (shouldRevalidatePosts(postsCache, swr)) {
+      schedulePostsSwrRefresh();
+    }
+    return postsCache.value;
+  }
+
+  const hydrated = await hydratePostsCache();
+  if (hasUsablePostsCache(hydrated)) {
+    if (shouldRevalidatePosts(hydrated, swr)) {
+      schedulePostsSwrRefresh();
+    }
+    return hydrated.value;
+  }
+
+  return ensurePostsFetch();
 }
 
 /** Short TTL: signed URLs expire; list cache limits duplicate network during navigation. */
@@ -118,6 +215,8 @@ function pdfListCacheKey(postId) {
 export function clearPdfCaches() {
   postsCache = null;
   postsInFlight = null;
+  postsHydrationInFlight = null;
+  void AsyncStorage.removeItem(POSTS_CACHE_KEY).catch(() => {});
   pdfNotesCache.clear();
   pdfNotesInFlight.clear();
   pdfListBgScheduled.clear();

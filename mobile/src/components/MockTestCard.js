@@ -5,6 +5,10 @@ import { colors } from '../theme/colors';
 import { pressFeedbackStyle } from '../utils/pressFeedback';
 import { formatTaxonomyLabel } from '../utils/formatTaxonomyLabel';
 import { testTypeMetaLabel } from '../utils/mockTestCardPresentation';
+import {
+  useDevItemMountCounter,
+  useDevRenderTrace,
+} from '../utils/renderPerfDevLog';
 
 function humanizeMockTitle(rawTitle, fallbackIndex) {
   const raw = (rawTitle || '').trim();
@@ -54,12 +58,26 @@ function MockTestCard({
   const safeLabel =
     typeof actionLabel === 'string' && actionLabel.trim() ? actionLabel : 'Start Mock';
   const disabled = isStarting || ctaDisabled || isLoading;
+  const itemId = String(item?._id ?? displayIndex);
 
   const handlePress = useCallback(() => {
     onStart(item);
   }, [onStart, item]);
 
   const statusStyle = statusChipStyle(statusTone);
+
+  useDevRenderTrace(
+    'MockTestCard',
+    () => ({
+      itemId,
+      prominent,
+      isStarting,
+      state,
+      disabled,
+    }),
+    { logEvery: 16, slowRenderMs: 12, logFirstRender: false }
+  );
+  useDevItemMountCounter('MockTestCard', itemId, { logEvery: 16 });
 
   return (
     <View

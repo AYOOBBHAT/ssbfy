@@ -67,6 +67,11 @@ import {
   nextTransitionGeneration,
   isStaleTransitionGeneration,
 } from '../utils/testTransitionLifecycle';
+import { useDevMountTrace, useDevRenderTrace } from '../utils/renderPerfDevLog';
+import {
+  getSessionQuestionSnapshot,
+  clearSessionQuestionSnapshot,
+} from '../utils/navigationPayloadStore';
 
 const DRAFT_DEBOUNCE_MS = 450;
 const SERVER_SYNC_INTERVAL_MS = 25000;
@@ -152,7 +157,15 @@ export default function TestScreen() {
   const questionIds = isLocal
     ? (Array.isArray(params.questionIds) ? params.questionIds : [])
     : (attempt?.questionIds ?? []);
-  const preloadedQuestions = isLocal && Array.isArray(params.questions) ? params.questions : null;
+  const cachedSessionQuestions = useMemo(
+    () => (isLocal && practiceSessionId ? getSessionQuestionSnapshot(practiceSessionId) : null),
+    [isLocal, practiceSessionId]
+  );
+  const preloadedQuestions = isLocal
+    ? Array.isArray(params.questions)
+      ? params.questions
+      : cachedSessionQuestions
+    : null;
   const localHeaderLabel = isPractice
     ? 'Practice Mode'
     : isDaily
@@ -170,6 +183,30 @@ export default function TestScreen() {
     : isBattle
     ? 'Submit battle'
     : 'Finish Practice';
+
+  useDevRenderTrace(
+    'TestScreen',
+    () => ({
+      mode: params.mode || 'mock',
+      questionIds: questionIds.length,
+      loading,
+      error: !!error,
+      index,
+      answers: Object.keys(answers).length,
+      submitting,
+    }),
+    { logEvery: 6, slowRenderMs: 20 }
+  );
+  useDevMountTrace(
+    'TestScreen',
+    () => ({
+      mode: params.mode || 'mock',
+      questionIds: questionIds.length,
+      isRetry,
+      isBattle,
+    }),
+    { slowMountMs: 55 }
+  );
 
   useEffect(() => {
     if (!isBattle) return;
@@ -1193,6 +1230,9 @@ export default function TestScreen() {
           });
         }
         if (committed) {
+          if (practiceSessionId) {
+            clearSessionQuestionSnapshot(practiceSessionId);
+          }
           void invalidateProfileCachesAfterSessionComplete();
           submissionCompletedRef.current = true;
           transitionInFlightRef.current = false;

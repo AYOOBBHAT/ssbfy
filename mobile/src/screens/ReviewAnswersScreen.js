@@ -1,5 +1,5 @@
-import { useMemo, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { useMemo, useCallback, memo, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, Platform } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import {
   useBottomSafeInsets,
@@ -9,6 +9,17 @@ import { EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
 import { typography } from '../theme/typography';
+import {
+  useDevItemMountCounter,
+  useDevMountTrace,
+  useDevRenderTrace,
+} from '../utils/renderPerfDevLog';
+import logger from '../utils/logger';
+function reviewFlowDevLog(event, detail = {}) {
+  if (!__DEV__) return;
+  logger.debug(`[ReviewFlow] ${event}`, detail);
+}
+
 
 const TEXT = colors.text;
 const MUTED = colors.muted;
@@ -137,8 +148,13 @@ const styles = StyleSheet.create({
   explanation: { marginTop: 10, color: TEXT, fontSize: 13, lineHeight: 18 },
 });
 
-const ReviewAnswerRow = memo(function ReviewAnswerRow({ item, index }) {
-  const { question, userSet, correctSet } = item || {};
+const ReviewAnswerRow = memo(function ReviewAnswerRow({
+  question,
+  questionId,
+  userSet,
+  correctSet,
+  index,
+}) {
   const options = Array.isArray(question?.options) ? question.options : [];
   const explanation =
     typeof question?.explanation === 'string' && question.explanation.trim()
@@ -152,6 +168,18 @@ const ReviewAnswerRow = memo(function ReviewAnswerRow({ item, index }) {
     Array.isArray(correctSet) &&
     correctSet.length > 0 &&
     indexSetsEqual(userSet, correctSet);
+
+  useDevRenderTrace(
+    'ReviewAnswerRow',
+    () => ({
+      questionId,
+      index,
+      options: options.length,
+      answered: !unanswered,
+    }),
+    { logEvery: 20, slowRenderMs: 12, logFirstRender: false }
+  );
+  useDevItemMountCounter('ReviewAnswerRow', questionId, { logEvery: 20 });
 
   return (
     <View style={styles.card}>
@@ -214,6 +242,39 @@ export default function ReviewAnswersScreen() {
   const userAnswers = params.userAnswers && typeof params.userAnswers === 'object' ? params.userAnswers : {};
   const correctAnswers = Array.isArray(params.correctAnswers) ? params.correctAnswers : [];
 
+  useDevRenderTrace(
+    'ReviewAnswersScreen',
+    () => ({
+      questions: questions.length,
+      correctAnswers: correctAnswers.length,
+      readOnly,
+    }),
+    { logEvery: 6, slowRenderMs: 18 }
+  );
+  useDevMountTrace(
+    'ReviewAnswersScreen',
+    () => ({
+      questions: questions.length,
+      readOnly,
+    }),
+    { slowMountMs: 45 }
+  );
+  useEffect(() => {
+    const paintHandle = requestAnimationFrame(() => {
+      reviewFlowDevLog('first_useful_paint', {
+        questions: questions.length,
+        readOnly,
+      });
+    });
+    reviewFlowDevLog('mount', {
+      questions: questions.length,
+      readOnly,
+    });
+    return () => {
+      if (paintHandle != null) cancelAnimationFrame(paintHandle);
+    };
+  }, [questions.length, readOnly]);
+
   const correctAnswerMap = useMemo(() => {
     const m = new Map();
     for (const c of correctAnswers) {
@@ -226,22 +287,30 @@ export default function ReviewAnswersScreen() {
     return m;
   }, [correctAnswers]);
 
-  const reviewItems = useMemo(() => {
-    return questions.map((q) => {
-      const qid = String(q?._id ?? '');
-      const userArr = toIndexArray(userAnswers[qid]);
+  const renderItem = useCallback(
+    ({ item, index }) => {
+      const question = item;
+      const qid = String(question?._id ?? index);
+      const userSet = toIndexArray(userAnswers[qid]);
       const fromMap = correctAnswerMap.get(qid);
-      const correctArr =
-        Array.isArray(fromMap) && fromMap.length > 0 ? fromMap : [];
-      return { key: qid, question: q, userSet: userArr, correctSet: correctArr };
-    });
-  }, [questions, userAnswers, correctAnswerMap]);
+      const correctSet = Array.isArray(fromMap) && fromMap.length > 0 ? fromMap : [];
+      return (
+        <ReviewAnswerRow
+          question={question}
+          questionId={qid}
+          userSet={userSet}
+          correctSet={correctSet}
+          index={index}
+        />
+      );
+    },
+    [correctAnswerMap, userAnswers]
+  );
 
-  const renderItem = useCallback(({ item, index }) => {
-    return <ReviewAnswerRow item={item} index={index} />;
-  }, []);
-
-  const keyExtractor = useCallback((item, idx) => item.key || String(idx), []);
+  const keyExtractor = useCallback(
+    (item, idx) => String(item?._id ?? item?.id ?? idx),
+    []
+  );
 
   if (questions.length === 0) {
     return (
@@ -259,14 +328,14 @@ export default function ReviewAnswersScreen() {
     <FlatList
       style={styles.container}
       contentContainerStyle={[styles.content, bottomInsets.scrollContentStyle]}
-      data={reviewItems}
+      data={questions}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       ListHeaderComponent={listHeader}
-      initialNumToRender={6}
-      maxToRenderPerBatch={8}
-      windowSize={8}
-      removeClippedSubviews
+      initialNumToRender={4}
+      maxToRenderPerBatch={6}
+      windowSize={7}
+      removeClippedSubviews={Platform.OS === 'android'}
     />
   );
 }

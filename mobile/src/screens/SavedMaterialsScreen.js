@@ -1,31 +1,169 @@
-import { useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as WebBrowser from 'expo-web-browser';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
-import { getSavedMaterials, toggleSavedMaterial } from '../services/savedMaterialService';
+import {
+  getSavedMaterials,
+  getSavedMaterialsSnapshot,
+  isSavedMaterialsSnapshotFresh,
+  toggleSavedMaterial,
+} from '../services/savedMaterialService';
 import { getPdfOpenUserMessage, openPdfInAppBrowser } from '../services/pdfService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
 import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
+import {
+  useDevItemMountCounter,
+  useDevMountTrace,
+  useDevRenderTrace,
+} from '../utils/renderPerfDevLog';
 
 const TABS = {
   PDF: 'pdf',
   NOTE: 'note',
 };
 
+const ITEM_SEPARATOR_STYLE = { height: 12 };
+
+function SavedMaterialSeparator() {
+  return <View style={ITEM_SEPARATOR_STYLE} />;
+}
+
+const SavedPdfRow = memo(function SavedPdfRow({
+  item,
+  disabled,
+  onOpen,
+  onUnsave,
+}) {
+  const id = String(item?.pdfId || '');
+
+  useDevRenderTrace(
+    'SavedPdfRow',
+    () => ({ id, disabled }),
+    { logEvery: 20, slowRenderMs: 10, logFirstRender: false }
+  );
+  useDevItemMountCounter('SavedPdfRow', id, { logEvery: 20 });
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.rowTop}>
+        <Pressable
+          style={({ pressed }) => [styles.flexOne, pressCardStyle(pressed)]}
+          onPress={() => onOpen(item)}
+        >
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {item?.title || 'Untitled PDF'}
+          </Text>
+          {item?.postTitle ? (
+            <Text style={styles.meta} numberOfLines={1}>
+              {item.postTitle}
+            </Text>
+          ) : null}
+        </Pressable>
+        <Pressable
+          onPress={() => onUnsave(item)}
+          disabled={disabled}
+          style={({ pressed }) => [
+            styles.iconBtn,
+            pressFeedbackStyle(pressed, disabled),
+            disabled && styles.disabled,
+          ]}
+        >
+          <Ionicons name="bookmark" size={16} color={colors.primary} />
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
+const SavedNoteRow = memo(function SavedNoteRow({
+  item,
+  disabled,
+  onOpen,
+  onUnsave,
+}) {
+  const id = String(item?.noteId || '');
+
+  useDevRenderTrace(
+    'SavedNoteRow',
+    () => ({ id, disabled }),
+    { logEvery: 20, slowRenderMs: 10, logFirstRender: false }
+  );
+  useDevItemMountCounter('SavedNoteRow', id, { logEvery: 20 });
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.rowTop}>
+        <Pressable
+          style={({ pressed }) => [styles.flexOne, pressCardStyle(pressed)]}
+          onPress={() => onOpen(item)}
+        >
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {item?.title || 'Untitled note'}
+          </Text>
+          {!!item?.contentPreview ? (
+            <Text style={styles.preview} numberOfLines={3}>
+              {item.contentPreview}
+            </Text>
+          ) : null}
+          <Text style={styles.meta} numberOfLines={1}>
+            {[item?.post, item?.subject, item?.topic].filter(Boolean).join(' • ')}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => onUnsave(item)}
+          disabled={disabled}
+          style={({ pressed }) => [
+            styles.iconBtn,
+            pressFeedbackStyle(pressed, disabled),
+            disabled && styles.disabled,
+          ]}
+        >
+          <Ionicons name="bookmark" size={16} color={colors.primary} />
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
 export default function SavedMaterialsScreen() {
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState(TABS.PDF);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !getSavedMaterialsSnapshot());
   const [error, setError] = useState(null);
-  const [savedPdfs, setSavedPdfs] = useState([]);
-  const [savedNotes, setSavedNotes] = useState([]);
+  const [savedPdfs, setSavedPdfs] = useState(
+    () => getSavedMaterialsSnapshot()?.savedPdfs || []
+  );
+  const [savedNotes, setSavedNotes] = useState(
+    () => getSavedMaterialsSnapshot()?.savedNotes || []
+  );
   const [workingId, setWorkingId] = useState(null);
   const loadAbortRef = useRef(null);
-  const openSavedPdf = async (item) => {
+
+  useDevRenderTrace(
+    'SavedMaterialsScreen',
+    () => ({
+      activeTab,
+      loading,
+      pdfs: savedPdfs.length,
+      notes: savedNotes.length,
+      workingId,
+    }),
+    { logEvery: 6, slowRenderMs: 18 }
+  );
+  useDevMountTrace(
+    'SavedMaterialsScreen',
+    () => ({
+      activeTab,
+      pdfs: savedPdfs.length,
+      notes: savedNotes.length,
+    }),
+    { slowMountMs: 45 }
+  );
+  const openSavedPdf = useCallback(async (item) => {
     const pdfId = String(item?.pdfId || '').trim();
     if (!pdfId) {
       Alert.alert('Cannot open', 'This PDF has no valid link.');
@@ -41,16 +179,16 @@ export default function SavedMaterialsScreen() {
     } catch (e) {
       Alert.alert('Could not open PDF', getPdfOpenUserMessage(e));
     }
-  };
+  }, []);
 
-  const openSavedNote = (item) => {
+  const openSavedNote = useCallback((item) => {
     const note = {
       _id: item?.noteId,
       title: item?.title,
       content: item?.content || '',
     };
     navigation.navigate('NoteDetail', { note });
-  };
+  }, [navigation]);
 
 
   const loadSaved = useCallback(async () => {
@@ -58,19 +196,35 @@ export default function SavedMaterialsScreen() {
     const ac = new AbortController();
     loadAbortRef.current = ac;
     setError(null);
-    setLoading(true);
+    const cached = getSavedMaterialsSnapshot();
+    const hasCached = !!cached;
+    if (cached) {
+      setSavedPdfs(Array.isArray(cached?.savedPdfs) ? cached.savedPdfs : []);
+      setSavedNotes(Array.isArray(cached?.savedNotes) ? cached.savedNotes : []);
+      setLoading(false);
+      if (isSavedMaterialsSnapshotFresh()) {
+        return;
+      }
+    } else {
+      setLoading(true);
+    }
     try {
-      const data = await getSavedMaterials({ signal: ac.signal });
+      const data = await getSavedMaterials({
+        force: true,
+        reason: hasCached ? 'saved_materials_focus_stale' : 'saved_materials_focus_cold',
+      });
       if (loadAbortRef.current !== ac) return;
       setSavedPdfs(Array.isArray(data?.savedPdfs) ? data.savedPdfs : []);
       setSavedNotes(Array.isArray(data?.savedNotes) ? data.savedNotes : []);
     } catch (e) {
       if (loadAbortRef.current !== ac || isRequestCancelled(e)) return;
       setError(getApiErrorMessage(e));
-      setSavedPdfs([]);
-      setSavedNotes([]);
+      if (!hasCached) {
+        setSavedPdfs([]);
+        setSavedNotes([]);
+      }
     } finally {
-      if (loadAbortRef.current === ac) {
+      if (loadAbortRef.current === ac && !hasCached) {
         setLoading(false);
       }
     }
@@ -86,7 +240,7 @@ export default function SavedMaterialsScreen() {
     }, [loadSaved])
   );
 
-  const handleUnsavePdf = async (item) => {
+  const handleUnsavePdf = useCallback(async (item) => {
     const pdfId = String(item?.pdfId || '').trim();
     if (!pdfId) return;
     setWorkingId(pdfId);
@@ -98,9 +252,9 @@ export default function SavedMaterialsScreen() {
     } finally {
       setWorkingId(null);
     }
-  };
+  }, []);
 
-  const handleUnsaveNote = async (item) => {
+  const handleUnsaveNote = useCallback(async (item) => {
     const noteId = String(item?.noteId || '').trim();
     if (!noteId) return;
     setWorkingId(noteId);
@@ -112,72 +266,42 @@ export default function SavedMaterialsScreen() {
     } finally {
       setWorkingId(null);
     }
-  };
+  }, []);
 
-  const renderPdf = ({ item }) => {
-    const id = String(item?.pdfId || '');
-    const disabled = workingId != null && String(workingId) === id;
-    return (
-      <View style={styles.card}>
-        <View style={styles.rowTop}>
-          <Pressable
-            style={({ pressed }) => [styles.flexOne, pressCardStyle(pressed)]}
-            onPress={() => openSavedPdf(item)}
-          >
-            <Text style={styles.cardTitle} numberOfLines={2}>
-              {item?.title || 'Untitled PDF'}
-            </Text>
-            {item?.postTitle ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                {item.postTitle}
-              </Text>
-            ) : null}
-          </Pressable>
-          <Pressable
-            onPress={() => handleUnsavePdf(item)}
-            disabled={disabled}
-            style={({ pressed }) => [styles.iconBtn, pressFeedbackStyle(pressed, disabled), disabled && styles.disabled]}
-          >
-            <Ionicons name="bookmark" size={16} color={colors.primary} />
-          </Pressable>
-        </View>
-      </View>
-    );
-  };
+  const renderPdf = useCallback(
+    ({ item }) => {
+      const id = String(item?.pdfId || '');
+      return (
+        <SavedPdfRow
+          item={item}
+          disabled={workingId != null && String(workingId) === id}
+          onOpen={openSavedPdf}
+          onUnsave={handleUnsavePdf}
+        />
+      );
+    },
+    [workingId, openSavedPdf, handleUnsavePdf]
+  );
 
-  const renderNote = ({ item }) => {
-    const id = String(item?.noteId || '');
-    const disabled = workingId != null && String(workingId) === id;
-    return (
-      <View style={styles.card}>
-        <View style={styles.rowTop}>
-          <Pressable
-            style={({ pressed }) => [styles.flexOne, pressCardStyle(pressed)]}
-            onPress={() => openSavedNote(item)}
-          >
-            <Text style={styles.cardTitle} numberOfLines={2}>
-              {item?.title || 'Untitled note'}
-            </Text>
-            {!!item?.contentPreview ? (
-              <Text style={styles.preview} numberOfLines={3}>
-                {item.contentPreview}
-              </Text>
-            ) : null}
-            <Text style={styles.meta} numberOfLines={1}>
-              {[item?.post, item?.subject, item?.topic].filter(Boolean).join(' • ')}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => handleUnsaveNote(item)}
-            disabled={disabled}
-            style={({ pressed }) => [styles.iconBtn, pressFeedbackStyle(pressed, disabled), disabled && styles.disabled]}
-          >
-            <Ionicons name="bookmark" size={16} color={colors.primary} />
-          </Pressable>
-        </View>
-      </View>
-    );
-  };
+  const renderNote = useCallback(
+    ({ item }) => {
+      const id = String(item?.noteId || '');
+      return (
+        <SavedNoteRow
+          item={item}
+          disabled={workingId != null && String(workingId) === id}
+          onOpen={openSavedNote}
+          onUnsave={handleUnsaveNote}
+        />
+      );
+    },
+    [workingId, openSavedNote, handleUnsaveNote]
+  );
+
+  const keyExtractor = useCallback(
+    (item, idx) => String(activeTab === TABS.PDF ? item?.pdfId ?? idx : item?.noteId ?? idx),
+    [activeTab]
+  );
 
   const currentData = activeTab === TABS.PDF ? savedPdfs : savedNotes;
 
@@ -215,12 +339,13 @@ export default function SavedMaterialsScreen() {
       {!loading && !error && currentData.length > 0 ? (
         <FlatList
           data={currentData}
-          keyExtractor={(item, idx) =>
-            String(activeTab === TABS.PDF ? item?.pdfId ?? idx : item?.noteId ?? idx)
-          }
+          keyExtractor={keyExtractor}
           renderItem={activeTab === TABS.PDF ? renderPdf : renderNote}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          ItemSeparatorComponent={SavedMaterialSeparator}
           contentContainerStyle={styles.listContent}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={7}
           showsVerticalScrollIndicator={false}
         />
       ) : null}

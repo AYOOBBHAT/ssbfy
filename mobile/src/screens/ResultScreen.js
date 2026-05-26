@@ -9,6 +9,7 @@ import {
   BackHandler,
   Animated,
   AppState,
+  InteractionManager,
 } from 'react-native';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
@@ -60,6 +61,11 @@ import { ERROR_TITLES } from '../utils/userFacingErrors';
 import { motion } from '../theme/motion';
 import { useAuth } from '../context/AuthContext';
 import { questionIdsFromDocs, resolveMongoId } from '../utils/mongoId.js';
+import { useDevMountTrace, useDevRenderTrace } from '../utils/renderPerfDevLog';
+import {
+  logNavigationPayload,
+  storeSessionQuestionSnapshot,
+} from '../utils/navigationPayloadStore';
 import {
   buildRenderableWeakTopics,
   buildTopicLabelMapFromCatalog,
@@ -117,6 +123,7 @@ import {
 // when the user has many weak topics / a large PDF catalog.
 const MAX_RECOMMENDATIONS = 5;
 const WEAK_FOCUS_PREVIEW = 4;
+const RESULT_DEFER_DEEP_DELAY_MS = 140;
 
 const PRIMARY = colors.primary;
 const TEXT = colors.text;
@@ -124,6 +131,11 @@ const MUTED = colors.muted;
 const BORDER = colors.border;
 const BG = colors.bg;
 const CARD_BG = colors.card;
+
+function resultDeferDevLog(event, detail = {}) {
+  if (!__DEV__) return;
+  logger.debug(`[ResultDefer] ${event}`, detail);
+}
 
 const TIER_HIGH = {
   color: colors.success,
@@ -269,8 +281,6 @@ function mapLearningSessionToNavExtras(api) {
     questions: Array.isArray(api.questions) ? api.questions : [],
     userAnswers: api.userAnswers && typeof api.userAnswers === 'object' ? api.userAnswers : {},
     correctAnswers: Array.isArray(api.correctAnswers) ? api.correctAnswers : [],
-    wrongQuestionIds: Array.isArray(api.wrongQuestionIds) ? api.wrongQuestionIds : [],
-    wrongQuestions: Array.isArray(api.wrongQuestions) ? api.wrongQuestions : [],
     summary: api.summary && typeof api.summary === 'object' ? api.summary : null,
     immutableAttemptSnapshot: api.immutableAttemptSnapshot === true,
     retrySkippedUnavailableCount: Number(api.retrySkippedUnavailableCount) || 0,
@@ -433,8 +443,6 @@ function mapAttemptResultToNavExtras(api) {
     questions: Array.isArray(api.questions) ? api.questions : [],
     userAnswers: api.userAnswers && typeof api.userAnswers === 'object' ? api.userAnswers : {},
     correctAnswers: Array.isArray(api.correctAnswers) ? api.correctAnswers : [],
-    wrongQuestionIds: Array.isArray(api.wrongQuestionIds) ? api.wrongQuestionIds : [],
-    wrongQuestions: Array.isArray(api.wrongQuestions) ? api.wrongQuestions : [],
     immutableAttemptSnapshot: api.immutableAttemptSnapshot === true,
     retrySkippedUnavailableCount: Number(api.retrySkippedUnavailableCount) || 0,
     testAvailable: api.testAvailable !== false,
@@ -466,6 +474,33 @@ export default function ResultScreen() {
   const needsServerHydration =
     hydrationMode === 'attempt' || hydrationMode === 'learning-session';
 
+  useDevRenderTrace(
+    'ResultScreen',
+    () => ({
+      hydrationMode,
+      needsServerHydration,
+      histLoading,
+      histError: !!histError,
+      routeQuestionCount: Array.isArray(route.params?.questions) ? route.params.questions.length : 0,
+      routeCorrectAnswerCount: Array.isArray(route.params?.correctAnswers)
+        ? route.params.correctAnswers.length
+        : 0,
+      routeUserAnswerCount:
+        route.params?.userAnswers && typeof route.params.userAnswers === 'object'
+          ? Object.keys(route.params.userAnswers).length
+          : 0,
+    }),
+    { logEvery: 4, slowRenderMs: 24 }
+  );
+  useDevMountTrace(
+    'ResultScreen',
+    () => ({
+      hydrationMode,
+      needsServerHydration,
+    }),
+    { slowMountMs: 55 }
+  );
+
   /** Monotonic load id — active ownership must match this value. */
   const activeLoadIdRef = useRef(0);
   /** P1: Active historical hydration ownership (authoritative for histLoading). */
@@ -479,6 +514,11 @@ export default function ResultScreen() {
   });
   const [histError, setHistError] = useState(null);
   const [retryTick, setRetryTick] = useState(0);
+  const [deferredHydrationState, setDeferredHydrationState] = useState({
+    key: null,
+    belowFoldReady: false,
+    deepReady: false,
+  });
   /** P3: Skip cache read for this cycle (retry / stale-cache recovery). */
   const histSkipCacheRef = useRef(false);
   const histRetryGenerationRef = useRef(0);
@@ -919,6 +959,17 @@ export default function ResultScreen() {
 
   const isRetry = !!reviewParams.retry;
   const isHistoricalAttempt = viewingHistoricalAttempt || historicalAttemptMode;
+  const resultIdentityKey = `${
+    historicalAttemptId ||
+    historicalLearningSessionId ||
+    learningSessionId ||
+    testId ||
+    'session'
+  }-${isRetry ? 'retry' : 'main'}`;
+  const belowFoldReady =
+    deferredHydrationState.key === resultIdentityKey && deferredHydrationState.belowFoldReady;
+  const deepDeferredReady =
+    deferredHydrationState.key === resultIdentityKey && deferredHydrationState.deepReady;
 
   const navigateBackFromResult = useCallback(() => {
     const { route: mainRoute } = resolveResultBackTarget(params);
@@ -934,6 +985,64 @@ export default function ResultScreen() {
       return () => sub.remove();
     }, [navigateBackFromResult])
   );
+
+  useEffect(() => {
+    const readyForDeferredHydration =
+      hasParams && (!needsServerHydration || (!!historicalExtras && !histLoading));
+    if (!readyForDeferredHydration) return undefined;
+
+    let cancelled = false;
+    let deepTimer = null;
+    setDeferredHydrationState({
+      key: resultIdentityKey,
+      belowFoldReady: false,
+      deepReady: false,
+    });
+
+    const paintHandle = requestAnimationFrame(() => {
+      if (cancelled) return;
+      resultDeferDevLog('first_useful_paint', {
+        key: resultIdentityKey,
+        historical: isHistoricalAttempt,
+        retry: isRetry,
+      });
+    });
+
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      resultDeferDevLog('below_fold_hydrate', { key: resultIdentityKey });
+      setDeferredHydrationState({
+        key: resultIdentityKey,
+        belowFoldReady: true,
+        deepReady: false,
+      });
+      deepTimer = setTimeout(() => {
+        if (cancelled) return;
+        resultDeferDevLog('deep_sections_hydrate', { key: resultIdentityKey });
+        setDeferredHydrationState({
+          key: resultIdentityKey,
+          belowFoldReady: true,
+          deepReady: true,
+        });
+      }, RESULT_DEFER_DEEP_DELAY_MS);
+    });
+
+    return () => {
+      cancelled = true;
+      if (paintHandle != null) cancelAnimationFrame(paintHandle);
+      interactionHandle.cancel();
+      if (deepTimer) clearTimeout(deepTimer);
+    };
+  }, [
+    hasParams,
+    histLoading,
+    historicalExtras,
+    isHistoricalAttempt,
+    isRetry,
+    needsServerHydration,
+    resultIdentityKey,
+  ]);
+
   const isMock = !!testId && !isRetry;
   const isPracticeSession = !isMock;
 
@@ -944,17 +1053,29 @@ export default function ResultScreen() {
   useEffect(() => {
     const ac = new AbortController();
     const loadAttempts = async () => {
-      if (!isMock || viewingHistoricalAttempt) {
+      if (!isMock || viewingHistoricalAttempt || !deepDeferredReady) {
         setAttemptsLoading(false);
+        if (!deepDeferredReady) {
+          setAttemptsError(null);
+          setAttempts([]);
+        }
         return;
       }
       setAttemptsLoading(true);
       setAttemptsError(null);
+      resultDeferDevLog('attempt_history_fetch_start', {
+        key: resultIdentityKey,
+        testId: String(testId || ''),
+      });
       try {
         const data = await getTestAttempts(testId, { signal: ac.signal });
         const list = Array.isArray(data?.attempts) ? data.attempts : [];
         if (ac.signal.aborted) return;
         setAttempts(list);
+        resultDeferDevLog('attempt_history_fetch_ok', {
+          key: resultIdentityKey,
+          attempts: list.length,
+        });
       } catch (e) {
         if (ac.signal.aborted || isRequestCancelled(e)) return;
         setAttemptsError(getApiErrorMessage(e));
@@ -969,7 +1090,7 @@ export default function ResultScreen() {
     return () => {
       ac.abort();
     };
-  }, [isMock, testId, viewingHistoricalAttempt]);
+  }, [deepDeferredReady, isMock, resultIdentityKey, testId, viewingHistoricalAttempt]);
 
   const bestAttempt = useMemo(() => {
     if (!Array.isArray(attempts) || attempts.length === 0) return null;
@@ -1072,7 +1193,7 @@ export default function ResultScreen() {
   }, [questions, wrongQuestionIds, wrongQuestions, userAnswers]);
 
   const mockAttemptStats = useMemo(() => {
-    if (isRetry) return null;
+    if (isRetry || !belowFoldReady) return null;
     const qs = Array.isArray(questions) ? questions : [];
     let correct = 0;
     let incorrect = 0;
@@ -1086,7 +1207,7 @@ export default function ResultScreen() {
     }
     return { correct, incorrect };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRetry, questions, userAnswers, correctAnswers]);
+  }, [belowFoldReady, isRetry, questions, userAnswers, correctAnswers]);
 
   const displayStats = useMemo(() => {
     const qlen = Array.isArray(questions) ? questions.length : 0;
@@ -1133,12 +1254,17 @@ export default function ResultScreen() {
 
   const handleReviewAnswers = () => {
     runOnce(() => {
-      navigation.navigate('ReviewAnswers', {
+      const reviewParams = {
         questions: Array.isArray(questions) ? questions : [],
         userAnswers: userAnswers && typeof userAnswers === 'object' ? userAnswers : {},
         correctAnswers: Array.isArray(correctAnswers) ? correctAnswers : [],
         readOnly: true,
+      };
+      logNavigationPayload('ReviewAnswers', reviewParams, {
+        includeDebug: true,
+        source: 'result_review_answers',
       });
+      navigation.navigate('ReviewAnswers', reviewParams);
     });
   };
 
@@ -1227,7 +1353,6 @@ export default function ResultScreen() {
         `${skippedTotal} question${skippedTotal === 1 ? '' : 's'} couldn't be included — the rest are ready when you are.`
       );
     }
-    const retryableCount = retryable.length;
     const sourceForIssue =
       historicalAttemptId ||
       (retryMeta && retryMeta.sourceAttemptId != null ? String(retryMeta.sourceAttemptId) : null);
@@ -1248,15 +1373,18 @@ export default function ResultScreen() {
           Alert.alert('Unable to start practice', 'Could not authorize this retry session.');
           return;
         }
-        navigation.navigate('Test', {
+        if (!isHistoricalAttempt) {
+          storeSessionQuestionSnapshot(practiceSessionId, retryable, {
+            source: 'retry_wrong_start',
+          });
+        }
+        const testParams = {
           mode: 'retry',
           questionIds: qids,
-          questions: retryable,
+          ...(isHistoricalAttempt ? { questions: retryable } : {}),
           practiceSessionId,
           historicalAttemptMode: isHistoricalAttempt,
           sourceAttemptId: sourceForIssue,
-          retryScopeCount: retryableCount,
-          retrySourceKind: isMock ? 'mock' : 'practice',
           originMainTab: resolveRetryOriginMainTab({
             returnMainTab,
             isHistoricalAttempt,
@@ -1266,7 +1394,12 @@ export default function ResultScreen() {
             const tid = !isHistoricalAttempt ? resolveMongoId(testId, 'testId') : null;
             return tid ? { testId: tid } : {};
           })(),
+        };
+        logNavigationPayload('Test', testParams, {
+          includeDebug: true,
+          source: 'retry_wrong_start',
         });
+        navigation.navigate('Test', testParams);
       } catch (e) {
         if (!isRequestCancelled(e)) {
           Alert.alert('Unable to start practice', getApiErrorMessage(e));
@@ -1300,15 +1433,18 @@ export default function ResultScreen() {
           Alert.alert('Unable to start practice', 'Could not authorize this retry session.');
           return;
         }
-        navigation.navigate('Test', {
+        if (!histRetry) {
+          storeSessionQuestionSnapshot(practiceSessionId, retryWrongQuestions, {
+            source: 'retry_again_start',
+          });
+        }
+        const testParams = {
           mode: 'retry',
           questionIds: retryWrongQuestionIds,
-          questions: retryWrongQuestions,
+          ...(histRetry ? { questions: retryWrongQuestions } : {}),
           practiceSessionId,
           historicalAttemptMode: histRetry,
           sourceAttemptId: sourceId,
-          retryScopeCount: retryWrongQuestionIds.length,
-          retrySourceKind: testId && !histRetry ? 'mock' : 'practice',
           originMainTab: resolveRetryOriginMainTab({
             returnMainTab,
             isHistoricalAttempt: histRetry,
@@ -1318,7 +1454,12 @@ export default function ResultScreen() {
             const tid = !histRetry ? resolveMongoId(testId, 'testId') : null;
             return tid ? { testId: tid } : {};
           })(),
+        };
+        logNavigationPayload('Test', testParams, {
+          includeDebug: true,
+          source: 'retry_again_start',
         });
+        navigation.navigate('Test', testParams);
       } catch (e) {
         if (!isRequestCancelled(e)) {
           Alert.alert('Unable to start practice', getApiErrorMessage(e));
@@ -1347,24 +1488,28 @@ export default function ResultScreen() {
   const [recLoading, setRecLoading] = useState(false);
   const [recError, setRecError] = useState(null);
   const [openingPdfId, setOpeningPdfId] = useState(null);
+  const rawWeakTopics = Array.isArray(weakTopics) ? weakTopics : [];
 
   // Normalize ids/names from server, local practice, or historical payloads.
   const normalizedWeakTopics = useMemo(
-    () => normalizeWeakTopicsList(weakTopics),
-    [weakTopics]
+    () => (belowFoldReady ? normalizeWeakTopicsList(rawWeakTopics) : []),
+    [belowFoldReady, rawWeakTopics]
   );
 
   const topicLabelContext = useMemo(
     () =>
-      createTopicLabelContext({
-        catalogMap: topicMap,
-        questions,
-        historicalQuestions: isHistoricalAttempt ? questions : [],
-        supplementalQuestions: wrongQuestions,
-        rawWeakTopics: weakTopics,
-        cachedCatalogMap: stableCatalogLabels,
-      }),
+      belowFoldReady
+        ? createTopicLabelContext({
+            catalogMap: topicMap,
+            questions,
+            historicalQuestions: isHistoricalAttempt ? questions : [],
+            supplementalQuestions: wrongQuestions,
+            rawWeakTopics: weakTopics,
+            cachedCatalogMap: stableCatalogLabels,
+          })
+        : null,
     [
+      belowFoldReady,
       topicMap,
       questions,
       isHistoricalAttempt,
@@ -1375,13 +1520,16 @@ export default function ResultScreen() {
   );
 
   const renderableWeakTopics = useMemo(
-    () => buildRenderableWeakTopics(normalizedWeakTopics, topicLabelContext),
-    [normalizedWeakTopics, topicLabelContext]
+    () =>
+      belowFoldReady && topicLabelContext
+        ? buildRenderableWeakTopics(normalizedWeakTopics, topicLabelContext)
+        : [],
+    [belowFoldReady, normalizedWeakTopics, topicLabelContext]
   );
 
   const weakTopicIds = useMemo(
-    () => renderableWeakTopics.map((t) => t.topicId),
-    [renderableWeakTopics]
+    () => (deepDeferredReady ? renderableWeakTopics.map((t) => t.topicId) : []),
+    [deepDeferredReady, renderableWeakTopics]
   );
 
   const visibleWeakTopics = useMemo(() => {
@@ -1394,7 +1542,7 @@ export default function ResultScreen() {
     renderableWeakTopics.length - WEAK_FOCUS_PREVIEW
   );
 
-  const hadRawWeakTopics = (Array.isArray(weakTopics) ? weakTopics : []).length > 0;
+  const hadRawWeakTopics = rawWeakTopics.length > 0;
   const focusAreasSuppressedOnly =
     hadRawWeakTopics && normalizedWeakTopics.length > 0 && renderableWeakTopics.length === 0;
 
@@ -1416,6 +1564,7 @@ export default function ResultScreen() {
   }, [questions]);
 
   useEffect(() => {
+    if (!belowFoldReady) return undefined;
     const ac = new AbortController();
     (async () => {
       try {
@@ -1428,6 +1577,10 @@ export default function ResultScreen() {
           if (Object.keys(map).length > 0) {
             setStableCatalogLabels(map);
           }
+          resultDeferDevLog('focus_topics_ready', {
+            key: resultIdentityKey,
+            count: list.length,
+          });
         }
       } catch (e) {
         if (ac.signal.aborted || isRequestCancelled(e)) return;
@@ -1437,7 +1590,7 @@ export default function ResultScreen() {
     return () => {
       ac.abort();
     };
-  }, []);
+  }, [belowFoldReady, resultIdentityKey]);
 
   /**
    * Load recommendations (notes + pdfs) whenever the pieces we need
@@ -1449,6 +1602,7 @@ export default function ResultScreen() {
    * round-trip on a perfect score.
    */
   useEffect(() => {
+    if (!deepDeferredReady) return undefined;
     if (weakTopicIds.length === 0) {
       setRecommendedNotes([]);
       setRecommendedPdfs([]);
@@ -1459,6 +1613,10 @@ export default function ResultScreen() {
     const ac = new AbortController();
     setRecLoading(true);
     setRecError(null);
+    resultDeferDevLog('resource_hydration_start', {
+      key: resultIdentityKey,
+      weakTopics: weakTopicIds.length,
+    });
 
     (async () => {
       try {
@@ -1485,6 +1643,11 @@ export default function ResultScreen() {
 
         setRecommendedNotes(nextNotes.slice(0, MAX_RECOMMENDATIONS));
         setRecommendedPdfs(nextPdfs.slice(0, MAX_RECOMMENDATIONS));
+        resultDeferDevLog('resource_hydration_ok', {
+          key: resultIdentityKey,
+          notes: nextNotes.length,
+          pdfs: nextPdfs.length,
+        });
 
         // Only surface an error when BOTH requests failed — a partial
         // success is a useful recommender and we'd rather hide a pdf
@@ -1507,7 +1670,7 @@ export default function ResultScreen() {
     return () => {
       ac.abort();
     };
-  }, [weakTopicIds, recommendedPostId]);
+  }, [deepDeferredReady, recommendedPostId, resultIdentityKey, weakTopicIds]);
 
   const handleOpenNote = (note) => {
     if (!note) return;
@@ -1575,10 +1738,12 @@ export default function ResultScreen() {
           setPracticeError('Could not start practice session. Please try again.');
           return;
         }
-        navigation.navigate('Test', {
+        storeSessionQuestionSnapshot(practiceSessionId, fetched, {
+          source: 'weak_practice_start',
+        });
+        const testParams = {
           mode: 'practice',
           practiceType: 'weak',
-          questions: fetched,
           questionIds,
           practiceSessionId,
           originMainTab: resolveRetryOriginMainTab({
@@ -1586,7 +1751,12 @@ export default function ResultScreen() {
             isHistoricalAttempt,
             testId,
           }),
+        };
+        logNavigationPayload('Test', testParams, {
+          includeDebug: true,
+          source: 'weak_practice_start',
         });
+        navigation.navigate('Test', testParams);
       } catch (e) {
         setPracticeError(getApiErrorMessage(e));
       } finally {
@@ -1619,18 +1789,25 @@ export default function ResultScreen() {
           setPracticeError('Could not start practice session. Please try again.');
           return;
         }
-        navigation.navigate('Test', {
+        storeSessionQuestionSnapshot(practiceSessionId, limited, {
+          source: 'topic_practice_start',
+        });
+        const testParams = {
           mode: 'practice',
           practiceType: 'topic',
           questionIds,
-          questions: limited,
           practiceSessionId,
           originMainTab: resolveRetryOriginMainTab({
             returnMainTab,
             isHistoricalAttempt,
             testId,
           }),
+        };
+        logNavigationPayload('Test', testParams, {
+          includeDebug: true,
+          source: 'topic_practice_start',
         });
+        navigation.navigate('Test', testParams);
       } catch (e) {
         setPracticeError(getApiErrorMessage(e));
       } finally {
@@ -1669,10 +1846,13 @@ export default function ResultScreen() {
   const showStreakChip =
     !isHistoricalAttempt && !isRetry && returnMainTab === MAIN_TABS.HOME && streakCount > 0;
 
-  const correctCount = mockAttemptStats?.correct ?? (Number(score) || 0);
-  const wrongCount = mockAttemptStats
-    ? mockAttemptStats.incorrect
-    : Math.max(0, (Number(displayStats.answeredQ) || 0) - correctCount);
+  const immediateCorrectCount = Number(score) || 0;
+  const immediateWrongCount = Math.max(
+    0,
+    (Number(displayStats.answeredQ) || 0) - immediateCorrectCount
+  );
+  const correctCount = mockAttemptStats?.correct ?? immediateCorrectCount;
+  const wrongCount = mockAttemptStats?.incorrect ?? immediateWrongCount;
 
   const heroAccuracy =
     isRetry && retryStats ? retryStats.accuracyPct : Number(accuracy) || 0;
@@ -1744,7 +1924,7 @@ export default function ResultScreen() {
     return buildMockPacingLine(timeTaken, displayStats.totalQ);
   }, [isMock, isRetry, timeTaken, displayStats.totalQ]);
 
-  const resultAnimKey = `${historicalAttemptId || historicalLearningSessionId || learningSessionId || testId || 'session'}-${isRetry ? 'retry' : 'main'}`;
+  const resultAnimKey = resultIdentityKey;
 
   useEffect(() => {
     heroOpacity.setValue(0);
@@ -1820,7 +2000,7 @@ export default function ResultScreen() {
   };
 
   const renderPracticeNextSteps = () => {
-    const hasWeak = renderableWeakTopics.length > 0;
+    const hasWeak = hadRawWeakTopics || renderableWeakTopics.length > 0;
     const hasWrong = wrongQuestionIds.length > 0;
     const allCorrect = !hasWrong && displayStats.totalQ > 0;
     const showReviewPrimary = allCorrect;
@@ -2055,6 +2235,18 @@ export default function ResultScreen() {
     );
   };
 
+  const renderDeferredSectionPlaceholder = (title, subtitle, label = 'Loading…') => (
+    <View style={styles.deferredSectionBlock}>
+      <View style={styles.sectionHeaderCompact}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.sectionSubtitleShort}>{subtitle}</Text> : null}
+      </View>
+      <View style={styles.sectionCardCompact}>
+        <InlineLoading size="small" label={label} />
+      </View>
+    </View>
+  );
+
   const renderHeader = () => (
     <View>
       {isPracticeSession && !isRetry ? (
@@ -2262,82 +2454,126 @@ export default function ResultScreen() {
 
       {isPracticeSession && !isRetry ? (
         <>
-          {renderWeakTopicsBlock('practice')}
           {renderPracticeNextSteps()}
+          {belowFoldReady
+            ? renderWeakTopicsBlock('practice')
+            : hadRawWeakTopics
+            ? renderDeferredSectionPlaceholder(
+                PRACTICE_WEAK_SECTION.title,
+                PRACTICE_WEAK_SECTION.subtitle,
+                'Loading focus areas…'
+              )
+            : null}
         </>
       ) : isMock && !isRetry ? (
         <>
-          {renderWeakTopicsBlock('mock')}
           {renderMockNextSteps()}
+          {belowFoldReady
+            ? renderWeakTopicsBlock('mock')
+            : hadRawWeakTopics
+            ? renderDeferredSectionPlaceholder(
+                MOCK_WEAK_SECTION.title,
+                MOCK_WEAK_SECTION.subtitle,
+                'Loading weak sections…'
+              )
+            : null}
         </>
       ) : isRetry ? (
         <>
-          {renderableWeakTopics.length > 0
-            ? renderWeakTopicsBlock(testId ? 'mock' : 'practice')
-            : null}
           {renderRetryNextSteps()}
+          {belowFoldReady && renderableWeakTopics.length > 0
+            ? renderWeakTopicsBlock(testId ? 'mock' : 'practice')
+            : !belowFoldReady && hadRawWeakTopics
+            ? renderDeferredSectionPlaceholder(
+                testId ? MOCK_WEAK_SECTION.title : PRACTICE_WEAK_SECTION.title,
+                testId ? MOCK_WEAK_SECTION.subtitle : PRACTICE_WEAK_SECTION.subtitle,
+                'Loading focus areas…'
+              )
+            : null}
         </>
       ) : (
         <>
           {renderPrimaryActions()}
-          {renderWeakTopicsBlock('practice')}
+          {belowFoldReady
+            ? renderWeakTopicsBlock('practice')
+            : hadRawWeakTopics
+            ? renderDeferredSectionPlaceholder(
+                PRACTICE_WEAK_SECTION.title,
+                PRACTICE_WEAK_SECTION.subtitle,
+                'Loading focus areas…'
+              )
+            : null}
         </>
       )}
 
-      {weakTopicIds.length > 0 ? renderRecommendations() : null}
+      {deepDeferredReady
+        ? weakTopicIds.length > 0
+          ? renderRecommendations()
+          : null
+        : hadRawWeakTopics
+        ? renderDeferredSectionPlaceholder('Study resources', null, 'Finding resources…')
+        : null}
 
       {isMock && !viewingHistoricalAttempt ? (
-        <View style={styles.attemptsBlock}>
-          <Text style={styles.sectionTitleMuted}>Attempt history</Text>
-          <Text style={styles.sectionSubtitleShort}>
-            Compare scores across timed attempts on this mock.
-          </Text>
-          {attemptsLoading ? (
-            <View style={styles.attemptsLoadingWrap}>
-              <InlineLoading size="small" />
-            </View>
-          ) : null}
-          {attemptsError ? (
-            <Text style={styles.attemptsError}>{attemptsError}</Text>
-          ) : null}
-          {!attemptsLoading && attempts.length > 0 ? (
-            <>
-              <View style={styles.attemptsSummaryRow}>
-                <View style={styles.summaryPill}>
-                  <Text style={styles.summaryLabel}>Attempts</Text>
-                  <Text style={styles.summaryValue}>{String(attempts.length)}</Text>
-                </View>
-                <View style={styles.summaryPill}>
-                  <Text style={styles.summaryLabel}>Best</Text>
-                  <Text style={styles.summaryValue}>{String(bestAttempt?.accuracy ?? 0)}%</Text>
-                </View>
+        deepDeferredReady ? (
+          <View style={styles.attemptsBlock}>
+            <Text style={styles.sectionTitleMuted}>Attempt history</Text>
+            <Text style={styles.sectionSubtitleShort}>
+              Compare scores across timed attempts on this mock.
+            </Text>
+            {attemptsLoading ? (
+              <View style={styles.attemptsLoadingWrap}>
+                <InlineLoading size="small" />
               </View>
-              <View style={styles.attemptList}>
-                {attempts
-                  .slice()
-                  .sort(
-                    (a, b) => (Number(b?.attemptNumber) || 0) - (Number(a?.attemptNumber) || 0)
-                  )
-                  .slice(0, 3)
-                  .map((a) => (
-                    <View key={String(a?._id)} style={styles.attemptRow}>
-                      <View style={styles.attemptLeft}>
-                        <Text style={styles.attemptTitle}>
-                          Attempt {String(a?.attemptNumber ?? '—')}
-                        </Text>
-                        <Text style={styles.attemptSub}>
-                          {String(a?.accuracy ?? 0)}% • {formatAttemptTime(a?.timeTaken)}
-                        </Text>
+            ) : null}
+            {attemptsError ? (
+              <Text style={styles.attemptsError}>{attemptsError}</Text>
+            ) : null}
+            {!attemptsLoading && attempts.length > 0 ? (
+              <>
+                <View style={styles.attemptsSummaryRow}>
+                  <View style={styles.summaryPill}>
+                    <Text style={styles.summaryLabel}>Attempts</Text>
+                    <Text style={styles.summaryValue}>{String(attempts.length)}</Text>
+                  </View>
+                  <View style={styles.summaryPill}>
+                    <Text style={styles.summaryLabel}>Best</Text>
+                    <Text style={styles.summaryValue}>{String(bestAttempt?.accuracy ?? 0)}%</Text>
+                  </View>
+                </View>
+                <View style={styles.attemptList}>
+                  {attempts
+                    .slice()
+                    .sort(
+                      (a, b) => (Number(b?.attemptNumber) || 0) - (Number(a?.attemptNumber) || 0)
+                    )
+                    .slice(0, 3)
+                    .map((a) => (
+                      <View key={String(a?._id)} style={styles.attemptRow}>
+                        <View style={styles.attemptLeft}>
+                          <Text style={styles.attemptTitle}>
+                            Attempt {String(a?.attemptNumber ?? '—')}
+                          </Text>
+                          <Text style={styles.attemptSub}>
+                            {String(a?.accuracy ?? 0)}% • {formatAttemptTime(a?.timeTaken)}
+                          </Text>
+                        </View>
+                        <Text style={styles.attemptPct}>{String(a?.accuracy ?? 0)}%</Text>
                       </View>
-                      <Text style={styles.attemptPct}>{String(a?.accuracy ?? 0)}%</Text>
-                    </View>
-                  ))}
-              </View>
-            </>
-          ) : !attemptsLoading ? (
-            <Text style={styles.attemptsEmpty}>First attempt — your baseline starts here.</Text>
-          ) : null}
-        </View>
+                    ))}
+                </View>
+              </>
+            ) : !attemptsLoading ? (
+              <Text style={styles.attemptsEmpty}>First attempt — your baseline starts here.</Text>
+            ) : null}
+          </View>
+        ) : (
+          renderDeferredSectionPlaceholder(
+            'Attempt history',
+            'Compare scores across timed attempts on this mock.',
+            'Loading attempt history…'
+          )
+        )
       ) : null}
     </View>
   );
@@ -2492,7 +2728,7 @@ export default function ResultScreen() {
     );
   }
 
-  const resultScreenKey = `result-${historicalAttemptId || historicalLearningSessionId || learningSessionId || testId || 'session'}-${isRetry ? 'retry' : 'mock'}`;
+  const resultScreenKey = `result-${resultIdentityKey}`;
 
   return (
     <ScrollView
@@ -2790,6 +3026,9 @@ const styles = StyleSheet.create({
     color: TEXT,
     marginTop: 4,
     marginBottom: 6,
+  },
+  deferredSectionBlock: {
+    marginBottom: 8,
   },
 
   attemptsBlock: {

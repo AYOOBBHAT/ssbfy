@@ -31,6 +31,11 @@ import {
 import { colors, brand } from '../theme/colors';
 import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
+import { useDevRenderTrace } from '../utils/renderPerfDevLog';
+import {
+  logNavigationPayload,
+  storeSessionQuestionSnapshot,
+} from '../utils/navigationPayloadStore';
 
 function greetingForHour() {
   const h = new Date().getHours();
@@ -49,7 +54,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshUser?.();
+      void refreshUser?.({ source: 'home_focus' });
     }, [refreshUser])
   );
 
@@ -79,13 +84,20 @@ export default function HomeScreen() {
         setDailyError('Could not start daily practice. Please try again.');
         return;
       }
-      navigation.navigate('Test', {
+      storeSessionQuestionSnapshot(practiceSessionId, questions, {
+        source: 'daily_start',
+      });
+      const testParams = {
         mode: 'daily',
         questionIds,
-        questions,
         practiceSessionId,
         originMainTab: 'Home',
+      };
+      logNavigationPayload('Test', testParams, {
+        includeDebug: true,
+        source: 'daily_start',
       });
+      navigation.navigate('Test', testParams);
     } catch (e) {
       if (isRequestCancelled(e) || dailyAbortRef.current !== ac) return;
       setDailyError(getApiErrorMessage(e));
@@ -103,6 +115,19 @@ export default function HomeScreen() {
   const greet = greetingForHour();
   const showPremiumBanner = !userHasPremiumAccess(user);
   const { quota, loading: quotaLoading, showQuota } = useMockQuota();
+
+  useDevRenderTrace(
+    'HomeScreen',
+    () => ({
+      dailyLoading,
+      hasDailyError: !!dailyError,
+      showPremiumBanner,
+      showQuota,
+      quotaLoading,
+      streak,
+    }),
+    { logEvery: 6, slowRenderMs: 18 }
+  );
 
   return (
     <ScrollView

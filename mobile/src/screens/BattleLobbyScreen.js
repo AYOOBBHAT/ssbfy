@@ -17,6 +17,10 @@ import {
   formatBattleShareMessage,
   normalizeBattleWebLink,
 } from '../utils/battleInviteLinks';
+import {
+  logNavigationPayload,
+  storeSessionQuestionSnapshot,
+} from '../utils/navigationPayloadStore';
 
 async function copyToClipboard(text) {
   try {
@@ -114,16 +118,23 @@ export default function BattleLobbyScreen() {
         battle?.timerMode === 'total' && battle?.timerSeconds
           ? Math.ceil(Number(battle.timerSeconds) / 60)
           : undefined;
-      navigation.navigate('Test', {
+      storeSessionQuestionSnapshot(practiceSessionId, questions, {
+        source: 'battle_start',
+      });
+      const testParams = {
         mode: 'battle',
         practiceType: 'battle',
         battleId,
         questionIds,
-        questions,
         practiceSessionId,
         originMainTab: MAIN_TABS.HOME,
         durationMinutes,
+      };
+      logNavigationPayload('Test', testParams, {
+        includeDebug: true,
+        source: 'battle_start',
       });
+      navigation.navigate('Test', testParams);
     } catch (e) {
       if (!isRequestCancelled(e)) setError(getApiErrorMessage(e));
     } finally {

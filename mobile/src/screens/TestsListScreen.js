@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, SectionList, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useMockTests } from '../hooks/useMockTests';
 import { useMockQuota } from '../hooks/useMockQuota';
 import MockTestCard from '../components/MockTestCard';
@@ -12,27 +12,35 @@ import { EMPTY } from '../theme/stateCopy';
 import { useAuth } from '../context/AuthContext';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
-import { getMyTestStatus } from '../services/testService';
+import {
+  getCachedMyTestStatusSnapshot,
+  getMyTestStatus,
+  isMyTestStatusSnapshotFresh,
+} from '../services/testService';
 import { isQuotaExhausted } from '../utils/mockQuotaCopy';
 import { resolveMockTestPresentation } from '../utils/mockTestCardPresentation';
+import { useDevMountTrace, useDevRenderTrace } from '../utils/renderPerfDevLog';
 
-function ListSectionHeader({ title, subtitle }) {
+const ListSectionHeader = memo(function ListSectionHeader({ title, subtitle }) {
   return (
     <View style={styles.sectionHead}>
       <Text style={styles.sectionTitle}>{title}</Text>
       {subtitle ? <Text style={styles.sectionSub}>{subtitle}</Text> : null}
     </View>
   );
-}
+});
 
 export default function TestsListScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const isPremium = userHasPremiumAccess(user);
   const { quota, loading: quotaLoading, refresh: refreshQuota, showQuota } = useMockQuota();
-  const [statusMap, setStatusMap] = useState({});
+  const [statusMap, setStatusMap] = useState(
+    () => getCachedMyTestStatusSnapshot()?.status || {}
+  );
   const [statusError, setStatusError] = useState(null);
-  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(() => !getCachedMyTestStatusSnapshot());
+  const hasFocusedOnceRef = useRef(false);
   const {
     tests,
     loading,
@@ -49,12 +57,25 @@ export default function TestsListScreen() {
     (mockStartError === FREE_TEST_LIMIT_MESSAGE ||
       (isQuotaExhausted(quota) && !mockStartError));
 
-  const handleStartTest = useCallback(
-    async (item) => {
-      await startTestBase(item);
-      void refreshQuota();
-    },
-    [startTestBase, refreshQuota]
+  useDevRenderTrace(
+    'TestsListScreen',
+    () => ({
+      tests: tests.length,
+      sections: sections.length,
+      statusLoading,
+      loading,
+      showExhaustedCard,
+      startingId: startingId != null ? String(startingId) : null,
+    }),
+    { logEvery: 6, slowRenderMs: 18 }
+  );
+  useDevMountTrace(
+    'TestsListScreen',
+    () => ({
+      tests: tests.length,
+      sections: sections.length,
+    }),
+    { slowMountMs: 45 }
   );
 
   const goPremium = useCallback(() => {
@@ -69,29 +90,66 @@ export default function TestsListScreen() {
     navigation.navigate('Main', { screen: 'Practice' });
   }, [navigation]);
 
-  useEffect(() => {
-    const ac = new AbortController();
-    const loadStatuses = async () => {
-      try {
+  const loadStatuses = useCallback(async (options = {}) => {
+    const { force = false, source = 'mount' } = options;
+    const cached = getCachedMyTestStatusSnapshot();
+    const hasCached = !!cached;
+    if (cached) {
+      const next = cached?.status && typeof cached.status === 'object' ? cached.status : {};
+      setStatusMap(next);
+      setStatusLoading(false);
+      if (!force && isMyTestStatusSnapshotFresh()) {
         setStatusError(null);
-        setStatusLoading(true);
-        const data = await getMyTestStatus({ signal: ac.signal });
-        const next = data?.status && typeof data.status === 'object' ? data.status : {};
-        if (ac.signal.aborted) return;
-        setStatusMap(next);
-      } catch (e) {
-        if (ac.signal.aborted || isRequestCancelled(e)) return;
-        setStatusError(getApiErrorMessage(e));
+        return next;
+      }
+    } else {
+      setStatusLoading(true);
+    }
+    try {
+      setStatusError(null);
+      const data = await getMyTestStatus({
+        force: true,
+        reason: source,
+      });
+      const next = data?.status && typeof data.status === 'object' ? data.status : {};
+      setStatusMap(next);
+      return next;
+    } catch (e) {
+      if (isRequestCancelled(e)) return cached?.status ?? {};
+      setStatusError(getApiErrorMessage(e));
+      if (!hasCached) {
         setStatusMap({});
       }
-      if (ac.signal.aborted) return;
-      setStatusLoading(false);
-    };
-    void loadStatuses();
-    return () => {
-      ac.abort();
-    };
+    } finally {
+      if (!hasCached) {
+        setStatusLoading(false);
+      }
+    }
+    return cached?.status ?? {};
   }, []);
+
+  useEffect(() => {
+    void loadStatuses({ source: 'tests_mount' });
+  }, [loadStatuses]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (hasFocusedOnceRef.current) {
+        void loadStatuses({ source: 'tests_focus' });
+      } else {
+        hasFocusedOnceRef.current = true;
+      }
+    }, [loadStatuses])
+  );
+
+  const handleStartTest = useCallback(
+    async (item) => {
+      await startTestBase(item);
+      void refreshQuota({ force: true, source: 'start_test' });
+      void loadStatuses({ force: true, source: 'start_test' });
+    },
+    [loadStatuses, startTestBase, refreshQuota]
+  );
 
   const testStatusById = useMemo(() => {
     const map = new Map();
@@ -188,6 +246,20 @@ export default function TestsListScreen() {
     [handleStartTest, startingId, statusLoading, statusError, isPremium]
   );
 
+  const handleRefresh = useCallback(() => {
+    void loadTests();
+    void refreshQuota({ force: true, source: 'tests_pull_to_refresh' });
+    void loadStatuses({ force: true, source: 'tests_pull_to_refresh' });
+  }, [loadTests, loadStatuses, refreshQuota]);
+
+  const renderSectionHeader = useCallback(
+    ({ section }) =>
+      section.data.length > 0 ? (
+        <ListSectionHeader title={section.title} subtitle={section.subtitle} />
+      ) : null,
+    []
+  );
+
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
@@ -263,16 +335,9 @@ export default function TestsListScreen() {
       keyExtractor={(row, idx) => String(row?.test?._id ?? idx)}
       stickySectionHeadersEnabled={false}
       refreshing={loading && tests.length > 0}
-      onRefresh={() => {
-        void loadTests();
-        void refreshQuota();
-      }}
+      onRefresh={handleRefresh}
       ListHeaderComponent={listHeader}
-      renderSectionHeader={({ section }) =>
-        section.data.length > 0 ? (
-          <ListSectionHeader title={section.title} subtitle={section.subtitle} />
-        ) : null
-      }
+      renderSectionHeader={renderSectionHeader}
       renderItem={renderMockRow}
       ListEmptyComponent={
         !loading && !error && tests.length === 0 ? (
@@ -281,6 +346,9 @@ export default function TestsListScreen() {
           </View>
         ) : null
       }
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      windowSize={7}
       showsVerticalScrollIndicator={false}
     />
   );

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,12 @@ import {
   putProfileAnalyticsCache,
 } from '../utils/profileAnalyticsCache';
 import { isRequestCancelled } from '../services/api';
+import { focusRefetchDevLog } from '../utils/focusRefetchDevLog';
+import { getCacheAgeMs, isCacheFresh, isCacheStale } from '../utils/requestFreshness';
+import { useDevRenderTrace } from '../utils/renderPerfDevLog';
+
+const PROFILE_ANALYTICS_STALE_AFTER_MS = 45 * 1000;
+const PROFILE_OVERVIEW_STALE_AFTER_MS = 60 * 1000;
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
@@ -51,55 +57,157 @@ export default function ProfileScreen({ navigation }) {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [overviewStale, setOverviewStale] = useState(false);
+  const analyticsRefreshInFlightRef = useRef(null);
+
+  useDevRenderTrace(
+    'ProfileScreen',
+    () => ({
+      analyticsLoading,
+      analyticsReady: !!analytics,
+      overviewReady: !!overview,
+      overviewStale,
+      analyticsError,
+      isPremium,
+    }),
+    { logEvery: 6, slowRenderMs: 18 }
+  );
 
   useFocusEffect(
     useCallback(() => {
-      const ac = new AbortController();
+      let active = true;
       (async () => {
         try {
           const [cachedOverview, cachedProfile] = await Promise.all([
             getAnalyticsOverviewCache(),
             getProfileAnalyticsCache(),
           ]);
-          if (ac.signal.aborted) return;
+          if (!active) return;
+          const hasCachedOverview = !!cachedOverview?.payload;
+          const hasCachedProfile = !!cachedProfile?.payload;
+          const overviewFresh = isCacheFresh(
+            cachedOverview?.savedAt,
+            PROFILE_OVERVIEW_STALE_AFTER_MS
+          );
+          const profileFresh = isCacheFresh(
+            cachedProfile?.savedAt,
+            PROFILE_ANALYTICS_STALE_AFTER_MS
+          );
           if (cachedOverview?.payload) {
             setOverview(cachedOverview.payload);
-            setOverviewStale(true);
+            setOverviewStale(!overviewFresh);
           }
           if (cachedProfile?.payload) {
             setAnalytics(cachedProfile.payload);
           }
 
-          setAnalyticsLoading(!cachedOverview?.payload && !cachedProfile?.payload);
+          setAnalyticsLoading(!hasCachedOverview && !hasCachedProfile);
           setAnalyticsError(false);
 
-          const [profileData, overviewData] = await Promise.all([
-            getProfileAnalytics({ signal: ac.signal }),
-            getAnalyticsOverview({ signal: ac.signal }).catch(() => null),
-          ]);
-          if (ac.signal.aborted) return;
-          setAnalytics(profileData);
-          void putProfileAnalyticsCache(profileData);
+          const needsProfile = !hasCachedProfile || isCacheStale(
+            cachedProfile?.savedAt,
+            PROFILE_ANALYTICS_STALE_AFTER_MS
+          );
+          const needsOverview = !hasCachedOverview || isCacheStale(
+            cachedOverview?.savedAt,
+            PROFILE_OVERVIEW_STALE_AFTER_MS
+          );
+
+          if (!needsProfile && !needsOverview) {
+            focusRefetchDevLog('profile_skip_fresh', {
+              profileAgeMs: getCacheAgeMs(cachedProfile?.savedAt),
+              overviewAgeMs: getCacheAgeMs(cachedOverview?.savedAt),
+            });
+            return;
+          }
+
+          focusRefetchDevLog('profile_refresh_request', {
+            hasCachedProfile,
+            hasCachedOverview,
+            needsProfile,
+            needsOverview,
+          });
+
+          if (!analyticsRefreshInFlightRef.current) {
+            const request = (async () => {
+              const [profileData, overviewData] = await Promise.all([
+                needsProfile ? getProfileAnalytics() : Promise.resolve(null),
+                needsOverview ? getAnalyticsOverview().catch(() => null) : Promise.resolve(null),
+              ]);
+              return { profileData, overviewData };
+            })();
+            const trackedRequest = request.finally(() => {
+              if (analyticsRefreshInFlightRef.current === trackedRequest) {
+                analyticsRefreshInFlightRef.current = null;
+              }
+            });
+            analyticsRefreshInFlightRef.current = trackedRequest;
+          } else {
+            focusRefetchDevLog('profile_dedupe_reuse', {
+              needsProfile,
+              needsOverview,
+            });
+          }
+
+          const { profileData, overviewData } = await analyticsRefreshInFlightRef.current;
+          if (!active) return;
+          if (profileData) {
+            setAnalytics(profileData);
+            void putProfileAnalyticsCache(profileData);
+          }
           if (overviewData) {
             setOverview(overviewData);
             setOverviewStale(false);
             void putAnalyticsOverviewCache(overviewData);
+          } else if (cachedOverview?.payload) {
+            setOverviewStale(true);
           }
+          focusRefetchDevLog('profile_refresh_ok', {
+            refreshedProfile: !!profileData,
+            refreshedOverview: !!overviewData,
+          });
         } catch (e) {
-          if (ac.signal.aborted || isRequestCancelled(e)) return;
+          if (!active || isRequestCancelled(e)) return;
           setAnalyticsError(true);
         } finally {
-          if (!ac.signal.aborted) setAnalyticsLoading(false);
+          if (active) setAnalyticsLoading(false);
         }
       })();
       return () => {
-        ac.abort();
+        active = false;
       };
     }, [user?._id, user?.id])
   );
 
-  const goPremium = (from) => navigation.navigate('Premium', { from });
-  const goToTests = () => navigation.navigate('Main', { screen: 'Tests' });
+  const goPremium = useCallback((from) => navigation.navigate('Premium', { from }), [navigation]);
+  const goToTests = useCallback(
+    () => navigation.navigate('Main', { screen: 'Tests' }),
+    [navigation]
+  );
+  const rootNavigation = useMemo(
+    () => navigation.getParent()?.getParent() ?? null,
+    [navigation]
+  );
+  const handleOpenMockAttempt = useCallback(
+    (attemptId) => {
+      rootNavigation?.navigate('Result', {
+        attemptId,
+        learningSessionId: undefined,
+      });
+    },
+    [rootNavigation]
+  );
+  const handleOpenLearningSession = useCallback(
+    (learningSessionId) => {
+      rootNavigation?.navigate('Result', {
+        learningSessionId,
+        attemptId: undefined,
+      });
+    },
+    [rootNavigation]
+  );
+  const handleCreateBattle = useCallback(() => {
+    rootNavigation?.navigate('BattleCreate');
+  }, [rootNavigation]);
   const openLegalUrl = useCallback(async (url) => {
     try {
       await Linking.openURL(url);
@@ -137,26 +245,14 @@ export default function ProfileScreen({ navigation }) {
         error={analyticsError}
         cacheOwnerUserId={user?._id ?? user?.id ?? null}
         onStart={goToTests}
-        onOpenMockAttempt={(attemptId) => {
-          navigation.getParent()?.getParent()?.navigate('Result', {
-            attemptId,
-            learningSessionId: undefined,
-          });
-        }}
-        onOpenLearningSession={(learningSessionId) => {
-          navigation.getParent()?.getParent()?.navigate('Result', {
-            learningSessionId,
-            attemptId: undefined,
-          });
-        }}
+        onOpenMockAttempt={handleOpenMockAttempt}
+        onOpenLearningSession={handleOpenLearningSession}
       />
 
       <View style={styles.progressCard}>
         <BattleHistorySection
-          rootNavigation={navigation.getParent()?.getParent()}
-          onCreateBattle={() =>
-            navigation.getParent()?.getParent()?.navigate('BattleCreate')
-          }
+          rootNavigation={rootNavigation}
+          onCreateBattle={handleCreateBattle}
         />
       </View>
 

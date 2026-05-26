@@ -18,9 +18,12 @@ import {
   removeLegacySensitiveAsyncKeys,
   setActiveCacheUserId,
 } from '../utils/authScopedCache';
+import { focusRefetchDevLog } from '../utils/focusRefetchDevLog';
+import { getCacheAgeMs, isCacheFresh } from '../utils/requestFreshness';
 import { markStartup } from '../utils/startupTiming';
 
 const STORAGE_KEY = '@ssbfy/auth_session';
+const USER_REFRESH_STALE_AFTER_MS = 45 * 1000;
 
 const AuthContext = createContext(null);
 
@@ -39,6 +42,8 @@ export function AuthProvider({ children }) {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const refreshUserAbortRef = useRef(null);
+  const refreshUserFetchedAtRef = useRef(0);
+  const refreshUserInFlightRef = useRef(null);
   const loginAbortRef = useRef(null);
 
   const isAuthenticated = !!token;
@@ -77,6 +82,7 @@ export function AuthProvider({ children }) {
           if (ac.signal.aborted) return false;
           if (freshUser && typeof freshUser === 'object') {
             setUser(freshUser);
+            refreshUserFetchedAtRef.current = Date.now();
             await Promise.allSettled([
               removeLegacySensitiveAsyncKeys(),
               persistSession(sessionToken, freshUser),
@@ -165,6 +171,7 @@ export function AuthProvider({ children }) {
         throw new Error('Invalid login response from server.');
       }
       setUser(u);
+      refreshUserFetchedAtRef.current = Date.now();
       setToken(t);
       setAuthToken(t);
       await removeLegacySensitiveAsyncKeys();
@@ -194,6 +201,7 @@ export function AuthProvider({ children }) {
         throw new Error('Invalid signup response from server.');
       }
       setUser(u);
+      refreshUserFetchedAtRef.current = Date.now();
       setToken(t);
       setAuthToken(t);
       await removeLegacySensitiveAsyncKeys();
@@ -205,35 +213,76 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const refreshUser = useCallback(async () => {
-    refreshUserAbortRef.current?.abort();
+  const refreshUser = useCallback(async (options = {}) => {
+    const {
+      force = false,
+      staleAfterMs = USER_REFRESH_STALE_AFTER_MS,
+      source = 'manual',
+    } = options;
+    if (!token) return null;
+    if (!force && user && isCacheFresh(refreshUserFetchedAtRef.current, staleAfterMs)) {
+      focusRefetchDevLog('refresh_user_skip_fresh', {
+        source,
+        ageMs: getCacheAgeMs(refreshUserFetchedAtRef.current),
+      });
+      return user;
+    }
+    if (refreshUserInFlightRef.current) {
+      focusRefetchDevLog('refresh_user_dedupe_reuse', { source });
+      return refreshUserInFlightRef.current;
+    }
     const ac = new AbortController();
     refreshUserAbortRef.current = ac;
-    try {
-      const res = await api.get('/users/me', { signal: ac.signal });
-      const freshUser = res?.data?.data?.user;
-      if (refreshUserAbortRef.current !== ac) return null;
-      if (freshUser && typeof freshUser === 'object') {
-        setUser(freshUser);
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : null;
-        const t = parsed?.token;
-        if (typeof t === 'string' && t.length > 0) {
-          await persistSession(t, freshUser);
+    const promise = (async () => {
+      try {
+        focusRefetchDevLog('refresh_user_start', {
+          source,
+          force,
+          hadUser: !!user,
+        });
+        const res = await api.get('/users/me', { signal: ac.signal });
+        const freshUser = res?.data?.data?.user;
+        if (refreshUserAbortRef.current !== ac) return null;
+        if (freshUser && typeof freshUser === 'object') {
+          setUser(freshUser);
+          refreshUserFetchedAtRef.current = Date.now();
+          const raw = await AsyncStorage.getItem(STORAGE_KEY);
+          const parsed = raw ? JSON.parse(raw) : null;
+          const t = parsed?.token;
+          if (typeof t === 'string' && t.length > 0) {
+            await persistSession(t, freshUser);
+          }
+          focusRefetchDevLog('refresh_user_ok', {
+            source,
+            ageMs: getCacheAgeMs(refreshUserFetchedAtRef.current),
+          });
+          return freshUser;
         }
-        return freshUser;
+      } catch (e) {
+        if (isRequestCancelled(e)) return null;
+        focusRefetchDevLog('refresh_user_error', { source });
+        // Swallow errors; global 401 handler logs auth issues separately.
+      } finally {
+        if (refreshUserAbortRef.current === ac) {
+          refreshUserAbortRef.current = null;
+        }
+        if (refreshUserInFlightRef.current === promise) {
+          refreshUserInFlightRef.current = null;
+        }
       }
-    } catch (e) {
-      if (isRequestCancelled(e)) return null;
-      // Swallow errors; global 401 handler logs auth issues separately.
-    }
-    return null;
-  }, []);
+      return null;
+    })();
+    refreshUserInFlightRef.current = promise;
+    return promise;
+  }, [token, user]);
 
   const logout = useCallback(async () => {
     const previousUserId = user?._id ?? user?.id ?? null;
     loginAbortRef.current?.abort();
     refreshUserAbortRef.current?.abort();
+    refreshUserAbortRef.current = null;
+    refreshUserInFlightRef.current = null;
+    refreshUserFetchedAtRef.current = 0;
     clearAuthToken();
     setToken(null);
     setUser(null);

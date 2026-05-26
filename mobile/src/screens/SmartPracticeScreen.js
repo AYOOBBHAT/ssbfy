@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
-import { getPosts } from '../services/pdfService';
+import { getCachedPostsSnapshot, getPosts } from '../services/pdfService';
 import { postSmartPractice } from '../services/testService';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import PracticeSetupSection from '../components/practice/PracticeSetupSection';
@@ -18,6 +18,10 @@ import { questionIdsFromDocs, resolveMongoId } from '../utils/mongoId.js';
 import { resolveTopicId } from '../utils/topicRef';
 import { formatTaxonomyLabel } from '../utils/formatTaxonomyLabel';
 import { buildPracticeSetupSummary } from '../utils/practiceSetupSummary';
+import {
+  logNavigationPayload,
+  storeSessionQuestionSnapshot,
+} from '../utils/navigationPayloadStore';
 
 const DIFFICULTY_OPTIONS = [
   { id: 'all', label: 'All' },
@@ -30,9 +34,10 @@ const DEFAULT_Q = 10;
 
 export default function SmartPracticeScreen() {
   const navigation = useNavigation();
+  const initialPostsCache = getCachedPostsSnapshot();
 
-  const [posts, setPosts] = useState([]);
-  const [postsLoading, setPostsLoading] = useState(true);
+  const [posts, setPosts] = useState(() => initialPostsCache?.posts ?? []);
+  const [postsLoading, setPostsLoading] = useState(() => !initialPostsCache);
   const [postsError, setPostsError] = useState(null);
 
   const [selectedPostId, setSelectedPostId] = useState('');
@@ -54,17 +59,23 @@ export default function SmartPracticeScreen() {
     postsLoadRef.current?.abort();
     const ac = new AbortController();
     postsLoadRef.current = ac;
+    const cached = getCachedPostsSnapshot();
+    const hasCachedPosts = Array.isArray(cached?.posts);
     setPostsError(null);
-    setPostsLoading(true);
+    if (!hasCachedPosts) {
+      setPostsLoading(true);
+    }
     try {
-      const data = await getPosts({ force: true, signal: ac.signal });
+      const data = await getPosts({ signal: ac.signal });
       if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
     } catch (e) {
       if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
-      setPosts([]);
+      if (!hasCachedPosts) {
+        setPosts([]);
+      }
     } finally {
       if (postsLoadRef.current === ac) {
         setPostsLoading(false);
@@ -165,14 +176,21 @@ export default function SmartPracticeScreen() {
         setStartError('Could not start practice session. Please try again.');
         return;
       }
-      navigation.navigate('Test', {
+      storeSessionQuestionSnapshot(practiceSessionId, list, {
+        source: 'smart_practice_start',
+      });
+      const testParams = {
         mode: 'practice',
         practiceType: 'smart',
         questionIds,
-        questions: list,
         practiceSessionId,
         originMainTab: 'Practice',
+      };
+      logNavigationPayload('Test', testParams, {
+        includeDebug: true,
+        source: 'smart_practice_start',
       });
+      navigation.navigate('Test', testParams);
     } catch (e) {
       setStartError(getApiErrorMessage(e));
     } finally {

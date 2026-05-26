@@ -14,6 +14,8 @@
  * - Motion: default push for study/tool screens; short fade on Result only (see theme/motion.js).
  */
 
+import { logNavigationPayload } from '../utils/navigationPayloadStore';
+
 export const MAIN_TABS = {
   PRACTICE: 'Practice',
   HOME: 'Home',
@@ -72,6 +74,17 @@ export function resetStackToResult(navigation, { originMainTab, resultParams, co
   if (commitRef) commitRef.current = true;
 
   const tab = originMainTab || MAIN_TABS.HOME;
+  logNavigationPayload(
+    'Result',
+    {
+      ...(resultParams || {}),
+      returnMainTab: tab,
+    },
+    {
+      includeDebug: true,
+      source: 'reset_to_result',
+    }
+  );
   navigation.reset({
     index: 1,
     routes: [

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   Alert,
@@ -23,6 +24,7 @@ import { PremiumUpsellCard } from '../components/PremiumUpsellCard';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import {
   formatFileSize,
+  getCachedPostsSnapshot,
   getPdfNotes,
   getPosts,
   getPdfOpenUserMessage,
@@ -31,6 +33,8 @@ import {
 import logger from '../utils/logger';
 import {
   getSavedMaterials,
+  getSavedMaterialsSnapshot,
+  isSavedMaterialsSnapshotFresh,
   toggleSavedMaterial,
   PREMIUM_SAVE_MESSAGE,
 } from '../services/savedMaterialService';
@@ -39,6 +43,89 @@ import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
 import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
 import { isGlobalOpening } from '../utils/navigationGuard';
+import {
+  useDevItemMountCounter,
+  useDevMountTrace,
+  useDevRenderTrace,
+} from '../utils/renderPerfDevLog';
+
+const ITEM_SEPARATOR_STYLE = { height: 12 };
+
+function buildSavedPdfIdSet(snapshot) {
+  return new Set(
+    (snapshot?.savedPdfs || [])
+      .map((item) => String(item?.pdfId || '').trim())
+      .filter(Boolean)
+  );
+}
+
+function PdfSeparator() {
+  return <View style={ITEM_SEPARATOR_STYLE} />;
+}
+
+const PdfRow = memo(function PdfRow({
+  item,
+  isOpening,
+  anyOpening,
+  isSaved,
+  isSaving,
+  onOpen,
+  onToggleSave,
+}) {
+  const pdfId = String(item?._id || '');
+  const title = item?.title || item?.fileName || 'Untitled PDF';
+  const size = formatFileSize(item?.fileSize);
+
+  useDevRenderTrace(
+    'PdfListItem',
+    () => ({ pdfId, isOpening, anyOpening, isSaved, isSaving }),
+    { logEvery: 20, slowRenderMs: 10, logFirstRender: false }
+  );
+  useDevItemMountCounter('PdfListItem', pdfId, { logEvery: 20 });
+
+  return (
+    <View style={styles.pdfCard}>
+      <Pressable
+        onPress={() => onOpen(item)}
+        disabled={anyOpening}
+        style={({ pressed }) => [
+          styles.pdfMainArea,
+          pressCardStyle(pressed, anyOpening),
+          anyOpening && styles.btnDisabled,
+        ]}
+      >
+        <View style={styles.pdfIconWrap}>
+          <Text style={styles.pdfIcon}>PDF</Text>
+        </View>
+        <View style={styles.pdfTextBlock}>
+          <Text style={styles.pdfTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={styles.pdfMeta} numberOfLines={1}>
+            {size ? `${size} • ` : ''}Tap to open
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{isOpening ? '…' : '›'}</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => onToggleSave(item)}
+        hitSlop={8}
+        disabled={isSaving}
+        style={({ pressed }) => [
+          styles.saveBtn,
+          pressFeedbackStyle(pressed),
+          isSaving && styles.btnDisabled,
+        ]}
+      >
+        <Ionicons
+          name={isSaved ? 'bookmark' : 'bookmark-outline'}
+          size={18}
+          color={isSaved ? colors.primary : colors.muted}
+        />
+      </Pressable>
+    </View>
+  );
+});
 
 /**
  * Browse study PDFs scoped by Post.
@@ -60,12 +147,13 @@ export default function PdfListScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const initialPostId = route?.params?.postId || null;
+  const initialPostsCache = getCachedPostsSnapshot();
   const showPremiumUpsell = !userHasPremiumAccess(user);
 
-  const [posts, setPosts] = useState([]);
+  const [posts, setPosts] = useState(() => initialPostsCache?.posts ?? []);
   const [selectedPostId, setSelectedPostId] = useState(initialPostId);
 
-  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsLoading, setPostsLoading] = useState(() => !initialPostsCache);
   const [postsError, setPostsError] = useState(null);
 
   const [pdfs, setPdfs] = useState([]);
@@ -73,10 +161,35 @@ export default function PdfListScreen() {
   const [pdfsError, setPdfsError] = useState(null);
 
   const [openingId, setOpeningId] = useState(null);
-  const [savedPdfIds, setSavedPdfIds] = useState(new Set());
+  const [savedPdfIds, setSavedPdfIds] = useState(() =>
+    buildSavedPdfIdSet(getSavedMaterialsSnapshot())
+  );
   const [savingId, setSavingId] = useState(null);
   const postsLoadRef = useRef(null);
   const pdfsLoadRef = useRef(null);
+
+  useDevRenderTrace(
+    'PdfListScreen',
+    () => ({
+      pdfs: pdfs.length,
+      savedCount: savedPdfIds.size,
+      selectedPostId,
+      postsLoading,
+      pdfsLoading,
+      openingId,
+      savingId,
+    }),
+    { logEvery: 6, slowRenderMs: 18 }
+  );
+  useDevMountTrace(
+    'PdfListScreen',
+    () => ({
+      pdfs: pdfs.length,
+      selectedPostId,
+      openingId,
+    }),
+    { slowMountMs: 45 }
+  );
 
   // ---- Posts -------------------------------------------------------------
 
@@ -84,10 +197,14 @@ export default function PdfListScreen() {
     postsLoadRef.current?.abort();
     const ac = new AbortController();
     postsLoadRef.current = ac;
+    const cached = getCachedPostsSnapshot();
+    const hasCachedPosts = Array.isArray(cached?.posts);
     setPostsError(null);
-    setPostsLoading(true);
+    if (!hasCachedPosts) {
+      setPostsLoading(true);
+    }
     try {
-      const data = await getPosts({ force: true, signal: ac.signal });
+      const data = await getPosts({ signal: ac.signal });
       if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
@@ -100,6 +217,9 @@ export default function PdfListScreen() {
     } catch (e) {
       if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
+      if (!hasCachedPosts) {
+        setPosts([]);
+      }
     } finally {
       if (postsLoadRef.current === ac) {
         setPostsLoading(false);
@@ -169,18 +289,26 @@ export default function PdfListScreen() {
           setSavedPdfIds(new Set());
           return;
         }
+        const cached = getSavedMaterialsSnapshot();
+        if (cached) {
+          setSavedPdfIds(buildSavedPdfIdSet(cached));
+          if (isSavedMaterialsSnapshotFresh()) {
+            return;
+          }
+        }
         try {
-          const data = await getSavedMaterials({ signal: ac.signal });
+          const data = await getSavedMaterials({
+            force: true,
+            reason: 'pdf_focus',
+          });
           if (ac.signal.aborted) return;
-          const next = new Set(
-            (data?.savedPdfs || [])
-              .map((p) => String(p?.pdfId || '').trim())
-              .filter(Boolean)
-          );
+          const next = buildSavedPdfIdSet(data);
           setSavedPdfIds(next);
         } catch (e) {
           if (ac.signal.aborted || isRequestCancelled(e)) return;
-          setSavedPdfIds(new Set());
+          if (!cached) {
+            setSavedPdfIds(new Set());
+          }
         }
       };
       void loadSaved();
@@ -204,7 +332,7 @@ export default function PdfListScreen() {
    * iOS-only hint that gives the modal rounded top corners on iOS 13+;
    * it's ignored on Android.
    */
-  const handleOpenPdf = async (pdf) => {
+  const handleOpenPdf = useCallback(async (pdf) => {
     if (isGlobalOpening(openingId)) return;
     const id = pdf?._id;
     if (!id) {
@@ -238,9 +366,9 @@ export default function PdfListScreen() {
     } finally {
       setOpeningId(null);
     }
-  };
+  }, [openingId]);
 
-  const handleToggleSave = async (pdf) => {
+  const handleToggleSave = useCallback(async (pdf) => {
     const pdfId = String(pdf?._id || '').trim();
     if (!pdfId) return;
     if (!userHasPremiumAccess(user)) {
@@ -264,7 +392,7 @@ export default function PdfListScreen() {
     } finally {
       setSavingId(null);
     }
-  };
+  }, [navigation, user]);
 
   // ---- Render helpers ----------------------------------------------------
 
@@ -273,7 +401,7 @@ export default function PdfListScreen() {
     [posts]
   );
 
-  const renderPostChips = () => {
+  const renderPostChips = useCallback(() => {
     if (postsLoading) {
       return (
         <View style={styles.chipsFallback}>
@@ -324,9 +452,49 @@ export default function PdfListScreen() {
         })}
       </ScrollView>
     );
-  };
+  }, [postsLoading, postsError, loadPosts, activePosts, selectedPostId]);
 
-  const renderPdfBody = () => {
+  const renderPdf = useCallback(
+    ({ item }) => {
+      const anyOpening = isGlobalOpening(openingId);
+      const pdfId = String(item?._id || '');
+      return (
+        <PdfRow
+          item={item}
+          isOpening={anyOpening && String(openingId) === String(item?._id)}
+          anyOpening={anyOpening}
+          isSaved={savedPdfIds.has(pdfId)}
+          isSaving={savingId != null && String(savingId) === pdfId}
+          onOpen={handleOpenPdf}
+          onToggleSave={handleToggleSave}
+        />
+      );
+    },
+    [openingId, savedPdfIds, savingId, handleOpenPdf, handleToggleSave]
+  );
+
+  const keyExtractor = useCallback((item, idx) => String(item?._id ?? idx), []);
+
+  const listHeader = useMemo(
+    () => (
+      <>
+        {showPremiumUpsell ? (
+          <PremiumUpsellCard
+            title={PDF_UPSELL_TITLE}
+            subtitle={PDF_UPSELL_SUB}
+            icon="document-text-outline"
+            onPress={() => navigation.navigate('Premium', { from: 'pdf' })}
+          />
+        ) : null}
+        <Text style={styles.sectionTitle}>Post</Text>
+        {renderPostChips()}
+        <Text style={[styles.sectionTitle, styles.pdfSectionTitle]}>PDF Notes</Text>
+      </>
+    ),
+    [showPremiumUpsell, navigation, renderPostChips]
+  );
+
+  const listEmpty = useMemo(() => {
     if (!selectedPostId) {
       return (
         <View style={styles.card}>
@@ -348,95 +516,36 @@ export default function PdfListScreen() {
         </View>
       );
     }
-    if (pdfs.length === 0) {
-      return (
-        <View style={styles.card}>
-          <EmptyState compact {...EMPTY.PDF_NONE} />
-        </View>
-      );
-    }
     return (
-      <FlatList
-        data={pdfs}
-        keyExtractor={(item, idx) => String(item?._id ?? idx)}
-        renderItem={renderPdf}
-        scrollEnabled={false}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-      />
-    );
-  };
-
-  const renderPdf = ({ item }) => {
-    const title = item?.title || item?.fileName || 'Untitled PDF';
-    const size = formatFileSize(item?.fileSize);
-    const anyOpening = isGlobalOpening(openingId);
-    const isOpening = anyOpening && String(openingId) === String(item?._id);
-    const pdfId = String(item?._id || '');
-    const isSaved = savedPdfIds.has(pdfId);
-    const isSaving = savingId != null && String(savingId) === pdfId;
-    return (
-      <View style={styles.pdfCard}>
-        <Pressable
-          onPress={() => handleOpenPdf(item)}
-          disabled={anyOpening}
-          style={({ pressed }) => [
-            styles.pdfMainArea,
-            pressCardStyle(pressed, anyOpening),
-            anyOpening && styles.btnDisabled,
-          ]}
-        >
-          <View style={styles.pdfIconWrap}>
-            <Text style={styles.pdfIcon}>📄</Text>
-          </View>
-          <View style={styles.pdfTextBlock}>
-            <Text style={styles.pdfTitle} numberOfLines={2}>
-              {title}
-            </Text>
-            <Text style={styles.pdfMeta} numberOfLines={1}>
-              {size ? `${size} • ` : ''}Tap to open
-            </Text>
-          </View>
-          <Text style={styles.chevron}>{isOpening ? '…' : '›'}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => handleToggleSave(item)}
-          hitSlop={8}
-          disabled={isSaving}
-          style={({ pressed }) => [styles.saveBtn, pressFeedbackStyle(pressed), isSaving && styles.btnDisabled]}
-        >
-          <Ionicons
-            name={isSaved ? 'bookmark' : 'bookmark-outline'}
-            size={18}
-            color={isSaved ? colors.primary : colors.muted}
-          />
-        </Pressable>
+      <View style={styles.card}>
+        <EmptyState compact {...EMPTY.PDF_NONE} />
       </View>
     );
-  };
+  }, [selectedPostId, pdfsLoading, pdfsError, loadPdfs]);
+
+  const visiblePdfs = useMemo(
+    () => (selectedPostId && !pdfsLoading && !pdfsError ? pdfs : []),
+    [selectedPostId, pdfsLoading, pdfsError, pdfs]
+  );
 
   return (
-    <ScrollView
+    <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
+      data={visiblePdfs}
+      keyExtractor={keyExtractor}
+      renderItem={renderPdf}
+      ItemSeparatorComponent={PdfSeparator}
+      ListHeaderComponent={listHeader}
+      ListEmptyComponent={listEmpty}
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      updateCellsBatchingPeriod={50}
+      windowSize={7}
+      removeClippedSubviews={Platform.OS === 'android'}
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
-    >
-      {showPremiumUpsell ? (
-        <PremiumUpsellCard
-          title={PDF_UPSELL_TITLE}
-          subtitle={PDF_UPSELL_SUB}
-          icon="document-text-outline"
-          onPress={() => navigation.navigate('Premium', { from: 'pdf' })}
-        />
-      ) : null}
-      <Text style={styles.sectionTitle}>Post</Text>
-      {renderPostChips()}
-
-      <Text style={[styles.sectionTitle, styles.pdfSectionTitle]}>
-        PDF Notes
-      </Text>
-      {renderPdfBody()}
-    </ScrollView>
+    />
   );
 }
 
@@ -512,7 +621,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  pdfIcon: { fontSize: 22 },
+  pdfIcon: { fontSize: 11, fontWeight: '800', color: colors.primary, letterSpacing: 0.6 },
   pdfTextBlock: { flex: 1 },
   pdfTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   pdfMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },

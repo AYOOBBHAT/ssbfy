@@ -101,10 +101,10 @@ export default function PremiumScreen() {
 
   /** `GET /users/me` via refreshUser — matches backend premium (timed + lifetime). */
   const confirmPremiumFromBackend = useCallback(async () => {
-    let u = await refreshUser?.();
+    let u = await refreshUser?.({ force: true, source: 'premium_confirm_initial' });
     if (userHasPremiumAccess(u)) return true;
     await new Promise((r) => setTimeout(r, BACKEND_POLL_MS));
-    u = await refreshUser?.();
+    u = await refreshUser?.({ force: true, source: 'premium_confirm_retry' });
     return userHasPremiumAccess(u);
   }, [refreshUser]);
 

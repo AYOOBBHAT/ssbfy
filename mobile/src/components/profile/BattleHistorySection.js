@@ -1,80 +1,137 @@
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '../../theme/colors';
 import { pressCardStyle } from '../../utils/pressFeedback';
-import { formatActivityClock } from '../../utils/activityTimeFormat';
 import { useBattleHistory } from '../../hooks/useBattleHistory';
 import { battleHistoryDevLog } from '../../utils/battleHistoryDevLog';
 import { getSessionActivityVisual } from '../../utils/sessionActivityVisual';
+import { useDevMountTrace, useDevRenderTrace } from '../../utils/renderPerfDevLog';
+import {
+  canOpenBattleHistoryRow,
+  getBattleHistoryMeta,
+  getBattleHistoryScoreChip,
+  getBattleHistoryVisualKind,
+} from '../../utils/battleHistoryRowStability';
 
-function SummaryStat({ label, value, accent }) {
+const SummaryStat = memo(function SummaryStat({ label, value, accent }) {
   return (
     <View style={[styles.statCell, accent && styles.statCellAccent]}>
       <Text style={[styles.statValue, accent && styles.statValueAccent]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
+});
+
+const RecentOpponentChip = memo(function RecentOpponentChip({ displayName }) {
+  return (
+    <View style={styles.opponentChip}>
+      <Text style={styles.opponentChipText} numberOfLines={1}>
+        {displayName}
+      </Text>
+    </View>
+  );
+});
+
+function useDevBattleCardTrace({
+  battleId,
+  uxStatus,
+  reopenAction,
+  headline,
+  metaLabel,
+  statusLabel,
+  canOpen,
+}) {
+  const prevRef = useRef(null);
+  const renderCountRef = useRef(0);
+
+  useEffect(() => {
+    if (!__DEV__) return undefined;
+    battleHistoryDevLog('card_mount', { battleId, uxStatus });
+    return () => {
+      battleHistoryDevLog('card_unmount', { battleId });
+    };
+  }, [battleId]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    renderCountRef.current += 1;
+    const next = {
+      battleId,
+      uxStatus,
+      reopenAction,
+      headline,
+      metaLabel,
+      statusLabel,
+      canOpen,
+    };
+    const prev = prevRef.current;
+    if (prev) {
+      const changed = Object.keys(next).filter((key) => prev[key] !== next[key]);
+      if (changed.length > 0 && renderCountRef.current <= 5) {
+        battleHistoryDevLog('card_rerender', {
+          battleId,
+          renderCount: renderCountRef.current,
+          changed,
+        });
+      }
+    }
+    prevRef.current = next;
+  }, [battleId, canOpen, headline, metaLabel, reopenAction, statusLabel, uxStatus]);
 }
 
-function scoreChipForRow(row) {
-  if (row.uxStatus === 'completed') {
-    if (row.outcome === 'win') return 'Win';
-    if (row.outcome === 'loss') return 'Loss';
-    if (row.outcome === 'tie') return 'Tie';
-  }
-  if (row.uxStatus === 'awaiting_opponent') return 'Wait';
-  if (row.uxStatus === 'waiting') return 'Invite';
-  if (row.uxStatus === 'active') return 'Play';
-  if (row.uxStatus === 'expired') return 'End';
-  return '—';
-}
+const BattleCard = memo(function BattleCard({
+  battleId,
+  headline,
+  metaLabel,
+  statusLabel,
+  uxStatus,
+  reopenAction,
+  iconName,
+  iconBg,
+  iconColor,
+  chipBg,
+  chipText,
+  canOpen,
+  onPress,
+}) {
+  const handlePress = useCallback(() => {
+    onPress({ id: battleId, uxStatus, reopenAction });
+  }, [battleId, onPress, reopenAction, uxStatus]);
 
-function rowVisualKind(row) {
-  if (row.uxStatus === 'completed') {
-    if (row.outcome === 'win') return 'win';
-    if (row.outcome === 'loss') return 'loss';
-    return 'tie';
-  }
-  return 'pending';
-}
-
-function battleMeta(row) {
-  const parts = [];
-  if (row.topicLabel) parts.push(row.topicLabel);
-  if (row.scoreLine && row.uxStatus === 'completed') parts.push(row.scoreLine);
-  const clock = formatActivityClock(row.updatedAt || row.createdAt);
-  if (clock) parts.push(clock);
-  return parts.filter(Boolean).join(' · ');
-}
-
-function BattleCard({ row, onPress }) {
-  const visual = getSessionActivityVisual(rowVisualKind(row));
-  const canOpen = row.uxStatus !== 'expired' || row.reopenAction === 'lobby';
+  useDevBattleCardTrace({
+    battleId,
+    uxStatus,
+    reopenAction,
+    headline,
+    metaLabel,
+    statusLabel,
+    canOpen,
+  });
 
   return (
     <Pressable
-      onPress={() => onPress(row)}
+      onPress={handlePress}
       disabled={!canOpen}
       style={({ pressed }) => [styles.battleRowWrap, pressCardStyle(pressed)]}
     >
       <View style={styles.battleRowInner}>
-        <View style={[styles.battleIcon, { backgroundColor: visual.iconBg }]}>
-          <Ionicons name={visual.icon} size={18} color={visual.iconColor} />
+        <View style={[styles.battleIcon, { backgroundColor: iconBg }]}>
+          <Ionicons name={iconName} size={18} color={iconColor} />
         </View>
         <View style={styles.battleBody}>
           <Text style={styles.battleHeadline} numberOfLines={2}>
-            {row.headline}
+            {headline}
           </Text>
           <Text style={styles.battleMeta} numberOfLines={1}>
-            {battleMeta(row)}
+            {metaLabel}
           </Text>
         </View>
         <View style={styles.battleTrailing}>
-          <View style={[styles.outcomeChip, { backgroundColor: visual.chipBg }]}>
-            <Text style={[styles.outcomeChipText, { color: visual.chipText }]}>
-              {scoreChipForRow(row)}
+          <View style={[styles.outcomeChip, { backgroundColor: chipBg }]}>
+            <Text style={[styles.outcomeChipText, { color: chipText }]}>
+              {statusLabel}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -82,14 +139,38 @@ function BattleCard({ row, onPress }) {
       </View>
     </Pressable>
   );
-}
+});
 
 function BattleHistorySection({ rootNavigation, onCreateBattle }) {
   const { data, loading, error, reload } = useBattleHistory({ enabled: true });
+  const hasFocusedOnceRef = useRef(false);
+
+  useDevRenderTrace(
+    'BattleHistorySection',
+    () => ({
+      loading,
+      error: !!error,
+      pending: Array.isArray(data?.pendingBattles) ? data.pendingBattles.length : 0,
+      recent: Array.isArray(data?.recentBattles) ? data.recentBattles.length : 0,
+    }),
+    { logEvery: 6, slowRenderMs: 16 }
+  );
+  useDevMountTrace(
+    'BattleHistorySection',
+    () => ({
+      pending: Array.isArray(data?.pendingBattles) ? data.pendingBattles.length : 0,
+      recent: Array.isArray(data?.recentBattles) ? data.recentBattles.length : 0,
+    }),
+    { slowMountMs: 40 }
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void reload();
+      if (hasFocusedOnceRef.current) {
+        void reload({ source: 'profile_focus' });
+      } else {
+        hasFocusedOnceRef.current = true;
+      }
     }, [reload])
   );
 
@@ -137,6 +218,30 @@ function BattleHistorySection({ rootNavigation, onCreateBattle }) {
   const hasAny = pending.length > 0 || recent.length > 0;
   const totalBattles =
     (summary?.wins ?? 0) + (summary?.losses ?? 0) + (summary?.ties ?? 0);
+  const renderBattleRow = useCallback(
+    (row) => {
+      const visual = getSessionActivityVisual(getBattleHistoryVisualKind(row));
+      return (
+        <BattleCard
+          key={row.id}
+          battleId={row.id}
+          headline={row.headline || 'Battle'}
+          metaLabel={getBattleHistoryMeta(row)}
+          statusLabel={getBattleHistoryScoreChip(row)}
+          uxStatus={row.uxStatus}
+          reopenAction={row.reopenAction}
+          iconName={visual.icon}
+          iconBg={visual.iconBg}
+          iconColor={visual.iconColor}
+          chipBg={visual.chipBg}
+          chipText={visual.chipText}
+          canOpen={canOpenBattleHistoryRow(row)}
+          onPress={handleReopen}
+        />
+      );
+    },
+    [handleReopen]
+  );
 
   if (loading && !data) {
     return (
@@ -152,7 +257,7 @@ function BattleHistorySection({ rootNavigation, onCreateBattle }) {
       <View style={styles.block}>
         <Text style={styles.sectionTitle}>Battle history</Text>
         <Text style={styles.errText}>{error}</Text>
-        <Pressable onPress={() => void reload()} style={styles.retryBtn}>
+        <Pressable onPress={() => void reload({ force: true, source: 'retry' })} style={styles.retryBtn}>
           <Text style={styles.retryText}>Retry</Text>
         </Pressable>
       </View>
@@ -204,11 +309,10 @@ function BattleHistorySection({ rootNavigation, onCreateBattle }) {
           <Text style={styles.opponentsLabel}>Recent opponents</Text>
           <View style={styles.opponentChips}>
             {opponents.map((o) => (
-              <View key={o.userId} style={styles.opponentChip}>
-                <Text style={styles.opponentChipText} numberOfLines={1}>
-                  {o.displayName}
-                </Text>
-              </View>
+              <RecentOpponentChip
+                key={o.userId}
+                displayName={o.displayName}
+              />
             ))}
           </View>
         </View>
@@ -217,9 +321,7 @@ function BattleHistorySection({ rootNavigation, onCreateBattle }) {
       {pending.length > 0 ? (
         <>
           <Text style={styles.subheading}>Pending</Text>
-          {pending.map((row) => (
-            <BattleCard key={row.id} row={row} onPress={handleReopen} />
-          ))}
+          {pending.map(renderBattleRow)}
         </>
       ) : null}
 
@@ -228,9 +330,7 @@ function BattleHistorySection({ rootNavigation, onCreateBattle }) {
           <Text style={styles.subheading}>
             {pending.length > 0 ? 'Recent' : 'Completed & expired'}
           </Text>
-          {recent.map((row) => (
-            <BattleCard key={row.id} row={row} onPress={handleReopen} />
-          ))}
+          {recent.map(renderBattleRow)}
         </>
       ) : null}
 

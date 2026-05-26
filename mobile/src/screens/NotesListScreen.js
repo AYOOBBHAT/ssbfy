@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
+  Platform,
   Pressable,
   ScrollView,
   Alert,
@@ -20,12 +21,14 @@ import {
 } from '../constants/upgradeCopy';
 import { PremiumUpsellCard } from '../components/PremiumUpsellCard';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
-import { getPosts } from '../services/pdfService';
+import { getCachedPostsSnapshot, getPosts } from '../services/pdfService';
 import { getNotes, previewOf } from '../services/noteService';
 import { usePracticeTaxonomy } from '../hooks/usePracticeTaxonomy';
 import { formatTaxonomyLabel } from '../utils/formatTaxonomyLabel';
 import {
   getSavedMaterials,
+  getSavedMaterialsSnapshot,
+  isSavedMaterialsSnapshotFresh,
   toggleSavedMaterial,
   PREMIUM_SAVE_MESSAGE,
 } from '../services/savedMaterialService';
@@ -36,6 +39,75 @@ import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
 import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
 import { useNavigationActionLock } from '../hooks/useNavigationActionLock';
+import {
+  useDevItemMountCounter,
+  useDevMountTrace,
+  useDevRenderTrace,
+} from '../utils/renderPerfDevLog';
+
+const ITEM_SEPARATOR_STYLE = { height: 12 };
+
+function buildSavedNoteIdSet(snapshot) {
+  return new Set(
+    (snapshot?.savedNotes || [])
+      .map((item) => String(item?.noteId || '').trim())
+      .filter(Boolean)
+  );
+}
+
+function NoteSeparator() {
+  return <View style={ITEM_SEPARATOR_STYLE} />;
+}
+
+const NoteRow = memo(function NoteRow({
+  item,
+  isSaved,
+  isSaving,
+  onOpen,
+  onToggleSave,
+}) {
+  const noteId = String(item?._id || '');
+  const title = item?.title || 'Untitled note';
+  const preview = previewOf(item?.content, 100);
+
+  useDevRenderTrace(
+    'NotesListItem',
+    () => ({ noteId, isSaved, isSaving }),
+    { logEvery: 20, slowRenderMs: 10, logFirstRender: false }
+  );
+  useDevItemMountCounter('NotesListItem', noteId, { logEvery: 20 });
+
+  return (
+    <View style={styles.noteCard}>
+      <Pressable
+        onPress={() => onToggleSave(item)}
+        hitSlop={8}
+        disabled={isSaving}
+        style={({ pressed }) => [
+          styles.saveBtn,
+          pressFeedbackStyle(pressed),
+          isSaving && styles.btnDisabled,
+        ]}
+      >
+        <Ionicons
+          name={isSaved ? 'bookmark' : 'bookmark-outline'}
+          size={18}
+          color={isSaved ? colors.primary : colors.muted}
+        />
+      </Pressable>
+      <Pressable onPress={() => onOpen(item)} style={({ pressed }) => [pressCardStyle(pressed)]}>
+        <Text style={styles.noteTitle} numberOfLines={2}>
+          {title}
+        </Text>
+        {preview ? (
+          <Text style={styles.notePreview} numberOfLines={2}>
+            {preview}
+          </Text>
+        ) : null}
+      </Pressable>
+    </View>
+  );
+});
 
 /**
  * Browse structured (text) notes.
@@ -61,6 +133,7 @@ export default function NotesListScreen() {
   const route = useRoute();
   const { user } = useAuth();
   const initial = route?.params || {};
+  const initialPostsCache = getCachedPostsSnapshot();
   const showPremiumUpsell = !userHasPremiumAccess(user);
 
   // ---- Selection state ----
@@ -78,35 +151,69 @@ export default function NotesListScreen() {
     usePracticeTaxonomy(selectedSubjectId);
 
   // ---- Reference data (posts) ----
-  const [posts, setPosts] = useState([]);
+  const [posts, setPosts] = useState(() => initialPostsCache?.posts ?? []);
 
-  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsLoading, setPostsLoading] = useState(() => !initialPostsCache);
   const [postsError, setPostsError] = useState(null);
 
   // ---- Notes list ----
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState(null);
-  const [savedNoteIds, setSavedNoteIds] = useState(new Set());
+  const [savedNoteIds, setSavedNoteIds] = useState(() =>
+    buildSavedNoteIdSet(getSavedMaterialsSnapshot())
+  );
   const [savingId, setSavingId] = useState(null);
   const postsLoadRef = useRef(null);
   const notesLoadRef = useRef(null);
+
+  useDevRenderTrace(
+    'NotesListScreen',
+    () => ({
+      notes: notes.length,
+      savedCount: savedNoteIds.size,
+      selectedPostId,
+      selectedSubjectId,
+      selectedTopicId,
+      notesLoading,
+      postsLoading,
+      savingId,
+    }),
+    { logEvery: 6, slowRenderMs: 18 }
+  );
+  useDevMountTrace(
+    'NotesListScreen',
+    () => ({
+      notes: notes.length,
+      selectedPostId,
+      selectedSubjectId,
+      selectedTopicId,
+    }),
+    { slowMountMs: 45 }
+  );
 
   // ---- Load posts once -------------------------------------------------
   const loadPosts = useCallback(async () => {
     postsLoadRef.current?.abort();
     const ac = new AbortController();
     postsLoadRef.current = ac;
+    const cached = getCachedPostsSnapshot();
+    const hasCachedPosts = Array.isArray(cached?.posts);
     setPostsError(null);
-    setPostsLoading(true);
+    if (!hasCachedPosts) {
+      setPostsLoading(true);
+    }
     try {
-      const data = await getPosts({ force: true, signal: ac.signal });
+      const data = await getPosts({ signal: ac.signal });
       if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
     } catch (e) {
       if (isRequestCancelled(e) || postsLoadRef.current !== ac) return;
       setPostsError(getApiErrorMessage(e));
+      if (!hasCachedPosts) {
+        setPosts([]);
+      }
     } finally {
       if (postsLoadRef.current === ac) {
         setPostsLoading(false);
@@ -175,18 +282,26 @@ export default function NotesListScreen() {
           setSavedNoteIds(new Set());
           return;
         }
+        const cached = getSavedMaterialsSnapshot();
+        if (cached) {
+          setSavedNoteIds(buildSavedNoteIdSet(cached));
+          if (isSavedMaterialsSnapshotFresh()) {
+            return;
+          }
+        }
         try {
-          const data = await getSavedMaterials({ signal: ac.signal });
+          const data = await getSavedMaterials({
+            force: true,
+            reason: 'notes_focus',
+          });
           if (ac.signal.aborted) return;
-          const next = new Set(
-            (data?.savedNotes || [])
-              .map((n) => String(n?.noteId || '').trim())
-              .filter(Boolean)
-          );
+          const next = buildSavedNoteIdSet(data);
           setSavedNoteIds(next);
         } catch (e) {
           if (ac.signal.aborted || isRequestCancelled(e)) return;
-          setSavedNoteIds(new Set());
+          if (!cached) {
+            setSavedNoteIds(new Set());
+          }
         }
       };
       void loadSaved();
@@ -203,26 +318,26 @@ export default function NotesListScreen() {
     [posts]
   );
 
-  function pickPost(id) {
+  const pickPost = useCallback((id) => {
     const sid = String(id);
     setSelectedPostId((prev) => (String(prev) === sid ? '' : sid));
-  }
+  }, []);
 
-  function pickSubject(id) {
+  const pickSubject = useCallback((id) => {
     setSelectedSubjectId((prev) => (prev === id ? '' : id));
     setSelectedTopicId('');
-  }
+  }, []);
 
-  function pickTopic(id) {
+  const pickTopic = useCallback((id) => {
     setSelectedTopicId((prev) => (prev === id ? '' : id));
-  }
+  }, []);
 
-  const openNote = (note) => {
+  const openNote = useCallback((note) => {
     if (!note) return;
     runOnce(() => navigation.navigate('NoteDetail', { note }));
-  };
+  }, [navigation, runOnce]);
 
-  const handleToggleSave = async (note) => {
+  const handleToggleSave = useCallback(async (note) => {
     const noteId = String(note?._id || '').trim();
     if (!noteId) return;
     if (!userHasPremiumAccess(user)) {
@@ -246,163 +361,102 @@ export default function NotesListScreen() {
     } finally {
       setSavingId(null);
     }
-  };
+  }, [navigation, user]);
 
   // ---- Render helpers -------------------------------------------------
 
-  const renderChipRow = ({
-    label,
-    items,
-    selectedId,
-    onSelect,
-    loading,
-    emptyText,
-    getItemId,
-  }) => {
-    const resolveId = getItemId || ((it) => it._id);
-    if (loading) {
+  const renderChipRow = useCallback(
+    ({
+      label,
+      items,
+      selectedId,
+      onSelect,
+      loading,
+      emptyText,
+      getItemId,
+    }) => {
+      const resolveId = getItemId || ((it) => it._id);
+      if (loading) {
+        return (
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>{label}</Text>
+            <View style={styles.chipsFallback}>
+              <LoadingState compact />
+            </View>
+          </View>
+        );
+      }
+      if (!items || items.length === 0) {
+        return (
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>{label}</Text>
+            <View style={styles.chipsFallback}>
+              <EmptyState
+                compact
+                title={emptyText}
+                subtitle="Try another filter or check back later."
+                glyph="filter"
+              />
+            </View>
+          </View>
+        );
+      }
       return (
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>{label}</Text>
-          <View style={styles.chipsFallback}>
-            <LoadingState compact />
-          </View>
-        </View>
-      );
-    }
-    if (!items || items.length === 0) {
-      return (
-        <View style={styles.sectionBlock}>
-          <Text style={styles.sectionTitle}>{label}</Text>
-          <View style={styles.chipsFallback}>
-            <EmptyState
-              compact
-              title={emptyText}
-              subtitle="Try another filter or check back later."
-              glyph="filter"
-            />
-          </View>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.sectionBlock}>
-        <Text style={styles.sectionTitle}>{label}</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
-          {items.map((it) => {
-            const itemId = resolveId(it);
-            const active = String(itemId) === String(selectedId);
-            return (
-              <Pressable
-                key={String(itemId)}
-                onPress={() => onSelect(itemId)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  active && styles.chipActive,
-                  pressFeedbackStyle(pressed),
-                ]}
-              >
-                <Text
-                  style={[styles.chipText, active && styles.chipTextActive]}
-                  numberOfLines={1}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}
+          >
+            {items.map((it) => {
+              const itemId = resolveId(it);
+              const active = String(itemId) === String(selectedId);
+              return (
+                <Pressable
+                  key={String(itemId)}
+                  onPress={() => onSelect(itemId)}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    active && styles.chipActive,
+                    pressFeedbackStyle(pressed),
+                  ]}
                 >
-                  {formatTaxonomyLabel(it?.name || it?.slug)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
-    );
-  };
-
-  const renderNote = ({ item }) => {
-    const title = item?.title || 'Untitled note';
-    const preview = previewOf(item?.content, 100);
-    const noteId = String(item?._id || '');
-    const isSaved = savedNoteIds.has(noteId);
-    const isSaving = savingId != null && String(savingId) === noteId;
-    return (
-      <View style={styles.noteCard}>
-        <Pressable
-          onPress={() => handleToggleSave(item)}
-          hitSlop={8}
-          disabled={isSaving}
-          style={({ pressed }) => [styles.saveBtn, pressFeedbackStyle(pressed), isSaving && styles.btnDisabled]}
-        >
-          <Ionicons
-            name={isSaved ? 'bookmark' : 'bookmark-outline'}
-            size={18}
-            color={isSaved ? colors.primary : colors.muted}
-          />
-        </Pressable>
-        <Pressable onPress={() => openNote(item)} style={({ pressed }) => [pressCardStyle(pressed)]}>
-          <Text style={styles.noteTitle} numberOfLines={2}>
-            {title}
-          </Text>
-          {preview ? (
-            <Text style={styles.notePreview} numberOfLines={2}>
-              {preview}
-            </Text>
-          ) : null}
-        </Pressable>
-      </View>
-    );
-  };
-
-  const renderNotesBody = () => {
-    if (notesLoading) {
-      return (
-        <View style={styles.card}>
-          <LoadingState compact />
+                  <Text
+                    style={[styles.chipText, active && styles.chipTextActive]}
+                    numberOfLines={1}
+                  >
+                    {formatTaxonomyLabel(it?.name || it?.slug)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </View>
       );
-    }
-    if (notesError) {
-      return (
-        <View style={styles.card}>
-          <ErrorState message={notesError} context="notes" onRetry={loadNotes} compact />
-        </View>
-      );
-    }
-    if (notes.length === 0) {
-      return (
-        <View style={styles.card}>
-          <EmptyState
-            compact
-            {...EMPTY.NOTES_NONE}
-            subtitle={
-              selectedTopicId
-                ? 'Notes for this topic will appear when they are published.'
-                : selectedSubjectId
-                ? 'Notes for this subject will appear when they are published.'
-                : EMPTY.NOTES_NONE.subtitle
-            }
-          />
-        </View>
-      );
-    }
-    return (
-      <FlatList
-        data={notes}
-        keyExtractor={(item, idx) => String(item?._id ?? idx)}
-        renderItem={renderNote}
-        scrollEnabled={false}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        contentContainerStyle={styles.listContent}
-      />
-    );
-  };
+    },
+    []
+  );
 
-  // ---- Render ---------------------------------------------------------
+  const renderNote = useCallback(
+    ({ item }) => {
+      const noteId = String(item?._id || '');
+      return (
+        <NoteRow
+          item={item}
+          isSaved={savedNoteIds.has(noteId)}
+          isSaving={savingId != null && String(savingId) === noteId}
+          onOpen={openNote}
+          onToggleSave={handleToggleSave}
+        />
+      );
+    },
+    [savedNoteIds, savingId, openNote, handleToggleSave]
+  );
 
-  // Post row gets its own error/empty fallback since it's loaded via the
-  // shared (cached) getPosts helper.
-  const renderPostRow = () => {
+  const keyExtractor = useCallback((item, idx) => String(item?._id ?? idx), []);
+
+  const renderPostRow = useCallback(() => {
     if (postsLoading) {
       return (
         <View style={styles.sectionBlock}>
@@ -431,48 +485,113 @@ export default function NotesListScreen() {
       loading: false,
       emptyText: 'No posts available yet',
     });
-  };
+  }, [postsLoading, postsError, loadPosts, renderChipRow, activePosts, selectedPostId, pickPost]);
+
+  const listHeader = useMemo(
+    () => (
+      <>
+        {showPremiumUpsell ? (
+          <PremiumUpsellCard
+            title={NOTES_UPSELL_TITLE}
+            subtitle={NOTES_UPSELL_SUB}
+            icon="bookmark-outline"
+            onPress={() => navigation.navigate('Premium', { from: 'notes' })}
+          />
+        ) : null}
+        {renderPostRow()}
+        {renderChipRow({
+          label: 'Subject',
+          items: subjects,
+          selectedId: selectedSubjectId,
+          onSelect: pickSubject,
+          loading: subjectsLoading,
+          emptyText: 'No subjects available yet',
+        })}
+        {selectedSubjectId
+          ? renderChipRow({
+              label: 'Topic',
+              items: topics,
+              selectedId: selectedTopicId,
+              onSelect: pickTopic,
+              getItemId: (it) => resolveTopicId(it?._id) || String(it?._id ?? ''),
+              loading: topicsLoading,
+              emptyText: 'No topics for this subject yet',
+            })
+          : null}
+        <Text style={[styles.sectionTitle, styles.notesSectionTitle]}>Notes</Text>
+      </>
+    ),
+    [
+      showPremiumUpsell,
+      navigation,
+      renderPostRow,
+      renderChipRow,
+      subjects,
+      selectedSubjectId,
+      pickSubject,
+      subjectsLoading,
+      topics,
+      selectedTopicId,
+      pickTopic,
+      topicsLoading,
+    ]
+  );
+
+  const listEmpty = useMemo(() => {
+    if (notesLoading) {
+      return (
+        <View style={styles.card}>
+          <LoadingState compact />
+        </View>
+      );
+    }
+    if (notesError) {
+      return (
+        <View style={styles.card}>
+          <ErrorState message={notesError} context="notes" onRetry={loadNotes} compact />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.card}>
+        <EmptyState
+          compact
+          {...EMPTY.NOTES_NONE}
+          subtitle={
+            selectedTopicId
+              ? 'Notes for this topic will appear when they are published.'
+              : selectedSubjectId
+              ? 'Notes for this subject will appear when they are published.'
+              : EMPTY.NOTES_NONE.subtitle
+          }
+        />
+      </View>
+    );
+  }, [notesLoading, notesError, loadNotes, selectedTopicId, selectedSubjectId]);
+
+  const visibleNotes = useMemo(
+    () => (notesLoading || notesError ? [] : notes),
+    [notesLoading, notesError, notes]
+  );
 
   return (
-    <ScrollView
+    <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
+      data={visibleNotes}
+      keyExtractor={keyExtractor}
+      renderItem={renderNote}
+      ItemSeparatorComponent={NoteSeparator}
+      ListHeaderComponent={listHeader}
+      ListEmptyComponent={listEmpty}
+      initialNumToRender={8}
+      maxToRenderPerBatch={8}
+      updateCellsBatchingPeriod={50}
+      windowSize={7}
+      removeClippedSubviews={Platform.OS === 'android'}
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
-    >
-      {showPremiumUpsell ? (
-        <PremiumUpsellCard
-          title={NOTES_UPSELL_TITLE}
-          subtitle={NOTES_UPSELL_SUB}
-          icon="bookmark-outline"
-          onPress={() => navigation.navigate('Premium', { from: 'notes' })}
-        />
-      ) : null}
-      {renderPostRow()}
-
-      {renderChipRow({
-        label: 'Subject',
-        items: subjects,
-        selectedId: selectedSubjectId,
-        onSelect: pickSubject,
-        loading: subjectsLoading,
-        emptyText: 'No subjects available yet',
-      })}
-
-      {selectedSubjectId
-        ? renderChipRow({
-            label: 'Topic',
-            items: topics,
-            selectedId: selectedTopicId,
-            onSelect: pickTopic,
-            getItemId: (it) => resolveTopicId(it?._id) || String(it?._id ?? ''),
-            loading: topicsLoading,
-            emptyText: 'No topics for this subject yet',
-          })
-        : null}
-
-      <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Notes</Text>
-      {renderNotesBody()}
-    </ScrollView>
+    />
   );
 }
 
@@ -481,6 +600,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32 },
 
   sectionBlock: { marginBottom: 12 },
+  notesSectionTitle: { marginTop: 16 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',

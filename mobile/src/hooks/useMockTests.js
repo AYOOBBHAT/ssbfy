@@ -13,6 +13,10 @@ import {
   releaseLockAfter,
   tryAcquireLock,
 } from '../utils/navigationGuard';
+import {
+  buildMockAttemptNavSnapshot,
+  logNavigationPayload,
+} from '../utils/navigationPayloadStore';
 
 export function useMockTests() {
   const navigation = useNavigation();
@@ -70,12 +74,17 @@ export function useMockTests() {
         setMockStartError('Could not start this test. Please try again.');
         return;
       }
-      navigation.navigate('Test', {
+      const testParams = {
         testId,
-        attempt: data.attempt,
+        attempt: buildMockAttemptNavSnapshot(data.attempt),
         durationMinutes: item?.duration,
         originMainTab: 'Tests',
+      };
+      logNavigationPayload('Test', testParams, {
+        includeDebug: true,
+        source: 'mock_start',
       });
+      navigation.navigate('Test', testParams);
     } catch (e) {
       if (isRequestCancelled(e)) return;
       setMockStartError(
