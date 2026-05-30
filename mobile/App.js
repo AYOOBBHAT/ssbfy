@@ -19,7 +19,33 @@ import { splashTheme } from './src/theme/splash';
 import { markStartup } from './src/utils/startupTiming';
 
 markStartup('app_start');
+try {
+  SplashScreen.setOptions({ fade: false, duration: 0 });
+} catch {
+  // Best-effort only; startup should still continue if native options are unavailable.
+}
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+function waitForPaintFrames(frameCount = 2) {
+  return new Promise((resolve) => {
+    let remaining = frameCount;
+    const schedule =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (callback) => setTimeout(callback, 16);
+
+    const step = () => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        resolve();
+        return;
+      }
+      schedule(step);
+    };
+
+    schedule(step);
+  });
+}
 
 const navigationTheme = {
   ...DefaultTheme,
@@ -86,6 +112,7 @@ function AppBootstrapRoot() {
   const { initializing } = useAuth();
   const [navigationReady, setNavigationReady] = useState(false);
   const [rootLaidOut, setRootLaidOut] = useState(false);
+  const [appContentVisible, setAppContentVisible] = useState(false);
   const splashHiddenRef = useRef(false);
 
   useEffect(() => {
@@ -102,10 +129,17 @@ function AppBootstrapRoot() {
     if (splashHiddenRef.current) return;
     if (initializing || !navigationReady || !rootLaidOut) return;
     splashHiddenRef.current = true;
-    await SplashScreen.hideAsync();
-    markStartup('splash_hidden', {
-      routeName: navigationRef.getCurrentRoute()?.name ?? null,
-    });
+    const routeName = navigationRef.getCurrentRoute()?.name ?? null;
+    try {
+      await SplashScreen.hideAsync();
+      await waitForPaintFrames(2);
+      markStartup('splash_hidden', { routeName });
+    } catch {
+      markStartup('splash_hide_failed', { routeName });
+    } finally {
+      setAppContentVisible(true);
+      markStartup('first_screen_rendered', { routeName });
+    }
   }, [initializing, navigationReady, rootLaidOut, navigationRef]);
 
   useEffect(() => {
@@ -118,7 +152,7 @@ function AppBootstrapRoot() {
 
   const handleNavigationReady = useCallback(() => {
     setNavigationReady(true);
-    markStartup('first_screen_rendered', {
+    markStartup('navigation_ready', {
       routeName: navigationRef.getCurrentRoute()?.name ?? null,
     });
   }, [navigationRef]);
@@ -126,14 +160,19 @@ function AppBootstrapRoot() {
   return (
     <View onLayout={handleRootLayout} style={{ flex: 1, backgroundColor: splashTheme.background }}>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: splashTheme.background }}>
-        <NavigationContainer
-          ref={navigationRef}
-          theme={navigationTheme}
-          linking={linking}
-          onReady={handleNavigationReady}
+        <View
+          pointerEvents={appContentVisible ? 'auto' : 'none'}
+          style={[styles.appContent, !appContentVisible && styles.appContentHidden]}
         >
-          <AppNavigator />
-        </NavigationContainer>
+          <NavigationContainer
+            ref={navigationRef}
+            theme={navigationTheme}
+            linking={linking}
+            onReady={handleNavigationReady}
+          >
+            <AppNavigator />
+          </NavigationContainer>
+        </View>
         <StatusBar style="dark" backgroundColor={splashTheme.background} />
       </GestureHandlerRootView>
     </View>
@@ -149,3 +188,13 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = {
+  appContent: {
+    flex: 1,
+    backgroundColor: splashTheme.background,
+  },
+  appContentHidden: {
+    opacity: 0,
+  },
+};
