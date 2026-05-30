@@ -181,7 +181,7 @@ function AppBootstrapRoot() {
             <AppNavigator />
           </NavigationContainer>
         </View>
-        <StatusBar style="dark" backgroundColor={splashTheme.background} />
+        <StatusBar style="dark" />
       </GestureHandlerRootView>
     </View>
   );
