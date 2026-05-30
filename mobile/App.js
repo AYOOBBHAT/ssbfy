@@ -18,6 +18,7 @@ import { colors } from './src/theme/colors';
 import { splashTheme } from './src/theme/splash';
 import { markStartup } from './src/utils/startupTiming';
 
+markStartup('APP_START');
 markStartup('app_start');
 try {
   SplashScreen.setOptions({ fade: false, duration: 0 });
@@ -121,6 +122,7 @@ function AppBootstrapRoot() {
 
   useEffect(() => {
     if (!initializing) {
+      markStartup('AUTH_READY');
       markStartup('auth_restored');
     }
   }, [initializing]);
@@ -132,12 +134,14 @@ function AppBootstrapRoot() {
     const routeName = navigationRef.getCurrentRoute()?.name ?? null;
     try {
       await SplashScreen.hideAsync();
+      markStartup('SPLASH_HIDE', { routeName });
       await waitForPaintFrames(2);
       markStartup('splash_hidden', { routeName });
     } catch {
       markStartup('splash_hide_failed', { routeName });
     } finally {
       setAppContentVisible(true);
+      markStartup('APP_REVEAL', { routeName });
       markStartup('first_screen_rendered', { routeName });
     }
   }, [initializing, navigationReady, rootLaidOut, navigationRef]);
@@ -147,11 +151,15 @@ function AppBootstrapRoot() {
   }, [maybeHideSplash]);
 
   const handleRootLayout = useCallback(() => {
+    markStartup('LAYOUT_READY');
     setRootLaidOut(true);
   }, []);
 
   const handleNavigationReady = useCallback(() => {
     setNavigationReady(true);
+    markStartup('NAV_READY', {
+      routeName: navigationRef.getCurrentRoute()?.name ?? null,
+    });
     markStartup('navigation_ready', {
       routeName: navigationRef.getCurrentRoute()?.name ?? null,
     });

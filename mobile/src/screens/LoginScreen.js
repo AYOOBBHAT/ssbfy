@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import { AuthErrorBanner } from '../components/auth/AuthErrorBanner';
 import AuthScreenShell from '../components/auth/AuthScreenShell';
 import { colors } from '../theme/colors';
 import { authStyles } from '../theme/authUi';
+import { markStartup } from '../utils/startupTiming';
 
 export default function LoginScreen({ navigation }) {
   const { login, authSubmitting } = useAuth();
@@ -19,6 +20,10 @@ export default function LoginScreen({ navigation }) {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef(null);
+
+  useEffect(() => {
+    markStartup('FIRST_LOGIN_RENDER');
+  }, []);
 
   async function handleLogin() {
     if (authSubmitting) return;

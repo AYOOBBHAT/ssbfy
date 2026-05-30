@@ -63,6 +63,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const ac = new AbortController();
+    let bootstrapHadToken = false;
+    let bootstrapHadUser = false;
     (async () => {
       const clearInvalidBootstrapSession = async () => {
         await clearStoredSession();
@@ -117,10 +119,12 @@ export function AuthProvider({ children }) {
           return;
         }
 
+        bootstrapHadToken = true;
         setToken(t);
         setAuthToken(t);
 
         if (cachedUser && typeof cachedUser === 'object') {
+          bootstrapHadUser = true;
           setUser(cachedUser);
           markStartup('auth_cache_restored');
           void Promise.allSettled([
@@ -135,6 +139,10 @@ export function AuthProvider({ children }) {
       } catch {
         await AsyncStorage.removeItem(STORAGE_KEY);
       } finally {
+        markStartup('AUTH_READY', {
+          hadToken: bootstrapHadToken,
+          hadUser: bootstrapHadUser,
+        });
         setInitializing(false);
       }
     })();
