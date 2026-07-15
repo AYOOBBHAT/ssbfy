@@ -1,4 +1,5 @@
 import { authService } from '../services/authService.js';
+import { googleAuthService } from '../services/googleAuthService.js';
 import { passwordResetService } from '../services/passwordResetService.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendCreated, sendSuccess } from '../utils/response.js';
@@ -12,6 +13,11 @@ export const authController = {
   login: asyncHandler(async (req, res) => {
     const { user, token } = await authService.login(req.body);
     return sendSuccess(res, { user, token }, 'Logged in');
+  }),
+
+  googleLogin: asyncHandler(async (req, res) => {
+    const { user, token } = await googleAuthService.loginWithGoogle(req.body);
+    return sendSuccess(res, { user, token }, 'Logged in with Google');
   }),
 
   /**

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { User } from '../models/User.js';
 import { FREE_TEST_ATTEMPTS } from '../constants/access.js';
+import { ROLES } from '../constants/roles.js';
 
 export const userRepository = {
   async create(data) {
@@ -13,6 +14,74 @@ export const userRepository = {
       q.select('+password');
     }
     return q.exec();
+  },
+
+  async countByEmail(email) {
+    return User.countDocuments({ email: email.toLowerCase() }).exec();
+  },
+
+  async findByGoogleSub(sub) {
+    if (!sub) return null;
+    return User.findOne({ 'authProviders.google.sub': sub }).exec();
+  },
+
+  /**
+   * Link Google provider to an existing account without touching progress/subscription fields.
+   */
+  async linkGoogleProvider(userId, { sub, email }) {
+    const now = new Date();
+    return User.findOneAndUpdate(
+      { _id: userId },
+      {
+        $set: {
+          'authProviders.google.sub': sub,
+          'authProviders.google.email': email.toLowerCase(),
+          'authProviders.google.linkedAt': now,
+          emailVerified: true,
+        },
+      },
+      { new: true }
+    ).exec();
+  },
+
+  /**
+   * Update stored Google email when the provider reports a change (sub remains stable).
+   */
+  async updateGoogleProviderEmail(userId, { sub, email }) {
+    return User.findOneAndUpdate(
+      {
+        _id: userId,
+        'authProviders.google.sub': sub,
+      },
+      {
+        $set: {
+          'authProviders.google.email': email.toLowerCase(),
+          emailVerified: true,
+        },
+      },
+      { new: true }
+    ).exec();
+  },
+
+  /**
+   * Create a Google-only user. Does not reset or overwrite any legacy user data paths.
+   */
+  async createGoogleUser({ name, email, sub, picture = null }) {
+    const now = new Date();
+    return User.create({
+      name: name?.trim() || email.split('@')[0] || 'SSBFY User',
+      email: email.toLowerCase(),
+      role: ROLES.USER,
+      emailVerified: true,
+      avatarUrl: picture || null,
+      authProviders: {
+        google: {
+          sub,
+          email: email.toLowerCase(),
+          linkedAt: now,
+        },
+      },
+    });
   },
 
   /**

@@ -13,6 +13,14 @@ export const loginValidators = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+export const googleLoginValidators = [
+  body('idToken')
+    .isString()
+    .trim()
+    .isLength({ min: 100, max: 8192 })
+    .withMessage('Google ID token is required'),
+];
+
 /** STEP 1: send-otp — only an email is required. */
 export const sendOtpValidators = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),

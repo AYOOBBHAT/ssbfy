@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,12 @@ import AppButton from '../components/AppButton';
 import AuthField, { PasswordToggle } from '../components/AuthField';
 import AuthBrandHeader from '../components/auth/AuthBrandHeader';
 import { AuthErrorBanner } from '../components/auth/AuthErrorBanner';
+import { AuthOrDivider, GoogleSignInButton } from '../components/auth/GoogleSignInButton';
+import {
+  configureGoogleSignIn,
+  isGoogleSignInCancelledError,
+  isGoogleSignInConfigured,
+} from '../services/googleSignIn';
 import AuthScreenShell from '../components/auth/AuthScreenShell';
 import { colors } from '../theme/colors';
 import { authStyles } from '../theme/authUi';
@@ -14,7 +20,7 @@ import { authStyles } from '../theme/authUi';
 const MIN_PASSWORD_LENGTH = 8;
 
 export default function SignupScreen({ navigation }) {
-  const { signup, authSubmitting } = useAuth();
+  const { signup, loginWithGoogle, authSubmitting } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,6 +28,21 @@ export default function SignupScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
+
+  useEffect(() => {
+    configureGoogleSignIn();
+  }, []);
+
+  async function handleGoogleSignup() {
+    if (authSubmitting) return;
+    setError('');
+    try {
+      await loginWithGoogle();
+    } catch (e) {
+      if (isGoogleSignInCancelledError(e)) return;
+      setError(getApiErrorMessage(e));
+    }
+  }
 
   async function handleSignup() {
     if (authSubmitting) return;
@@ -141,6 +162,17 @@ export default function SignupScreen({ navigation }) {
           style={authStyles.primaryCta}
           textStyle={authStyles.primaryCtaText}
         />
+
+        {isGoogleSignInConfigured() ? (
+          <>
+            <AuthOrDivider />
+            <GoogleSignInButton
+              onPress={handleGoogleSignup}
+              loading={authSubmitting}
+              disabled={authSubmitting}
+            />
+          </>
+        ) : null}
 
         <Pressable
           onPress={() => navigation.navigate('Login')}

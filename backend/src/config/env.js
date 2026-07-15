@@ -83,6 +83,16 @@ export const env = {
   upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN || '',
 
   /**
+   * Google Sign-In — server verifies ID tokens; never trust client profile alone.
+   * Android client ID + Web client ID (OAuth 2.0) from Google Cloud Console.
+   */
+  googleAndroidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID || '',
+  googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID || '',
+  get googleAllowedAudiences() {
+    return [this.googleAndroidClientId, this.googleWebClientId].filter(Boolean);
+  },
+
+  /**
    * Comma-separated browser origins allowed to call the API in production.
    * No wildcards; empty in prod means no web origin matches (mobile still works — no Origin).
    * Example: https://ssbfy.vercel.app,https://admin.example.com

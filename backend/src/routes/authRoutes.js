@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authController } from '../controllers/authController.js';
 import { validateRequest } from '../middlewares/validate.js';
 import {
+  googleLoginValidators,
   loginValidators,
   resetPasswordValidators,
   sendOtpValidators,
@@ -25,6 +26,13 @@ router.post(
   loginValidators,
   validateRequest,
   authController.login
+);
+router.post(
+  '/google',
+  authLimiter,
+  googleLoginValidators,
+  validateRequest,
+  authController.googleLogin
 );
 
 /**

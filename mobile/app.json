@@ -35,7 +35,7 @@
           ]
         }
       ],
-      "versionCode": 19,
+      "versionCode": 20,
       "permissions": [],
       "adaptiveIcon": {
         "foregroundImage": "./assets/new_icon.png",
@@ -56,7 +56,8 @@
     "plugins": [
       "expo-web-browser",
       "./plugins/withAdiRegistration",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "@react-native-google-signin/google-signin"
     ]
   }
 }

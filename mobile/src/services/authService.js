@@ -28,6 +28,23 @@ export async function login({ email, password, onRetrying, signal } = {}) {
 }
 
 /**
+ * @returns {Promise<{ user: object, token: string }>}
+ */
+export async function loginWithGoogle({ idToken, onRetrying, signal } = {}) {
+  return withSingleAuthNetworkRetry(
+    async () => {
+      const { data } = await api.post(
+        '/auth/google',
+        { idToken },
+        signal ? { signal } : undefined
+      );
+      return data?.data ?? {};
+    },
+    { signal, onRetrying, label: 'google_login' }
+  );
+}
+
+/**
  * Forgot Password — STEP 1.
  * Request a 6-digit reset OTP (email delivered via Resend server-side).
  * The response shape is identical whether or not the account exists,

@@ -11,6 +11,10 @@ import {
 import * as authService from '../services/authService';
 import api, { setAuthToken, clearAuthToken, isRequestCancelled } from '../services/api';
 import { withSingleAuthNetworkRetry } from '../utils/authNetworkRetry.js';
+import {
+  isGoogleSignInCancelledError,
+  requestGoogleIdToken,
+} from '../services/googleSignIn.js';
 import { clearTopicsCache } from '../services/topicService';
 import { setMonitoringUser } from '../monitoring/sentry';
 import {
@@ -195,6 +199,58 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const loginWithGoogle = useCallback(async ({ onNetworkRetrying } = {}) => {
+    if (submittingRef.current) {
+      return;
+    }
+    loginAbortRef.current?.abort();
+    const ac = new AbortController();
+    loginAbortRef.current = ac;
+    submittingRef.current = true;
+    setAuthSubmitting(true);
+    try {
+      const idToken = await requestGoogleIdToken();
+      if (ac.signal.aborted) {
+        return;
+      }
+      const res =
+        (await authService.loginWithGoogle({
+          idToken,
+          signal: ac.signal,
+          onRetrying: () => {
+            if (!ac.signal.aborted) onNetworkRetrying?.('retrying');
+          },
+        })) || {};
+      if (ac.signal.aborted) {
+        return;
+      }
+      const u = res.user;
+      const t = res.token;
+      if (typeof t !== 'string' || !t || !u) {
+        throw new Error('Invalid Google login response from server.');
+      }
+      setUser(u);
+      refreshUserFetchedAtRef.current = Date.now();
+      setToken(t);
+      setAuthToken(t);
+      await removeLegacySensitiveAsyncKeys();
+      await persistSession(t, u);
+      return { user: u };
+    } catch (e) {
+      if (ac.signal.aborted || isRequestCancelled(e) || isGoogleSignInCancelledError(e)) {
+        return;
+      }
+      throw e;
+    } finally {
+      if (loginAbortRef.current === ac) {
+        loginAbortRef.current = null;
+      }
+      submittingRef.current = false;
+      setAuthSubmitting(false);
+      onNetworkRetrying?.('');
+    }
+  }, []);
+
   const signup = useCallback(async ({ name, email, password }) => {
     if (submittingRef.current) {
       return;
@@ -308,6 +364,7 @@ export function AuthProvider({ children }) {
       initializing,
       authSubmitting,
       login,
+      loginWithGoogle,
       signup,
       logout,
       refreshUser,
@@ -319,6 +376,7 @@ export function AuthProvider({ children }) {
       initializing,
       authSubmitting,
       login,
+      loginWithGoogle,
       signup,
       logout,
       refreshUser,

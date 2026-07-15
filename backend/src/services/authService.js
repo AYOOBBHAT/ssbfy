@@ -48,6 +48,14 @@ export const authService = {
       throw new AppError('Invalid email or password', HTTP_STATUS.UNAUTHORIZED);
     }
 
+    if (!user.password) {
+      logSecurityEvent('login_failed', { reason: 'no_password_provider' });
+      throw new AppError(
+        'This account uses Google sign-in. Continue with Google or reset your password to add one.',
+        HTTP_STATUS.UNAUTHORIZED
+      );
+    }
+
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) {
       logSecurityEvent('login_failed', { reason: 'credentials' });

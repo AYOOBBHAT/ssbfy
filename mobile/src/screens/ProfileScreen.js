@@ -28,6 +28,7 @@ import { getProfileAnalytics } from '../services/profileAnalyticsService';
 import { getAnalyticsOverview } from '../services/analyticsService';
 import ProfileActivitySections from '../components/profile/ProfileActivitySections';
 import BattleHistorySection from '../components/profile/BattleHistorySection';
+import SupportFeedbackSection from '../components/profile/SupportFeedbackSection';
 import {
   getAnalyticsOverviewCache,
   putAnalyticsOverviewCache,
@@ -293,6 +294,7 @@ export default function ProfileScreen({ navigation }) {
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>
       </View>
+      <SupportFeedbackSection />
       <Text style={styles.sectionLabel}>Legal</Text>
       <View style={styles.card}>
         <Pressable

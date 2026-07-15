@@ -48,7 +48,10 @@ const EXPECTED_BY_COLLECTION = {
     { name: 'idx_question_active_post', key: { isActive: 1, postIds: 1 } },
     { name: 'idx_question_admin_recent', key: { isActive: 1, createdAt: -1 } },
   ],
-  users: [{ name: 'idx_leaderboard_streak', key: { streakCount: -1, _id: 1 } }],
+  users: [
+    { name: 'idx_leaderboard_streak', key: { streakCount: -1, _id: 1 } },
+    { name: 'uniq_authProviders_google_sub', key: { 'authProviders.google.sub': 1 } },
+  ],
   tests: [
     { name: 'idx_test_type', key: { type: 1 } },
     { name: 'idx_test_status_created', key: { status: 1, createdAt: -1 } },

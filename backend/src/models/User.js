@@ -11,7 +11,26 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    password: { type: String, required: true, select: false },
+    /**
+     * Required for email/password accounts. Optional when `authProviders.google.sub`
+     * is set (Google-only users may add a password later via reset/change flows).
+     */
+    password: {
+      type: String,
+      required() {
+        return !this.authProviders?.google?.sub;
+      },
+      select: false,
+    },
+    emailVerified: { type: Boolean, default: false },
+    avatarUrl: { type: String, default: null, trim: true },
+    authProviders: {
+      google: {
+        sub: { type: String, default: null, trim: true },
+        email: { type: String, default: null, lowercase: true, trim: true },
+        linkedAt: { type: Date, default: null },
+      },
+    },
     role: {
       type: String,
       enum: [ROLES.ADMIN, ROLES.USER],
@@ -68,5 +87,13 @@ const userSchema = new mongoose.Schema(
  * Compound order matches the sort so Mongo avoids in-memory sorts as user count grows.
  */
 userSchema.index({ streakCount: -1, _id: 1 }, { name: 'idx_leaderboard_streak' });
+
+/**
+ * One Google identity per account. Sparse so legacy users without Google stay unindexed.
+ */
+userSchema.index(
+  { 'authProviders.google.sub': 1 },
+  { unique: true, sparse: true, name: 'uniq_authProviders_google_sub' }
+);
 
 export const User = mongoose.model('User', userSchema);

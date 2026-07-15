@@ -8,13 +8,19 @@ import AppButton from '../components/AppButton';
 import AuthField, { PasswordToggle } from '../components/AuthField';
 import AuthBrandHeader from '../components/auth/AuthBrandHeader';
 import { AuthErrorBanner } from '../components/auth/AuthErrorBanner';
+import { AuthOrDivider, GoogleSignInButton } from '../components/auth/GoogleSignInButton';
+import {
+  configureGoogleSignIn,
+  isGoogleSignInCancelledError,
+  isGoogleSignInConfigured,
+} from '../services/googleSignIn';
 import AuthScreenShell from '../components/auth/AuthScreenShell';
 import { colors } from '../theme/colors';
 import { authStyles } from '../theme/authUi';
 import { markStartup } from '../utils/startupTiming';
 
 export default function LoginScreen({ navigation }) {
-  const { login, authSubmitting } = useAuth();
+  const { login, loginWithGoogle, authSubmitting } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,7 +29,20 @@ export default function LoginScreen({ navigation }) {
 
   useEffect(() => {
     markStartup('FIRST_LOGIN_RENDER');
+    configureGoogleSignIn();
   }, []);
+
+  async function handleGoogleLogin() {
+    if (authSubmitting) return;
+    setError('');
+    try {
+      await loginWithGoogle();
+    } catch (e) {
+      if (isGoogleSignInCancelledError(e)) return;
+      const afterRetry = getAuthFlowMessageAfterRetry(e);
+      setError(afterRetry || getApiErrorMessage(e));
+    }
+  }
 
   async function handleLogin() {
     if (authSubmitting) return;
@@ -112,6 +131,17 @@ export default function LoginScreen({ navigation }) {
           style={authStyles.primaryCta}
           textStyle={authStyles.primaryCtaText}
         />
+
+        {isGoogleSignInConfigured() ? (
+          <>
+            <AuthOrDivider />
+            <GoogleSignInButton
+              onPress={handleGoogleLogin}
+              loading={authSubmitting}
+              disabled={authSubmitting}
+            />
+          </>
+        ) : null}
 
         <Pressable
           onPress={() => navigation.navigate('Signup')}
