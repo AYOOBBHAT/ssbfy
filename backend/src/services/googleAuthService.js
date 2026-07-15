@@ -46,13 +46,16 @@ function duplicateKeyField(err) {
 
 /**
  * After a duplicate-key race, re-resolve the account without creating a second user.
+ * Throws only for true conflicts (duplicate email rows, sub mismatch).
  */
-async function resolveAfterDuplicateRace({ sub, email }) {
-  const bySub = await userRepository.findByGoogleSub(sub);
-  if (bySub) return bySub;
+async function resolveAfterDuplicateRace({ sub, email, name, picture }) {
+  const resolveExisting = async () => {
+    const bySub = await userRepository.findByGoogleSub(sub);
+    if (bySub) return bySub;
 
-  const byEmail = await userRepository.findByEmail(email);
-  if (byEmail) {
+    const byEmail = await userRepository.findByEmail(email);
+    if (!byEmail) return null;
+
     if (byEmail.authProviders?.google?.sub && byEmail.authProviders.google.sub !== sub) {
       throw new AppError(
         'This email is linked to a different Google account. Sign in with email and password, or contact support.',
@@ -62,7 +65,10 @@ async function resolveAfterDuplicateRace({ sub, email }) {
       );
     }
     return linkGoogleSafely(byEmail._id, { sub, email });
-  }
+  };
+
+  const existing = await resolveExisting();
+  if (existing) return existing;
 
   const emailCount = await userRepository.countByEmail(email);
   if (emailCount > 1) {
@@ -82,12 +88,33 @@ async function resolveAfterDuplicateRace({ sub, email }) {
     );
   }
 
+  // No visible winner yet (read-after-write race) — re-read once, then retry create.
+  const reread = await resolveExisting();
+  if (reread) return reread;
+
+  try {
+    return await userRepository.createGoogleUser({ name, email, sub, picture });
+  } catch (err) {
+    if (!isDuplicateKeyError(err)) throw err;
+
+    const winner = await resolveExisting();
+    if (winner) return winner;
+
+    logger.warn(
+      {
+        event: 'google_signup_race_unresolved',
+        field: duplicateKeyField(err) || 'unknown',
+        emailDomain: email.split('@')[1] || 'unknown',
+      },
+      'Google signup duplicate race could not be resolved'
+    );
     throw new AppError(
       'Google sign-in could not be completed. Please try again.',
       HTTP_STATUS.CONFLICT,
       null,
       { code: 'GOOGLE_ACCOUNT_CONFLICT' }
     );
+  }
 }
 
 async function linkGoogleSafely(userId, { sub, email }) {
@@ -204,7 +231,7 @@ export const googleAuthService = {
         'Concurrent Google signup — re-resolving account'
       );
 
-      user = await resolveAfterDuplicateRace({ sub, email });
+      user = await resolveAfterDuplicateRace({ sub, email, name, picture });
       return issueAuthResponse(user);
     }
   },
