@@ -19,9 +19,12 @@ import {
 import { submitTest, saveTestProgress, getQuestionsByIds } from '../services/testService';
 import { completeDailyPractice } from '../services/dailyPracticeService';
 import { pickUserAnswersForQuestions, revealPractice } from '../services/practiceService';
-import { filterValidMongoIds } from '../utils/mongoId.js';
+import { filterValidMongoIds, resolveMongoId } from '../utils/mongoId.js';
 import { buildResultParamsFromReveal } from '../utils/resultReviewPayload';
 import { putLearningSessionCache } from '../utils/learningSessionCache';
+import { incrementStandardMockCompletion } from '../services/ads/mockTestAdCounter';
+import { userHasPremiumAccess } from '../utils/premiumAccess';
+import { useAuth } from '../context/AuthContext';
 import {
   buildRevealReceiptKey,
   getRevealReceipt,
@@ -138,6 +141,7 @@ function userAnswersRecordFromAttempt(att, questionIdsList) {
 export default function TestScreen() {
   const route = useRoute();
   const navigation = useNavigation();
+  const { user } = useAuth();
   const params = route.params || {};
   const { testId, attempt, durationMinutes } = params;
   const isRetry = params.mode === 'retry';
@@ -806,6 +810,14 @@ export default function TestScreen() {
         return !(Array.isArray(v) && v.length > 0);
       }).length;
 
+      const attemptId =
+        resolveMongoId(payload.attempt?._id ?? payload.attemptId, 'attemptId') || undefined;
+      const mockAdCompletionKey =
+        attemptId ||
+        (testId
+          ? `mock:${String(testId)}:${payload.score ?? 0}:${payload.accuracy ?? 0}:${payload.timeTaken ?? 0}`
+          : undefined);
+
       const committed = resetStackToResult(navigation, {
         originMainTab: MAIN_TABS.TESTS,
         resultParams: {
@@ -825,7 +837,8 @@ export default function TestScreen() {
             ? payload.correctAnswers
             : [],
           recoveredSubmit: !!navOptions.recoveredSubmit,
-          attemptId: undefined,
+          attemptId,
+          mockAdCompletionKey,
           learningSessionId: undefined,
         },
         commitRef: navigationCommittedRef,
@@ -908,6 +921,17 @@ export default function TestScreen() {
           return;
         }
         submissionCompletedRef.current = true;
+        // Standard mock only (this path is not used for practice/daily/retry/battle).
+        if (!userHasPremiumAccess(user)) {
+          try {
+            const attemptKey =
+              resolveMongoId(data?.attempt?._id ?? data?.attemptId, 'attemptId') ||
+              `mock:${String(testId)}:${data?.score ?? 0}:${data?.accuracy ?? 0}:${data?.timeTaken ?? 0}`;
+            await incrementStandardMockCompletion(attemptKey);
+          } catch (_) {
+            /* ads counter must never block result navigation */
+          }
+        }
         try {
           await clearDraft(testId);
           await clearOpenAttempt(testId);
@@ -952,6 +976,19 @@ export default function TestScreen() {
             ) {
               return;
             }
+            if (!userHasPremiumAccess(user)) {
+              try {
+                const attemptKey =
+                  resolveMongoId(
+                    recovery?.attempt?._id ?? recovery?.attemptId,
+                    'attemptId'
+                  ) ||
+                  `mock:${String(testId)}:${recovery?.score ?? 0}:${recovery?.accuracy ?? 0}:${recovery?.timeTaken ?? 0}`;
+                await incrementStandardMockCompletion(attemptKey);
+              } catch (_) {
+                /* ads counter must never block result navigation */
+              }
+            }
             navigateToResult(
               recovery,
               {
@@ -987,7 +1024,7 @@ export default function TestScreen() {
         }
       }
     },
-    [testId, questionIds, questions, answers, navigateToResult, transitionRefs]
+    [testId, questionIds, questions, answers, navigateToResult, transitionRefs, user]
   );
 
   useEffect(() => {

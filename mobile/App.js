@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { battleDeepLinkDevLog, parseBattleInviteFromUrl } from './src/utils/battleDeepLinkDevLog';
+import { AdsReadyProvider } from './src/services/ads/AdsReadyProvider';
 import { colors } from './src/theme/colors';
 import { splashTheme } from './src/theme/splash';
 import { markStartup } from './src/utils/startupTiming';
@@ -191,7 +192,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <AppBootstrapRoot />
+        <AdsReadyProvider>
+          <AppBootstrapRoot />
+        </AdsReadyProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

@@ -44,6 +44,7 @@ import {
   useDevMountTrace,
   useDevRenderTrace,
 } from '../utils/renderPerfDevLog';
+import AppBannerAd from '../components/ads/AppBannerAd';
 
 const ITEM_SEPARATOR_STYLE = { height: 12 };
 
@@ -584,6 +585,7 @@ export default function NotesListScreen() {
       ItemSeparatorComponent={NoteSeparator}
       ListHeaderComponent={listHeader}
       ListEmptyComponent={listEmpty}
+      ListFooterComponent={<AppBannerAd placement="notes" />}
       initialNumToRender={8}
       maxToRenderPerBatch={8}
       updateCellsBatchingPeriod={50}

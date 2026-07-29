@@ -36,6 +36,7 @@ import {
   logNavigationPayload,
   storeSessionQuestionSnapshot,
 } from '../utils/navigationPayloadStore';
+import AppBannerAd from '../components/ads/AppBannerAd';
 
 function greetingForHour() {
   const h = new Date().getHours();
@@ -283,6 +284,7 @@ export default function HomeScreen() {
       <Text style={styles.footerBrand}>
         {brand.name} · {brand.tagline}
       </Text>
+      <AppBannerAd placement="home" />
     </ScrollView>
   );
 }

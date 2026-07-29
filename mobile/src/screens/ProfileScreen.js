@@ -41,6 +41,7 @@ import { isRequestCancelled } from '../services/api';
 import { focusRefetchDevLog } from '../utils/focusRefetchDevLog';
 import { getCacheAgeMs, isCacheFresh, isCacheStale } from '../utils/requestFreshness';
 import { useDevRenderTrace } from '../utils/renderPerfDevLog';
+import AppBannerAd from '../components/ads/AppBannerAd';
 
 const PROFILE_ANALYTICS_STALE_AFTER_MS = 45 * 1000;
 const PROFILE_OVERVIEW_STALE_AFTER_MS = 60 * 1000;
@@ -332,6 +333,7 @@ export default function ProfileScreen({ navigation }) {
         <Ionicons name="log-out-outline" size={22} color={colors.danger} />
         <Text style={styles.logoutText}>Log out</Text>
       </Pressable>
+      <AppBannerAd placement="profile" />
     </ScrollView>
   );
 }

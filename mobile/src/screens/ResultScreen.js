@@ -107,6 +107,7 @@ import {
   HYDRATION_OUTCOME,
   resolveHistoricalHydrationErrorMessage,
 } from '../utils/resultHydrationTelemetry';
+import { useMockTestInterstitial } from '../hooks/useMockTestInterstitial';
 
 /*
  * Manual QA — Result screen (mobile):
@@ -958,6 +959,8 @@ export default function ResultScreen() {
     testTitle: _testTitle = null,
     returnMainTab = null,
     practiceRevealed = false,
+    mockAdCompletionKey = null,
+    attemptId: liveAttemptId = null,
   } = reviewParams;
 
   const isRetry = !!reviewParams.retry;
@@ -973,6 +976,22 @@ export default function ResultScreen() {
     deferredHydrationState.key === resultIdentityKey && deferredHydrationState.belowFoldReady;
   const deepDeferredReady =
     deferredHydrationState.key === resultIdentityKey && deferredHydrationState.deepReady;
+
+  const isMock = !!testId && !isRetry;
+  const interstitialAttemptKey =
+    !isHistoricalAttempt && isMock
+      ? String(
+          mockAdCompletionKey ||
+            liveAttemptId ||
+            historicalAttemptId ||
+            `live:${testId}:${score}:${accuracy}:${timeTaken}`
+        )
+      : null;
+
+  useMockTestInterstitial({
+    enabled: isMock && !isHistoricalAttempt && !isRetry,
+    attemptKey: interstitialAttemptKey,
+  });
 
   const navigateBackFromResult = useCallback(() => {
     const { route: mainRoute } = resolveResultBackTarget(params);
@@ -1046,7 +1065,6 @@ export default function ResultScreen() {
     resultIdentityKey,
   ]);
 
-  const isMock = !!testId && !isRetry;
   const isPracticeSession = !isMock;
 
   const [attemptsLoading, setAttemptsLoading] = useState(false);

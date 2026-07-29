@@ -26,7 +26,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_ADMOB_USE_PRODUCTION": "1"
       },
       "android": {
         "buildType": "app-bundle"

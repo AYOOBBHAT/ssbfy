@@ -35,7 +35,7 @@
           ]
         }
       ],
-      "versionCode": 20,
+      "versionCode": 21,
       "permissions": [],
       "adaptiveIcon": {
         "foregroundImage": "./assets/new_icon.png",
@@ -57,7 +57,14 @@
       "expo-web-browser",
       "./plugins/withAdiRegistration",
       "@sentry/react-native",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7420252276948628~4551564612",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
     ]
   }
 }
