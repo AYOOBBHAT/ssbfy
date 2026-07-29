@@ -38,11 +38,17 @@ import {
   toggleSavedMaterial,
   PREMIUM_SAVE_MESSAGE,
 } from '../services/savedMaterialService';
+import { showBeforePdf } from '../services/ads/interstitialOrchestrator';
+import {
+  isGlobalOpening,
+  tryAcquireLock,
+  releaseLockAfter,
+  PDF_OPEN_LOCK_MS,
+} from '../utils/navigationGuard';
 import { LoadingState, EmptyState, ErrorState } from '../components/StateView';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
 import { pressCardStyle, pressFeedbackStyle } from '../utils/pressFeedback';
-import { isGlobalOpening } from '../utils/navigationGuard';
 import {
   useDevItemMountCounter,
   useDevMountTrace,
@@ -167,6 +173,7 @@ export default function PdfListScreen() {
   const [savingId, setSavingId] = useState(null);
   const postsLoadRef = useRef(null);
   const pdfsLoadRef = useRef(null);
+  const pdfOpenLockRef = useRef(false);
 
   useDevRenderTrace(
     'PdfListScreen',
@@ -333,9 +340,10 @@ export default function PdfListScreen() {
    * it's ignored on Android.
    */
   const handleOpenPdf = useCallback(async (pdf) => {
-    if (isGlobalOpening(openingId)) return;
+    if (isGlobalOpening(openingId) || !tryAcquireLock(pdfOpenLockRef)) return;
     const id = pdf?._id;
     if (!id) {
+      releaseLockAfter(pdfOpenLockRef, 0);
       Alert.alert('Cannot open', 'This PDF has no valid link.');
       return;
     }
@@ -353,6 +361,11 @@ export default function PdfListScreen() {
     }
     setOpeningId(id);
     try {
+      try {
+        await showBeforePdf({ user });
+      } catch (_) {
+        /* ads must never block PDF open */
+      }
       await openPdfInAppBrowser(pdf, browserOpts, {
         pdfId: String(id || ''),
         onRefreshed: (signedUrl) => {
@@ -365,8 +378,9 @@ export default function PdfListScreen() {
       Alert.alert('Could not open PDF', getPdfOpenUserMessage(err));
     } finally {
       setOpeningId(null);
+      releaseLockAfter(pdfOpenLockRef, PDF_OPEN_LOCK_MS);
     }
-  }, [openingId]);
+  }, [openingId, user]);
 
   const handleToggleSave = useCallback(async (pdf) => {
     const pdfId = String(pdf?._id || '').trim();

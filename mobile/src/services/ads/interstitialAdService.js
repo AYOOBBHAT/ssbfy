@@ -1,10 +1,9 @@
 /**
- * Mock-test interstitial manager.
+ * Shared interstitial load/show primitives used by interstitialOrchestrator.
  *
  * - Preloads after SDK init / close / failed load (bounded retry)
- * - Never blocks navigation
+ * - Never throws to callers
  * - Respects premium at load and immediately before show
- * - Session cap to prevent spam
  * - Single-flight load/show
  */
 
@@ -15,9 +14,13 @@ import { getGoogleMobileAdsModule } from './adsNative';
 import { canRequestAdsNow, initializeMobileAds, isMobileAdsInitialized } from './mobileAdsInit';
 import { getAdsRequestOptions } from './adsConsentGate';
 
-const MAX_SESSION_SHOWS = 2;
+/** Soft per-session ceiling; primary rate limit is the orchestrator cooldown. */
+const MAX_SESSION_SHOWS = 24;
 const LOAD_RETRY_DELAY_MS = 12_000;
 const MAX_LOAD_RETRIES = 3;
+const DEFAULT_READY_TIMEOUT_MS = 500;
+/** If CLOSED never arrives after a successful show, unblock callers. */
+const DEFAULT_CLOSE_WATCHDOG_MS = 15_000;
 
 let interstitial = null;
 let unsubscribers = [];
@@ -28,6 +31,8 @@ let loadRetries = 0;
 let retryTimer = null;
 let sessionShows = 0;
 let premiumUserRef = null;
+/** @type {((result: string) => void) | null} */
+let pendingCloseResolve = null;
 
 function clearListeners() {
   for (const unsub of unsubscribers) {
@@ -54,6 +59,11 @@ function discardLoadedAd() {
   loaded = false;
   loading = false;
   showing = false;
+  if (pendingCloseResolve) {
+    const resolve = pendingCloseResolve;
+    pendingCloseResolve = null;
+    resolve('discarded');
+  }
 }
 
 function scheduleRetry() {
@@ -80,6 +90,11 @@ function attachListeners(ad, AdEventType) {
     ad.addAdEventListener(AdEventType.CLOSED, () => {
       showing = false;
       loaded = false;
+      if (pendingCloseResolve) {
+        const resolve = pendingCloseResolve;
+        pendingCloseResolve = null;
+        resolve('closed');
+      }
       if (__DEV__) logger.debug('[ads] interstitial closed — preloading next');
       void preloadMockTestInterstitial({ force: true });
     })
@@ -89,6 +104,11 @@ function attachListeners(ad, AdEventType) {
       loading = false;
       loaded = false;
       showing = false;
+      if (pendingCloseResolve) {
+        const resolve = pendingCloseResolve;
+        pendingCloseResolve = null;
+        resolve('error');
+      }
       if (__DEV__) {
         logger.warn('[ads] interstitial error', {
           code: err?.code ?? null,
@@ -98,6 +118,10 @@ function attachListeners(ad, AdEventType) {
       scheduleRetry();
     })
   );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -155,7 +179,7 @@ export async function preloadMockTestInterstitial(opts = {}) {
 }
 
 /**
- * Attempt to show a loaded interstitial. Never throws; never blocks caller.
+ * Attempt to show a loaded interstitial. Never throws.
  * @param {{ user?: object | null }} [opts]
  * @returns {Promise<'shown' | 'skipped_not_loaded' | 'skipped_premium' | 'skipped_cap' | 'skipped_busy' | 'failed'>}
  */
@@ -191,6 +215,100 @@ export async function showMockTestInterstitialIfReady(opts = {}) {
     void preloadMockTestInterstitial({ force: true, user });
     return 'failed';
   }
+}
+
+/**
+ * Wait briefly for a loaded ad, show it, then resolve when closed (or fail-safe).
+ * Never throws. Ready wait is capped so navigation is not blocked.
+ * After a successful open, a close watchdog guarantees the Promise settles once.
+ *
+ * @param {{
+ *   user?: object | null,
+ *   readyTimeoutMs?: number,
+ *   closeWatchdogMs?: number,
+ *   onOpened?: () => void,
+ * }} [opts]
+ * @returns {Promise<'shown' | 'skipped_not_loaded' | 'skipped_premium' | 'skipped_cap' | 'skipped_busy' | 'failed'>}
+ */
+export async function showInterstitialAwaitingClose(opts = {}) {
+  const user = opts.user ?? premiumUserRef;
+  const readyTimeoutMs =
+    typeof opts.readyTimeoutMs === 'number' ? opts.readyTimeoutMs : DEFAULT_READY_TIMEOUT_MS;
+  const closeWatchdogMs =
+    typeof opts.closeWatchdogMs === 'number' ? opts.closeWatchdogMs : DEFAULT_CLOSE_WATCHDOG_MS;
+  const onOpened = typeof opts.onOpened === 'function' ? opts.onOpened : null;
+
+  premiumUserRef = user;
+
+  if (userHasPremiumAccess(user)) {
+    discardLoadedAd();
+    return 'skipped_premium';
+  }
+
+  if (!loaded && !loading) {
+    void preloadMockTestInterstitial({ user });
+  }
+
+  const deadline = Date.now() + Math.max(0, readyTimeoutMs);
+  while (!isMockTestInterstitialLoaded() && Date.now() < deadline) {
+    await sleep(40);
+  }
+
+  if (!isMockTestInterstitialLoaded()) {
+    return 'skipped_not_loaded';
+  }
+
+  if (showing) return 'skipped_busy';
+  if (sessionShows >= MAX_SESSION_SHOWS) return 'skipped_cap';
+
+  let settled = false;
+  let watchdogTimer = null;
+
+  const closePromise = new Promise((resolve) => {
+    const finishOnce = (reason) => {
+      if (settled) return;
+      settled = true;
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+      pendingCloseResolve = null;
+      resolve(reason);
+    };
+
+    pendingCloseResolve = (reason) => finishOnce(reason || 'closed');
+    watchdogTimer = setTimeout(() => {
+      showing = false;
+      if (__DEV__) {
+        logger.warn('[ads] interstitial close watchdog fired', {
+          ms: closeWatchdogMs,
+        });
+      }
+      finishOnce('timeout');
+    }, Math.max(1_000, closeWatchdogMs));
+  });
+
+  const showResult = await showMockTestInterstitialIfReady({ user });
+  if (showResult !== 'shown') {
+    if (!settled) {
+      settled = true;
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+      pendingCloseResolve = null;
+    }
+    return showResult;
+  }
+
+  try {
+    onOpened?.();
+  } catch (_) {
+    /* ignore analytics/callback errors */
+  }
+
+  await closePromise;
+  return 'shown';
 }
 
 export function onPremiumStatusChanged(user) {

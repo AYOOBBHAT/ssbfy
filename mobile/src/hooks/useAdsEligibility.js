@@ -3,11 +3,6 @@
  * Reuses `userHasPremiumAccess` — no parallel premium logic.
  */
 
-/**
- * Single source of truth for whether ads may be requested/rendered.
- * Reuses `userHasPremiumAccess` — no parallel premium logic.
- */
-
 import { useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { userHasPremiumAccess } from '../utils/premiumAccess';

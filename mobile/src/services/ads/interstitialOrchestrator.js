@@ -1,0 +1,159 @@
+/**
+ * Central interstitial orchestrator — the only place that decides/shows interstitials.
+ *
+ * Placements:
+ * - before mock start / after mock finish
+ * - before daily practice / after daily practice
+ * - before PDF open
+ *
+ * Fail-safe: never throws; if ad unavailable, callers continue immediately.
+ * Cooldown: minimum 45s between successful shows.
+ *
+ * Project convention is JS (+ JSDoc). File is .js (Expo has no TS check pipeline).
+ */
+
+import { userHasPremiumAccess } from '../../utils/premiumAccess';
+import logger from '../../utils/logger';
+import { monitoringBreadcrumb } from '../../monitoring/sentry';
+import {
+  isMockTestInterstitialLoaded,
+  preloadMockTestInterstitial,
+  showInterstitialAwaitingClose,
+} from './interstitialAdService';
+
+export const INTERSTITIAL_COOLDOWN_MS = 45_000;
+export const INTERSTITIAL_READY_TIMEOUT_MS = 500;
+export const INTERSTITIAL_CLOSE_WATCHDOG_MS = 15_000;
+
+/** @typedef {'before_mock_start' | 'after_mock_finish' | 'before_daily_practice' | 'after_daily_practice' | 'before_pdf'} InterstitialPlacement */
+
+let lastShownAtMs = 0;
+let inFlight = false;
+
+/**
+ * @param {string} event
+ * @param {Record<string, unknown>} [data]
+ */
+function track(event, data = {}) {
+  try {
+    monitoringBreadcrumb('ads_interstitial', event, data);
+  } catch {
+    /* ignore */
+  }
+  if (__DEV__) {
+    logger.debug(`[ads:orchestrator] ${event}`, data);
+  }
+}
+
+function cooldownRemainingMs() {
+  if (!lastShownAtMs) return 0;
+  const elapsed = Date.now() - lastShownAtMs;
+  return elapsed >= INTERSTITIAL_COOLDOWN_MS ? 0 : INTERSTITIAL_COOLDOWN_MS - elapsed;
+}
+
+/**
+ * @param {InterstitialPlacement} placement
+ * @param {{ user?: object | null }} [opts]
+ * @returns {Promise<'shown' | 'skipped_premium' | 'skipped_cooldown' | 'skipped_not_loaded' | 'skipped_busy' | 'failed'>}
+ */
+async function runPlacement(placement, opts = {}) {
+  const user = opts.user ?? null;
+
+  track(placement, {});
+
+  if (userHasPremiumAccess(user)) {
+    track('ad_skipped_premium', { placement });
+    return 'skipped_premium';
+  }
+
+  const remaining = cooldownRemainingMs();
+  if (remaining > 0) {
+    track('ad_skipped_cooldown', { placement, remainingMs: remaining });
+    return 'skipped_cooldown';
+  }
+
+  if (inFlight) {
+    track('ad_skipped_busy', { placement });
+    return 'skipped_busy';
+  }
+
+  inFlight = true;
+  try {
+    if (!isMockTestInterstitialLoaded()) {
+      void preloadMockTestInterstitial({ user });
+    } else {
+      track('ad_loaded', { placement });
+    }
+
+    const result = await showInterstitialAwaitingClose({
+      user,
+      readyTimeoutMs: INTERSTITIAL_READY_TIMEOUT_MS,
+      closeWatchdogMs: INTERSTITIAL_CLOSE_WATCHDOG_MS,
+      // Cooldown starts only when the interstitial actually opens.
+      onOpened: () => {
+        lastShownAtMs = Date.now();
+      },
+    });
+
+    if (result === 'shown') {
+      track('ad_shown', { placement });
+      return 'shown';
+    }
+
+    if (result === 'skipped_premium') {
+      track('ad_skipped_premium', { placement });
+      return 'skipped_premium';
+    }
+
+    if (result === 'skipped_not_loaded' || result === 'skipped_busy' || result === 'skipped_cap') {
+      track('ad_skipped_not_loaded', { placement, reason: result });
+      return result === 'skipped_busy' ? 'skipped_busy' : 'skipped_not_loaded';
+    }
+
+    track('ad_failed', { placement, reason: result });
+    return 'failed';
+  } catch (e) {
+    track('ad_failed', {
+      placement,
+      message: e?.message ? String(e.message).slice(0, 120) : 'unknown',
+    });
+    return 'failed';
+  } finally {
+    inFlight = false;
+    // Keep next ad warm for free users.
+    if (!userHasPremiumAccess(user)) {
+      void preloadMockTestInterstitial({ user });
+    }
+  }
+}
+
+/** @param {{ user?: object | null }} [opts] */
+export function showBeforeMockStart(opts = {}) {
+  return runPlacement('before_mock_start', opts);
+}
+
+/** @param {{ user?: object | null }} [opts] */
+export function showAfterMockFinish(opts = {}) {
+  return runPlacement('after_mock_finish', opts);
+}
+
+/** @param {{ user?: object | null }} [opts] */
+export function showBeforeDailyPractice(opts = {}) {
+  return runPlacement('before_daily_practice', opts);
+}
+
+/** @param {{ user?: object | null }} [opts] */
+export function showAfterDailyPractice(opts = {}) {
+  return runPlacement('after_daily_practice', opts);
+}
+
+/** @param {{ user?: object | null }} [opts] */
+export function showBeforePdf(opts = {}) {
+  return runPlacement('before_pdf', opts);
+}
+
+/** Test helper — do not use in product flows. */
+export function __resetInterstitialOrchestratorForTests() {
+  lastShownAtMs = 0;
+  inFlight = false;
+}

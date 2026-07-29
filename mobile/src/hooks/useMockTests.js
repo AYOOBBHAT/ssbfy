@@ -17,9 +17,12 @@ import {
   buildMockAttemptNavSnapshot,
   logNavigationPayload,
 } from '../utils/navigationPayloadStore';
+import { useAuth } from '../context/AuthContext';
+import { showBeforeMockStart } from '../services/ads/interstitialOrchestrator';
 
 export function useMockTests() {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const startLockRef = useRef(false);
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +87,11 @@ export function useMockTests() {
         includeDebug: true,
         source: 'mock_start',
       });
+      try {
+        await showBeforeMockStart({ user });
+      } catch (_) {
+        /* ads must never block test start */
+      }
       navigation.navigate('Test', testParams);
     } catch (e) {
       if (isRequestCancelled(e)) return;

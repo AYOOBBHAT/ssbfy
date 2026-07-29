@@ -81,8 +81,15 @@ export function getAdUnitIds() {
 
 /** @param {AdPlacementKey | string} key */
 export function getAdUnitId(key) {
-  const ids = getAdUnitIds();
-  return ids[key] || null;
+  try {
+    const ids = getAdUnitIds();
+    const id = ids?.[key];
+    if (typeof id !== 'string') return null;
+    const trimmed = id.trim();
+    return trimmed.length ? trimmed : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Sanitize IDs for DEV logs — never print full production unit strings. */

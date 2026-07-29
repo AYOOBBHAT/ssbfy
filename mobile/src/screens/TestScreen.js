@@ -23,6 +23,10 @@ import { filterValidMongoIds, resolveMongoId } from '../utils/mongoId.js';
 import { buildResultParamsFromReveal } from '../utils/resultReviewPayload';
 import { putLearningSessionCache } from '../utils/learningSessionCache';
 import { incrementStandardMockCompletion } from '../services/ads/mockTestAdCounter';
+import {
+  showAfterDailyPractice,
+  showAfterMockFinish,
+} from '../services/ads/interstitialOrchestrator';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -945,6 +949,18 @@ export default function TestScreen() {
         ) {
           return;
         }
+        try {
+          await showAfterMockFinish({ user });
+        } catch (_) {
+          /* ads must never block result navigation */
+        }
+        if (
+          !mountedRef.current ||
+          navigationCommittedRef.current ||
+          isStaleTransitionGeneration(transitionGenRef, gen)
+        ) {
+          return;
+        }
         navigateToResult(data, {}, gen);
       } catch (e) {
         if (isRequestCancelled(e)) {
@@ -988,6 +1004,18 @@ export default function TestScreen() {
               } catch (_) {
                 /* ads counter must never block result navigation */
               }
+            }
+            try {
+              await showAfterMockFinish({ user });
+            } catch (_) {
+              /* ads must never block result navigation */
+            }
+            if (
+              !mountedRef.current ||
+              navigationCommittedRef.current ||
+              isStaleTransitionGeneration(transitionGenRef, gen)
+            ) {
+              return;
             }
             navigateToResult(
               recovery,
@@ -1244,6 +1272,30 @@ export default function TestScreen() {
           });
         }
 
+        // Daily Practice only — never topic / retry / battle / other local modes.
+        if (
+          practiceType === 'daily' &&
+          isDaily &&
+          !isRetry &&
+          !isPractice &&
+          !isBattle
+        ) {
+          try {
+            await showAfterDailyPractice({ user });
+          } catch (_) {
+            /* ads must never block result navigation */
+          }
+          if (
+            !mountedRef.current ||
+            navigationCommittedRef.current ||
+            submissionCompletedRef.current ||
+            (transitionGen != null &&
+              isStaleTransitionGeneration(transitionGenRef, transitionGen))
+          ) {
+            return;
+          }
+        }
+
         let committed = false;
         if (practiceType === 'battle' && battleId) {
           if (navigationCommittedRef.current) return;
@@ -1293,10 +1345,12 @@ export default function TestScreen() {
       isPractice,
       isDaily,
       isRetry,
+      isBattle,
       historicalAttemptMode,
       sourceAttemptId,
       practiceSessionId,
       battleId,
+      user,
     ]
   );
 
