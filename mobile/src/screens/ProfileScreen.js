@@ -20,6 +20,7 @@ import {
   PROFILE_FREE_PLAN_SUB,
   SAVED_MATERIALS_ROW_SUB,
 } from '../constants/upgradeCopy';
+import { ENABLE_NOTES } from '../config/featureFlags';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { useMockQuota } from '../hooks/useMockQuota';
 import { getQuotaProfileLine } from '../utils/mockQuotaCopy';
@@ -289,7 +290,13 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>Saved Materials</Text>
             <Text style={styles.rowSub}>
-              {isPremium ? 'Your bookmarked notes and PDFs' : SAVED_MATERIALS_ROW_SUB}
+              {isPremium
+                ? ENABLE_NOTES
+                  ? 'Your bookmarked notes and PDFs'
+                  : 'Your bookmarked PDFs'
+                : ENABLE_NOTES
+                  ? SAVED_MATERIALS_ROW_SUB
+                  : 'Bookmark PDFs (Premium)'}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />

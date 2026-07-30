@@ -38,6 +38,7 @@ import {
 } from '../utils/navigationPayloadStore';
 import AppBannerAd from '../components/ads/AppBannerAd';
 import { showBeforeDailyPractice } from '../services/ads/interstitialOrchestrator';
+import { ENABLE_NOTES } from '../config/featureFlags';
 
 function greetingForHour() {
   const h = new Date().getHours();
@@ -262,18 +263,22 @@ export default function HomeScreen() {
 
       <Text style={styles.sectionTitle}>Study material</Text>
       <View style={styles.studyGroup}>
-        <Pressable
-          onPress={() => navigation.navigate('NotesList')}
-          style={({ pressed }) => [styles.studyRow, pressCardStyle(pressed)]}
-        >
-          <Ionicons name="document-text-outline" size={22} color={colors.primary} />
-          <View style={styles.studyRowText}>
-            <Text style={styles.studyRowTitle}>Notes</Text>
-            <Text style={styles.studyRowSub}>{HOME_NOTES_SUB}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-        </Pressable>
-        <View style={styles.studyDivider} />
+        {ENABLE_NOTES ? (
+          <>
+            <Pressable
+              onPress={() => navigation.navigate('NotesList')}
+              style={({ pressed }) => [styles.studyRow, pressCardStyle(pressed)]}
+            >
+              <Ionicons name="document-text-outline" size={22} color={colors.primary} />
+              <View style={styles.studyRowText}>
+                <Text style={styles.studyRowTitle}>Notes</Text>
+                <Text style={styles.studyRowSub}>{HOME_NOTES_SUB}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+            </Pressable>
+            <View style={styles.studyDivider} />
+          </>
+        ) : null}
         <Pressable
           onPress={() => navigation.navigate('PdfList')}
           style={({ pressed }) => [styles.studyRow, pressCardStyle(pressed)]}

@@ -37,6 +37,7 @@ import {
   openPdfInAppBrowser,
 } from '../services/pdfService';
 import { getApiErrorCode, getApiErrorMessage, isRequestCancelled } from '../services/api';
+import { ENABLE_NOTES } from '../config/featureFlags';
 import {
   computeRetryListsFromResult,
   isQuestionDocRetryable as isQuestionRetryable,
@@ -1642,7 +1643,9 @@ export default function ResultScreen() {
     (async () => {
       try {
         const [notesResult, pdfsResult] = await Promise.allSettled([
-          getNotes({ topicIds: weakTopicIds }, { signal: ac.signal }),
+          ENABLE_NOTES
+            ? getNotes({ topicIds: weakTopicIds }, { signal: ac.signal })
+            : Promise.resolve({ notes: [] }),
           // `recommendedPostId` may legitimately be null (e.g. questions
           // lacked postIds in a legacy record). Treat that as "no pdfs"
           // rather than fetching every pdf in the catalog.
@@ -1654,7 +1657,7 @@ export default function ResultScreen() {
         if (ac.signal.aborted) return;
 
         const nextNotes =
-          notesResult.status === 'fulfilled'
+          ENABLE_NOTES && notesResult.status === 'fulfilled'
             ? (Array.isArray(notesResult.value?.notes) ? notesResult.value.notes : [])
             : [];
         const nextPdfs =
@@ -1674,6 +1677,7 @@ export default function ResultScreen() {
         // success is a useful recommender and we'd rather hide a pdf
         // outage than scare the user with a red banner.
         if (
+          ENABLE_NOTES &&
           notesResult.status === 'rejected' &&
           pdfsResult.status === 'rejected'
         ) {
@@ -1682,6 +1686,12 @@ export default function ResultScreen() {
           if (!isRequestCancelled(r1) && !isRequestCancelled(r2)) {
             setRecError(getApiErrorMessage(r1));
           }
+        } else if (
+          !ENABLE_NOTES &&
+          pdfsResult.status === 'rejected' &&
+          !isRequestCancelled(pdfsResult.reason)
+        ) {
+          setRecError(getApiErrorMessage(pdfsResult.reason));
         }
       } finally {
         setRecLoading(false);
@@ -2600,7 +2610,7 @@ export default function ResultScreen() {
   );
 
   const renderRecommendations = () => {
-    const hasNotes = recommendedNotes.length > 0;
+    const hasNotes = ENABLE_NOTES && recommendedNotes.length > 0;
     const hasPdfs = recommendedPdfs.length > 0;
 
     if (
@@ -2623,7 +2633,9 @@ export default function ResultScreen() {
             <Text style={styles.err}>{recError}</Text>
           ) : !hasNotes && !hasPdfs ? (
             <Text style={styles.recMutedCompact}>
-              No matching notes or PDFs yet.
+              {ENABLE_NOTES
+                ? 'No matching notes or PDFs yet.'
+                : 'No matching PDFs yet.'}
             </Text>
           ) : (
             <>

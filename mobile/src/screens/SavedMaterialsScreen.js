@@ -20,6 +20,7 @@ import {
   useDevMountTrace,
   useDevRenderTrace,
 } from '../utils/renderPerfDevLog';
+import { ENABLE_NOTES } from '../config/featureFlags';
 
 const TABS = {
   PDF: 'pdf',
@@ -303,24 +304,26 @@ export default function SavedMaterialsScreen() {
     [activeTab]
   );
 
-  const currentData = activeTab === TABS.PDF ? savedPdfs : savedNotes;
+  const currentData = activeTab === TABS.PDF || !ENABLE_NOTES ? savedPdfs : savedNotes;
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabWrap}>
-        <Pressable
-          onPress={() => setActiveTab(TABS.PDF)}
-          style={({ pressed }) => [styles.tab, activeTab === TABS.PDF && styles.tabActive, pressFeedbackStyle(pressed)]}
-        >
-          <Text style={[styles.tabText, activeTab === TABS.PDF && styles.tabTextActive]}>Saved PDFs</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab(TABS.NOTE)}
-          style={({ pressed }) => [styles.tab, activeTab === TABS.NOTE && styles.tabActive, pressFeedbackStyle(pressed)]}
-        >
-          <Text style={[styles.tabText, activeTab === TABS.NOTE && styles.tabTextActive]}>Saved Notes</Text>
-        </Pressable>
-      </View>
+      {ENABLE_NOTES ? (
+        <View style={styles.tabWrap}>
+          <Pressable
+            onPress={() => setActiveTab(TABS.PDF)}
+            style={({ pressed }) => [styles.tab, activeTab === TABS.PDF && styles.tabActive, pressFeedbackStyle(pressed)]}
+          >
+            <Text style={[styles.tabText, activeTab === TABS.PDF && styles.tabTextActive]}>Saved PDFs</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setActiveTab(TABS.NOTE)}
+            style={({ pressed }) => [styles.tab, activeTab === TABS.NOTE && styles.tabActive, pressFeedbackStyle(pressed)]}
+          >
+            <Text style={[styles.tabText, activeTab === TABS.NOTE && styles.tabTextActive]}>Saved Notes</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {loading ? <LoadingState /> : null}
       {!loading && error ? (
@@ -333,14 +336,24 @@ export default function SavedMaterialsScreen() {
       ) : null}
       {!loading && !error && currentData.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <EmptyState {...EMPTY.SAVED_MATERIALS} />
+          <EmptyState
+            {...EMPTY.SAVED_MATERIALS}
+            {...(!ENABLE_NOTES
+              ? {
+                  subtitle: 'Bookmark PDFs from Home while you study.',
+                  hint: 'Open PDF Notes, then tap save.',
+                }
+              : {})}
+          />
         </View>
       ) : null}
       {!loading && !error && currentData.length > 0 ? (
         <FlatList
           data={currentData}
           keyExtractor={keyExtractor}
-          renderItem={activeTab === TABS.PDF ? renderPdf : renderNote}
+          renderItem={
+            activeTab === TABS.PDF || !ENABLE_NOTES ? renderPdf : renderNote
+          }
           ItemSeparatorComponent={SavedMaterialSeparator}
           contentContainerStyle={styles.listContent}
           initialNumToRender={8}
