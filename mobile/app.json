@@ -35,8 +35,10 @@
           ]
         }
       ],
-      "versionCode": 22,
-      "permissions": [],
+      "versionCode": 24,
+      "permissions": [
+  "com.google.android.gms.permission.AD_ID"
+],
       "adaptiveIcon": {
         "foregroundImage": "./assets/new_icon.png",
         "backgroundColor": "#fafbff"
