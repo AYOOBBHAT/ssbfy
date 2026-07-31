@@ -30,6 +30,8 @@ import { getAnalyticsOverview } from '../services/analyticsService';
 import ProfileActivitySections from '../components/profile/ProfileActivitySections';
 import BattleHistorySection from '../components/profile/BattleHistorySection';
 import SupportFeedbackSection from '../components/profile/SupportFeedbackSection';
+import { PremiumPdfUpgradeModal } from '../components/PremiumPdfUpgradeModal';
+import { trackPremiumPdfEvent } from '../services/premiumPdfAnalytics';
 import {
   getAnalyticsOverviewCache,
   putAnalyticsOverviewCache,
@@ -60,6 +62,7 @@ export default function ProfileScreen({ navigation }) {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [overviewStale, setOverviewStale] = useState(false);
+  const [savedUpgradeVisible, setSavedUpgradeVisible] = useState(false);
   const analyticsRefreshInFlightRef = useRef(null);
 
   useDevRenderTrace(
@@ -220,6 +223,7 @@ export default function ProfileScreen({ navigation }) {
   }, []);
 
   return (
+    <>
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.content}
@@ -275,11 +279,14 @@ export default function ProfileScreen({ navigation }) {
       </View>
       <View style={styles.card}>
         <Pressable
-          onPress={() =>
-            isPremium
-              ? navigation.navigate('SavedMaterials')
-              : navigation.navigate('Premium', { from: 'saved-materials' })
-          }
+          onPress={() => {
+            if (isPremium) {
+              navigation.navigate('SavedMaterials');
+              return;
+            }
+            trackPremiumPdfEvent('premium_pdf_dialog_opened', { source: 'saved_materials' });
+            setSavedUpgradeVisible(true);
+          }}
           style={({ pressed }) => [styles.row, pressCardStyle(pressed)]}
         >
           <Ionicons
@@ -342,6 +349,21 @@ export default function ProfileScreen({ navigation }) {
       </Pressable>
       <AppBannerAd placement="profile" />
     </ScrollView>
+    <PremiumPdfUpgradeModal
+      visible={savedUpgradeVisible}
+      title="Unlock Saved Materials"
+      subtitle="Bookmark PDFs and revisit them anytime with Premium."
+      onClose={() => {
+        trackPremiumPdfEvent('premium_pdf_dialog_closed', { source: 'saved_materials' });
+        setSavedUpgradeVisible(false);
+      }}
+      onUpgrade={() => {
+        trackPremiumPdfEvent('premium_pdf_upgrade_clicked', { source: 'saved_materials' });
+        setSavedUpgradeVisible(false);
+        navigation.navigate('Premium', { from: 'saved-materials' });
+      }}
+    />
+    </>
   );
 }
 

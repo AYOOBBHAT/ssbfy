@@ -116,9 +116,15 @@ async function loadPostTitleMap(postIdStrings) {
 
 /**
  * Wire shape for PDF notes: no permanent `fileUrl`, no storage `storedName`.
- * `signedUrl` is short-lived (see env `pdfSignedUrlTtlSeconds`).
+ *
+ * @param {object} doc
+ * @param {Map<string, string>} postTitleMap
+ * @param {{ includeSignedUrl?: boolean }} [opts]
+ *   - Premium/admin (`includeSignedUrl: true`): `locked=false` + short-lived `signedUrl`
+ *   - Free discovery (`includeSignedUrl: false`): `locked=true`, never `signedUrl`/paths
  */
-async function pdfDocToClientDto(doc, postTitleMap) {
+async function pdfDocToClientDto(doc, postTitleMap, opts = {}) {
+  const includeSignedUrl = opts.includeSignedUrl !== false;
   if (!doc) return doc;
   const normalized = normalizePdfNoteDoc(doc);
   const path = typeof normalized.storedName === 'string' ? normalized.storedName.trim() : '';
@@ -128,16 +134,15 @@ async function pdfDocToClientDto(doc, postTitleMap) {
   }
   const first = normalized.postIds?.[0] || normalized.postId;
   const postTitle = first ? postTitleMap.get(String(first)) || '' : '';
-  let signedUrl = '';
-  try {
-    signedUrl = await getSignedPdfUrl(path);
-  } catch (e) {
-    logger.warn('[PdfNote] createSignedUrl failed', {
-      id: String(normalized._id),
-      message: e?.message,
-    });
-  }
-  return {
+
+  const pagesRaw = normalized.pages ?? normalized.pageCount ?? null;
+  const pages =
+    pagesRaw != null && Number.isFinite(Number(pagesRaw)) && Number(pagesRaw) > 0
+      ? Math.floor(Number(pagesRaw))
+      : null;
+
+  /** @type {Record<string, unknown>} */
+  const dto = {
     _id: normalized._id,
     pdfId: String(normalized._id),
     title: normalized.title,
@@ -149,12 +154,29 @@ async function pdfDocToClientDto(doc, postTitleMap) {
     isActive: normalized.isActive !== false,
     createdAt: normalized.createdAt,
     updatedAt: normalized.updatedAt,
-    signedUrl,
     postTitle,
+    pages,
+    locked: !includeSignedUrl,
   };
+
+  if (includeSignedUrl) {
+    let signedUrl = '';
+    try {
+      signedUrl = await getSignedPdfUrl(path);
+    } catch (e) {
+      logger.warn('[PdfNote] createSignedUrl failed', {
+        id: String(normalized._id),
+        message: e?.message,
+      });
+    }
+    dto.signedUrl = signedUrl;
+    dto.locked = false;
+  }
+
+  return dto;
 }
 
-async function enrichSinglePdfForClient(doc) {
+async function enrichSinglePdfForClient(doc, opts = {}) {
   const normalized = normalizePdfNoteDoc(doc);
   const path = typeof normalized.storedName === 'string' ? normalized.storedName.trim() : '';
   if (!path) {
@@ -162,7 +184,7 @@ async function enrichSinglePdfForClient(doc) {
   }
   const first = normalized.postIds?.[0] || normalized.postId;
   const postTitleMap = first ? await loadPostTitleMap([String(first)]) : new Map();
-  return pdfDocToClientDto(normalized, postTitleMap);
+  return pdfDocToClientDto(normalized, postTitleMap, opts);
 }
 
 function mapList(docs) {
@@ -210,11 +232,19 @@ export const pdfNoteService = {
   },
 
   /**
-   * List PDF notes for authorized clients (premium or admin).
-   * Each row includes a short-lived `signedUrl`; never exposes `fileUrl` or `storedName`.
+   * List PDF notes for authenticated clients.
+   * - Premium/admin (`includeSignedUrl: true`): `locked=false` + short-lived `signedUrl`
+   * - Free discovery (`includeSignedUrl: false`): metadata only, `locked=true`, no signing
+   * Never exposes `fileUrl`, `storedName`, or storage paths.
    */
-  async listForClient({ postId, includeInactive = false } = {}) {
-    pdfSigningBatchStart();
+  async listForClient({
+    postId,
+    includeInactive = false,
+    includeSignedUrl = true,
+  } = {}) {
+    if (includeSignedUrl) {
+      pdfSigningBatchStart();
+    }
     const wall = Date.now();
     try {
       const filter = {};
@@ -232,29 +262,33 @@ export const pdfNoteService = {
         .filter(Boolean);
       const postTitleMap = await loadPostTitleMap(firstPostKeys);
       const items = await Promise.all(
-        normalized.map((doc) => pdfDocToClientDto(doc, postTitleMap))
+        normalized.map((doc) =>
+          pdfDocToClientDto(doc, postTitleMap, { includeSignedUrl: !!includeSignedUrl })
+        )
       );
       return items.filter(Boolean);
     } finally {
-      const stats = pdfSigningBatchEnd();
-      const durationMs = Date.now() - wall;
-      if (
-        stats &&
-        (stats.signCalls > 1 ||
-          stats.cacheHits > 0 ||
-          stats.waitDedupes > 0 ||
-          durationMs > 300)
-      ) {
-        logger.debug(
-          {
-            msg: '[pdf-sign] listForClient',
-            durationMs,
-            signCalls: stats.signCalls,
-            cacheHits: stats.cacheHits,
-            waitDedupes: stats.waitDedupes,
-          },
-          'pdf list signing summary'
-        );
+      if (includeSignedUrl) {
+        const stats = pdfSigningBatchEnd();
+        const durationMs = Date.now() - wall;
+        if (
+          stats &&
+          (stats.signCalls > 1 ||
+            stats.cacheHits > 0 ||
+            stats.waitDedupes > 0 ||
+            durationMs > 300)
+        ) {
+          logger.debug(
+            {
+              msg: '[pdf-sign] listForClient',
+              durationMs,
+              signCalls: stats.signCalls,
+              cacheHits: stats.cacheHits,
+              waitDedupes: stats.waitDedupes,
+            },
+            'pdf list signing summary'
+          );
+        }
       }
     }
   },

@@ -5,11 +5,18 @@
  * - Never throws to callers
  * - Respects premium at load and immediately before show
  * - Single-flight load/show
+ * - Production-safe Sentry breadcrumbs (no full ad unit IDs)
  */
 
 import { userHasPremiumAccess } from '../../utils/premiumAccess';
 import logger from '../../utils/logger';
-import { getAdUnitId, sanitizeAdUnitIdForLog } from '../../config/admob';
+import { monitoringBreadcrumb } from '../../monitoring/sentry';
+import {
+  getAdUnitId,
+  getAdUnitIds,
+  sanitizeAdUnitIdForLog,
+  shouldUseProductionAdUnits,
+} from '../../config/admob';
 import { getGoogleMobileAdsModule } from './adsNative';
 import { canRequestAdsNow, initializeMobileAds, isMobileAdsInitialized } from './mobileAdsInit';
 import { getAdsRequestOptions } from './adsConsentGate';
@@ -18,7 +25,8 @@ import { getAdsRequestOptions } from './adsConsentGate';
 const MAX_SESSION_SHOWS = 24;
 const LOAD_RETRY_DELAY_MS = 12_000;
 const MAX_LOAD_RETRIES = 3;
-const DEFAULT_READY_TIMEOUT_MS = 500;
+/** Max wait for an in-flight load before navigation continues. */
+const DEFAULT_READY_TIMEOUT_MS = 4000;
 /** If CLOSED never arrives after a successful show, unblock callers. */
 const DEFAULT_CLOSE_WATCHDOG_MS = 15_000;
 
@@ -33,6 +41,39 @@ let sessionShows = 0;
 let premiumUserRef = null;
 /** @type {((result: string) => void) | null} */
 let pendingCloseResolve = null;
+/** @type {(() => void) | null} */
+let pendingOpenedCallback = null;
+let openedCallbackFired = false;
+
+/**
+ * @param {string} event
+ * @param {Record<string, unknown>} [data]
+ */
+function track(event, data = {}) {
+  try {
+    monitoringBreadcrumb('ads_interstitial', event, data);
+  } catch {
+    /* ignore */
+  }
+  if (__DEV__) {
+    logger.debug(`[ads] ${event}`, data);
+  }
+}
+
+/**
+ * @param {unknown} err
+ * @returns {{ code: unknown, message: string, usingProductionUnits: boolean }}
+ */
+function safeErrorFields(err) {
+  return {
+    code: err && typeof err === 'object' && 'code' in err ? err.code ?? null : null,
+    message:
+      err && typeof err === 'object' && err.message
+        ? String(err.message).slice(0, 120)
+        : 'unknown',
+    usingProductionUnits: shouldUseProductionAdUnits(),
+  };
+}
 
 function clearListeners() {
   for (const unsub of unsubscribers) {
@@ -59,6 +100,8 @@ function discardLoadedAd() {
   loaded = false;
   loading = false;
   showing = false;
+  pendingOpenedCallback = null;
+  openedCallbackFired = false;
   if (pendingCloseResolve) {
     const resolve = pendingCloseResolve;
     pendingCloseResolve = null;
@@ -66,13 +109,33 @@ function discardLoadedAd() {
   }
 }
 
+function fireOpenedOnce() {
+  if (openedCallbackFired) return;
+  openedCallbackFired = true;
+  const cb = pendingOpenedCallback;
+  pendingOpenedCallback = null;
+  if (cb) {
+    try {
+      cb();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function scheduleRetry() {
   if (loadRetries >= MAX_LOAD_RETRIES) return;
+  if (userHasPremiumAccess(premiumUserRef)) return;
   clearRetry();
   retryTimer = setTimeout(() => {
     retryTimer = null;
+    if (userHasPremiumAccess(premiumUserRef)) return;
+    if (!canRequestAdsNow()) {
+      track('interstitial_consent_blocked', { phase: 'retry' });
+      return;
+    }
     loadRetries += 1;
-    void preloadMockTestInterstitial();
+    void preloadMockTestInterstitial({ user: premiumUserRef });
   }, LOAD_RETRY_DELAY_MS);
 }
 
@@ -83,20 +146,38 @@ function attachListeners(ad, AdEventType) {
       loaded = true;
       loading = false;
       loadRetries = 0;
-      if (__DEV__) logger.debug('[ads] interstitial loaded');
+      track('interstitial_loaded', {
+        usingProductionUnits: shouldUseProductionAdUnits(),
+      });
     })
   );
+
+  // OPENED exists in react-native-google-mobile-ads 16.x; guard for safety.
+  if (AdEventType?.OPENED) {
+    unsubscribers.push(
+      ad.addAdEventListener(AdEventType.OPENED, () => {
+        showing = true;
+        track('interstitial_opened', {
+          usingProductionUnits: shouldUseProductionAdUnits(),
+        });
+        fireOpenedOnce();
+      })
+    );
+  }
+
   unsubscribers.push(
     ad.addAdEventListener(AdEventType.CLOSED, () => {
       showing = false;
       loaded = false;
+      track('interstitial_closed', {
+        usingProductionUnits: shouldUseProductionAdUnits(),
+      });
       if (pendingCloseResolve) {
         const resolve = pendingCloseResolve;
         pendingCloseResolve = null;
         resolve('closed');
       }
-      if (__DEV__) logger.debug('[ads] interstitial closed — preloading next');
-      void preloadMockTestInterstitial({ force: true });
+      void preloadMockTestInterstitial({ force: true, user: premiumUserRef });
     })
   );
   unsubscribers.push(
@@ -104,16 +185,11 @@ function attachListeners(ad, AdEventType) {
       loading = false;
       loaded = false;
       showing = false;
+      track('interstitial_load_error', safeErrorFields(err));
       if (pendingCloseResolve) {
         const resolve = pendingCloseResolve;
         pendingCloseResolve = null;
         resolve('error');
-      }
-      if (__DEV__) {
-        logger.warn('[ads] interstitial error', {
-          code: err?.code ?? null,
-          message: err?.message ? String(err.message).slice(0, 120) : 'unknown',
-        });
       }
       scheduleRetry();
     })
@@ -133,6 +209,7 @@ export async function preloadMockTestInterstitial(opts = {}) {
 
   if (userHasPremiumAccess(premiumUserRef)) {
     discardLoadedAd();
+    track('interstitial_skipped_premium', { phase: 'preload' });
     return false;
   }
 
@@ -141,15 +218,28 @@ export async function preloadMockTestInterstitial(opts = {}) {
   try {
     if (!isMobileAdsInitialized()) {
       const ok = await initializeMobileAds();
-      if (!ok) return false;
+      if (!ok) {
+        track('interstitial_sdk_init_failed', {
+          usingProductionUnits: shouldUseProductionAdUnits(),
+        });
+        return false;
+      }
     }
-    if (!canRequestAdsNow()) return false;
+    if (!canRequestAdsNow()) {
+      track('interstitial_consent_blocked', { phase: 'preload' });
+      return false;
+    }
 
     const ads = getGoogleMobileAdsModule();
     if (!ads?.InterstitialAd || !ads?.AdEventType) return false;
 
     const unitId = getAdUnitId('mockTestInterstitial');
-    if (!unitId) return false;
+    if (!unitId) {
+      track('interstitial_invalid_unit', {
+        usingProductionUnits: shouldUseProductionAdUnits(),
+      });
+      return false;
+    }
 
     loading = true;
     loaded = false;
@@ -159,20 +249,16 @@ export async function preloadMockTestInterstitial(opts = {}) {
     attachListeners(interstitial, ads.AdEventType);
     interstitial.load();
 
-    if (__DEV__) {
-      logger.debug('[ads] interstitial load requested', {
-        unit: sanitizeAdUnitIdForLog(unitId),
-      });
-    }
+    track('interstitial_load_requested', {
+      unit: sanitizeAdUnitIdForLog(unitId),
+      usingProductionUnits: shouldUseProductionAdUnits(),
+      force: !!force,
+    });
     return true;
   } catch (e) {
     loading = false;
     loaded = false;
-    if (__DEV__) {
-      logger.warn('[ads] interstitial preload failed', {
-        message: e?.message ? String(e.message).slice(0, 120) : 'unknown',
-      });
-    }
+    track('interstitial_load_error', safeErrorFields(e));
     scheduleRetry();
     return false;
   }
@@ -189,29 +275,44 @@ export async function showMockTestInterstitialIfReady(opts = {}) {
 
   if (userHasPremiumAccess(user)) {
     discardLoadedAd();
+    track('interstitial_skipped_premium', { phase: 'show' });
     return 'skipped_premium';
   }
-  if (sessionShows >= MAX_SESSION_SHOWS) return 'skipped_cap';
-  if (showing || loading) return 'skipped_busy';
-  if (!loaded || !interstitial) return 'skipped_not_loaded';
+  if (sessionShows >= MAX_SESSION_SHOWS) {
+    track('interstitial_skipped_cap', { sessionShows });
+    return 'skipped_cap';
+  }
+  // Allow show when an ad is already loaded even if a prior flag raced;
+  // only treat as busy when another interstitial is on screen or still loading
+  // without a ready creative.
+  if (showing) {
+    track('interstitial_skipped_busy', { reason: 'showing' });
+    return 'skipped_busy';
+  }
+  if (loading && !loaded) {
+    track('interstitial_skipped_busy', { reason: 'loading' });
+    return 'skipped_busy';
+  }
+  if (!loaded || !interstitial) {
+    track('interstitial_skipped_not_loaded', { phase: 'show' });
+    return 'skipped_not_loaded';
+  }
 
   try {
     showing = true;
+    openedCallbackFired = false;
     await interstitial.show();
     sessionShows += 1;
     loaded = false;
-    if (__DEV__) {
-      logger.debug('[ads] interstitial shown', { sessionShows });
-    }
+    // Fallback if OPENED is unavailable or delayed past show() resolve.
+    fireOpenedOnce();
     return 'shown';
   } catch (e) {
     showing = false;
     loaded = false;
-    if (__DEV__) {
-      logger.warn('[ads] interstitial show failed', {
-        message: e?.message ? String(e.message).slice(0, 120) : 'unknown',
-      });
-    }
+    pendingOpenedCallback = null;
+    openedCallbackFired = false;
+    track('interstitial_show_error', safeErrorFields(e));
     void preloadMockTestInterstitial({ force: true, user });
     return 'failed';
   }
@@ -242,6 +343,7 @@ export async function showInterstitialAwaitingClose(opts = {}) {
 
   if (userHasPremiumAccess(user)) {
     discardLoadedAd();
+    track('interstitial_skipped_premium', { phase: 'await_close' });
     return 'skipped_premium';
   }
 
@@ -249,20 +351,34 @@ export async function showInterstitialAwaitingClose(opts = {}) {
     void preloadMockTestInterstitial({ user });
   }
 
+  // Poll until loaded or timeout. Returns immediately if already loaded.
   const deadline = Date.now() + Math.max(0, readyTimeoutMs);
   while (!isMockTestInterstitialLoaded() && Date.now() < deadline) {
     await sleep(40);
   }
 
   if (!isMockTestInterstitialLoaded()) {
+    track('interstitial_skipped_not_loaded', {
+      phase: 'await_ready',
+      waitedMs: readyTimeoutMs,
+    });
     return 'skipped_not_loaded';
   }
 
-  if (showing) return 'skipped_busy';
-  if (sessionShows >= MAX_SESSION_SHOWS) return 'skipped_cap';
+  if (showing) {
+    track('interstitial_skipped_busy', { reason: 'showing_before_show' });
+    return 'skipped_busy';
+  }
+  if (sessionShows >= MAX_SESSION_SHOWS) {
+    track('interstitial_skipped_cap', { sessionShows });
+    return 'skipped_cap';
+  }
 
   let settled = false;
   let watchdogTimer = null;
+
+  pendingOpenedCallback = onOpened;
+  openedCallbackFired = false;
 
   const closePromise = new Promise((resolve) => {
     const finishOnce = (reason) => {
@@ -279,17 +395,15 @@ export async function showInterstitialAwaitingClose(opts = {}) {
     pendingCloseResolve = (reason) => finishOnce(reason || 'closed');
     watchdogTimer = setTimeout(() => {
       showing = false;
-      if (__DEV__) {
-        logger.warn('[ads] interstitial close watchdog fired', {
-          ms: closeWatchdogMs,
-        });
-      }
+      track('interstitial_close_watchdog', { ms: closeWatchdogMs });
       finishOnce('timeout');
     }, Math.max(1_000, closeWatchdogMs));
   });
 
   const showResult = await showMockTestInterstitialIfReady({ user });
   if (showResult !== 'shown') {
+    pendingOpenedCallback = null;
+    openedCallbackFired = false;
     if (!settled) {
       settled = true;
       if (watchdogTimer) {
@@ -301,12 +415,6 @@ export async function showInterstitialAwaitingClose(opts = {}) {
     return showResult;
   }
 
-  try {
-    onOpened?.();
-  } catch (_) {
-    /* ignore analytics/callback errors */
-  }
-
   await closePromise;
   return 'shown';
 }
@@ -315,6 +423,7 @@ export function onPremiumStatusChanged(user) {
   premiumUserRef = user;
   if (userHasPremiumAccess(user)) {
     discardLoadedAd();
+    track('interstitial_skipped_premium', { phase: 'premium_changed' });
   }
 }
 
@@ -325,4 +434,33 @@ export function isMockTestInterstitialLoaded() {
 export function cleanupMockTestInterstitial() {
   discardLoadedAd();
   loadRetries = 0;
+}
+
+/**
+ * Dev/diagnostics snapshot — no full ad unit IDs or PII.
+ * @returns {Record<string, unknown>}
+ */
+export function getInterstitialDiagnostics() {
+  const ids = getAdUnitIds();
+  return {
+    initialized: isMobileAdsInitialized(),
+    canRequestAds: canRequestAdsNow(),
+    usingProductionUnits: !!ids.usingProductionUnits,
+    interstitialUnit: sanitizeAdUnitIdForLog(ids.mockTestInterstitial),
+    loaded,
+    loading,
+    showing,
+    sessionShows,
+    premium: userHasPremiumAccess(premiumUserRef),
+    retryCount: loadRetries,
+  };
+}
+
+/** Emit a one-shot sanitized startup breadcrumb for unit-mode visibility. */
+export function logInterstitialUnitModeBreadcrumb() {
+  const ids = getAdUnitIds();
+  track('interstitial_unit_mode', {
+    usingProductionUnits: !!ids.usingProductionUnits,
+    interstitialUnit: sanitizeAdUnitIdForLog(ids.mockTestInterstitial),
+  });
 }

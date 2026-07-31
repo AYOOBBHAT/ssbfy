@@ -30,22 +30,27 @@ export const pdfNoteController = {
     return sendSuccess(res, out, 'Signed URL');
   }),
 
-  /** GET /api/notes/pdfs?postId=&includeInactive= — requires auth; premium or admin. */
+  /**
+   * GET /api/notes/pdfs?postId=&includeInactive=
+   * Auth required. Premium/admin get unlockable rows (`locked=false` + signedUrl).
+   * Free users get discovery metadata only (`locked=true`, never signedUrl).
+   * Opening remains gated at GET /pdfs/:id/signed-url.
+   */
   list: asyncHandler(async (req, res) => {
     const user = await userRepository.findById(req.user.id);
     if (!user) {
       throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
     }
     const isAdmin = req.user.role === ROLES.ADMIN;
-    if (!isPremiumUser(user) && !isAdmin) {
-      throw new AppError('Premium required', HTTP_STATUS.FORBIDDEN);
-    }
+    const premium = isPremiumUser(user);
+    const includeSignedUrl = premium || isAdmin;
 
     logger.debug(
       {
         userId: String(req.user.id),
         isAdmin,
-        premium: isPremiumUser(user),
+        premium,
+        includeSignedUrl,
       },
       '[PdfNote] list'
     );
@@ -54,6 +59,7 @@ export const pdfNoteController = {
     const pdfs = await pdfNoteService.listForClient({
       postId,
       includeInactive: shouldIncludeInactive(req),
+      includeSignedUrl,
     });
     return sendSuccess(res, { pdfs }, 'PDF notes');
   }),

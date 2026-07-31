@@ -1,8 +1,13 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { userHasPremiumAccess } from '../../utils/premiumAccess';
-import { initializeMobileAds, isMobileAdsInitialized } from './mobileAdsInit';
 import {
+  canRequestAdsNow,
+  initializeMobileAds,
+  isMobileAdsInitialized,
+} from './mobileAdsInit';
+import {
+  logInterstitialUnitModeBreadcrumb,
   onPremiumStatusChanged,
   preloadMockTestInterstitial,
 } from './interstitialAdService';
@@ -15,11 +20,13 @@ const AdsReadyContext = createContext({
 /**
  * Tracks Mobile Ads init completion so eligibility hooks re-render.
  * Does not block splash; init is fire-and-forget after auth.
+ * Preloads interstitial for free users once SDK + consent allow it.
  */
 export function AdsReadyProvider({ children }) {
   const { initializing, user, isAuthenticated } = useAuth();
   const [adsReady, setAdsReady] = useState(() => isMobileAdsInitialized());
   const [adsInitAttempted, setAdsInitAttempted] = useState(() => isMobileAdsInitialized());
+  const unitModeLoggedRef = useRef(false);
 
   useEffect(() => {
     if (initializing) return undefined;
@@ -31,7 +38,22 @@ export function AdsReadyProvider({ children }) {
       setAdsInitAttempted(true);
       setAdsReady(!!ok);
       onPremiumStatusChanged(user);
-      if (ok && isAuthenticated && !userHasPremiumAccess(user)) {
+
+      if (!unitModeLoggedRef.current) {
+        unitModeLoggedRef.current = true;
+        try {
+          logInterstitialUnitModeBreadcrumb();
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (
+        ok &&
+        canRequestAdsNow() &&
+        isAuthenticated &&
+        !userHasPremiumAccess(user)
+      ) {
         void preloadMockTestInterstitial({ user });
       }
     })();
@@ -44,7 +66,16 @@ export function AdsReadyProvider({ children }) {
   useEffect(() => {
     if (initializing) return;
     onPremiumStatusChanged(user);
-  }, [initializing, user]);
+    // When a free user becomes available after init, warm the interstitial.
+    if (
+      isMobileAdsInitialized() &&
+      canRequestAdsNow() &&
+      isAuthenticated &&
+      !userHasPremiumAccess(user)
+    ) {
+      void preloadMockTestInterstitial({ user });
+    }
+  }, [initializing, user, isAuthenticated]);
 
   const value = useMemo(
     () => ({ adsReady, adsInitAttempted }),

@@ -7,7 +7,7 @@
  * - before PDF open
  *
  * Fail-safe: never throws; if ad unavailable, callers continue immediately.
- * Cooldown: minimum 45s between successful shows.
+ * Cooldown: minimum 45s between successful shows (starts only after open).
  *
  * Project convention is JS (+ JSDoc). File is .js (Expo has no TS check pipeline).
  */
@@ -22,7 +22,8 @@ import {
 } from './interstitialAdService';
 
 export const INTERSTITIAL_COOLDOWN_MS = 45_000;
-export const INTERSTITIAL_READY_TIMEOUT_MS = 500;
+/** Max wait for an in-flight load. Already-loaded ads show immediately. */
+export const INTERSTITIAL_READY_TIMEOUT_MS = 4000;
 export const INTERSTITIAL_CLOSE_WATCHDOG_MS = 15_000;
 
 /** @typedef {'before_mock_start' | 'after_mock_finish' | 'before_daily_practice' | 'after_daily_practice' | 'before_pdf'} InterstitialPlacement */
@@ -59,21 +60,25 @@ function cooldownRemainingMs() {
 async function runPlacement(placement, opts = {}) {
   const user = opts.user ?? null;
 
-  track(placement, {});
+  track('interstitial_placement', { placement });
 
   if (userHasPremiumAccess(user)) {
-    track('ad_skipped_premium', { placement });
+    track('interstitial_skipped_premium', { placement });
     return 'skipped_premium';
   }
 
   const remaining = cooldownRemainingMs();
   if (remaining > 0) {
-    track('ad_skipped_cooldown', { placement, remainingMs: remaining });
+    track('interstitial_skipped_cap', {
+      placement,
+      reason: 'cooldown',
+      remainingMs: remaining,
+    });
     return 'skipped_cooldown';
   }
 
   if (inFlight) {
-    track('ad_skipped_busy', { placement });
+    track('interstitial_skipped_busy', { placement });
     return 'skipped_busy';
   }
 
@@ -81,8 +86,6 @@ async function runPlacement(placement, opts = {}) {
   try {
     if (!isMockTestInterstitialLoaded()) {
       void preloadMockTestInterstitial({ user });
-    } else {
-      track('ad_loaded', { placement });
     }
 
     const result = await showInterstitialAwaitingClose({
@@ -96,25 +99,36 @@ async function runPlacement(placement, opts = {}) {
     });
 
     if (result === 'shown') {
-      track('ad_shown', { placement });
+      track('interstitial_shown', { placement });
       return 'shown';
     }
 
     if (result === 'skipped_premium') {
-      track('ad_skipped_premium', { placement });
+      track('interstitial_skipped_premium', { placement });
       return 'skipped_premium';
     }
 
-    if (result === 'skipped_not_loaded' || result === 'skipped_busy' || result === 'skipped_cap') {
-      track('ad_skipped_not_loaded', { placement, reason: result });
-      return result === 'skipped_busy' ? 'skipped_busy' : 'skipped_not_loaded';
+    if (result === 'skipped_busy') {
+      track('interstitial_skipped_busy', { placement });
+      return 'skipped_busy';
     }
 
-    track('ad_failed', { placement, reason: result });
+    if (result === 'skipped_cap') {
+      track('interstitial_skipped_cap', { placement, reason: 'session_cap' });
+      return 'skipped_not_loaded';
+    }
+
+    if (result === 'skipped_not_loaded') {
+      track('interstitial_skipped_not_loaded', { placement });
+      return 'skipped_not_loaded';
+    }
+
+    track('interstitial_show_error', { placement, reason: result });
     return 'failed';
   } catch (e) {
-    track('ad_failed', {
+    track('interstitial_show_error', {
       placement,
+      code: e?.code ?? null,
       message: e?.message ? String(e.message).slice(0, 120) : 'unknown',
     });
     return 'failed';

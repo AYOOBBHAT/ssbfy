@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  TextInput,
   Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -17,26 +18,27 @@ import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import {
   PDF_UPSELL_SUB,
   PDF_UPSELL_TITLE,
-  SAVE_ALERT_MESSAGE,
-  SAVE_ALERT_TITLE,
+  PREMIUM_SAVE_MESSAGE,
 } from '../constants/upgradeCopy';
 import { PremiumUpsellCard } from '../components/PremiumUpsellCard';
+import { PremiumPdfCard } from '../components/PremiumPdfCard';
+import { PremiumPdfUpgradeModal } from '../components/PremiumPdfUpgradeModal';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
 import {
-  formatFileSize,
   getCachedPostsSnapshot,
   getPdfNotes,
   getPosts,
   getPdfOpenUserMessage,
+  isPdfLocked,
   openPdfInAppBrowser,
 } from '../services/pdfService';
+import { trackPremiumPdfEvent } from '../services/premiumPdfAnalytics';
 import logger from '../utils/logger';
 import {
   getSavedMaterials,
   getSavedMaterialsSnapshot,
   isSavedMaterialsSnapshotFresh,
   toggleSavedMaterial,
-  PREMIUM_SAVE_MESSAGE,
 } from '../services/savedMaterialService';
 import { showBeforePdf } from '../services/ads/interstitialOrchestrator';
 import {
@@ -69,7 +71,7 @@ function PdfSeparator() {
   return <View style={ITEM_SEPARATOR_STYLE} />;
 }
 
-const PdfRow = memo(function PdfRow({
+const UnlockedPdfRow = memo(function UnlockedPdfRow({
   item,
   isOpening,
   anyOpening,
@@ -78,50 +80,36 @@ const PdfRow = memo(function PdfRow({
   onOpen,
   onToggleSave,
 }) {
-  const pdfId = String(item?._id || '');
-  const title = item?.title || item?.fileName || 'Untitled PDF';
-  const size = formatFileSize(item?.fileSize);
-
+  const pdfId = String(item?._id || item?.pdfId || '');
   useDevRenderTrace(
-    'PdfListItem',
+    'UnlockedPdfRow',
     () => ({ pdfId, isOpening, anyOpening, isSaved, isSaving }),
     { logEvery: 20, slowRenderMs: 10, logFirstRender: false }
   );
-  useDevItemMountCounter('PdfListItem', pdfId, { logEvery: 20 });
+  useDevItemMountCounter('UnlockedPdfRow', pdfId, { logEvery: 20 });
 
   return (
-    <View style={styles.pdfCard}>
-      <Pressable
+    <View style={styles.unlockedWrap}>
+      <PremiumPdfCard
+        title={item?.title || item?.fileName || 'Untitled PDF'}
+        subtitle={item?.postTitle || ''}
+        pages={item?.pages}
+        fileSize={item?.fileSize}
+        createdAt={item?.createdAt}
+        locked={false}
+        isOpening={isOpening}
         onPress={() => onOpen(item)}
-        disabled={anyOpening}
-        style={({ pressed }) => [
-          styles.pdfMainArea,
-          pressCardStyle(pressed, anyOpening),
-          anyOpening && styles.btnDisabled,
-        ]}
-      >
-        <View style={styles.pdfIconWrap}>
-          <Text style={styles.pdfIcon}>PDF</Text>
-        </View>
-        <View style={styles.pdfTextBlock}>
-          <Text style={styles.pdfTitle} numberOfLines={2}>
-            {title}
-          </Text>
-          <Text style={styles.pdfMeta} numberOfLines={1}>
-            {size ? `${size} • ` : ''}Tap to open
-          </Text>
-        </View>
-        <Text style={styles.chevron}>{isOpening ? '…' : '›'}</Text>
-      </Pressable>
+      />
       <Pressable
         onPress={() => onToggleSave(item)}
         hitSlop={8}
-        disabled={isSaving}
+        disabled={isSaving || anyOpening}
         style={({ pressed }) => [
           styles.saveBtn,
           pressFeedbackStyle(pressed),
           isSaving && styles.btnDisabled,
         ]}
+        accessibilityLabel={isSaved ? 'Remove bookmark' : 'Save PDF'}
       >
         <Ionicons
           name={isSaved ? 'bookmark' : 'bookmark-outline'}
@@ -135,18 +123,7 @@ const PdfRow = memo(function PdfRow({
 
 /**
  * Browse study PDFs scoped by Post.
- *
- * Flow:
- *   1. Load posts → let the user pick one (or accept the `postId` passed
- *      via route params, when we came here from an "X Notes" button).
- *   2. Whenever the selected post changes, fetch `/notes/pdfs?postId=…`.
- *   3. Tap a PDF → open `signedUrl` (short-lived) in an in-app browser via
- *      `WebBrowser.openBrowserAsync`. On Android this uses a Chrome
- *      Custom Tab, on iOS an SFSafariViewController — both render PDFs
- *      inline and keep the user inside our app (the browser sheet
- *      slides over, not replaces, the app). This avoids the native
- *      module churn `react-native-pdf` would demand (prebuild + dev
- *      client + loss of Expo Go support).
+ * Free users see locked discovery cards; premium users open signed URLs.
  */
 export default function PdfListScreen() {
   const route = useRoute();
@@ -154,7 +131,8 @@ export default function PdfListScreen() {
   const { user } = useAuth();
   const initialPostId = route?.params?.postId || null;
   const initialPostsCache = getCachedPostsSnapshot();
-  const showPremiumUpsell = !userHasPremiumAccess(user);
+  const isPremium = userHasPremiumAccess(user);
+  const showPremiumUpsell = !isPremium;
 
   const [posts, setPosts] = useState(() => initialPostsCache?.posts ?? []);
   const [selectedPostId, setSelectedPostId] = useState(initialPostId);
@@ -165,15 +143,20 @@ export default function PdfListScreen() {
   const [pdfs, setPdfs] = useState([]);
   const [pdfsLoading, setPdfsLoading] = useState(false);
   const [pdfsError, setPdfsError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [openingId, setOpeningId] = useState(null);
   const [savedPdfIds, setSavedPdfIds] = useState(() =>
     buildSavedPdfIdSet(getSavedMaterialsSnapshot())
   );
   const [savingId, setSavingId] = useState(null);
+  const [upgradeVisible, setUpgradeVisible] = useState(false);
+  const [upgradeSource, setUpgradeSource] = useState('card');
+
   const postsLoadRef = useRef(null);
   const pdfsLoadRef = useRef(null);
   const pdfOpenLockRef = useRef(false);
+  const searchTrackTimer = useRef(null);
 
   useDevRenderTrace(
     'PdfListScreen',
@@ -185,6 +168,7 @@ export default function PdfListScreen() {
       pdfsLoading,
       openingId,
       savingId,
+      isPremium,
     }),
     { logEvery: 6, slowRenderMs: 18 }
   );
@@ -197,6 +181,23 @@ export default function PdfListScreen() {
     }),
     { slowMountMs: 45 }
   );
+
+  const openUpgrade = useCallback((source = 'card') => {
+    setUpgradeSource(source);
+    setUpgradeVisible(true);
+    trackPremiumPdfEvent('premium_pdf_dialog_opened', { source });
+  }, []);
+
+  const closeUpgrade = useCallback(() => {
+    setUpgradeVisible(false);
+    trackPremiumPdfEvent('premium_pdf_dialog_closed', { source: upgradeSource });
+  }, [upgradeSource]);
+
+  const goUpgrade = useCallback(() => {
+    trackPremiumPdfEvent('premium_pdf_upgrade_clicked', { source: upgradeSource });
+    setUpgradeVisible(false);
+    navigation.navigate('Premium', { from: 'pdf' });
+  }, [navigation, upgradeSource]);
 
   // ---- Posts -------------------------------------------------------------
 
@@ -215,8 +216,6 @@ export default function PdfListScreen() {
       if (postsLoadRef.current !== ac) return;
       const list = Array.isArray(data?.posts) ? data.posts : [];
       setPosts(list);
-      // Auto-select the first post the first time we see them so the
-      // screen isn't empty on mount. Route params win if present.
       setSelectedPostId((prev) => {
         if (prev) return prev;
         return list[0]?._id || null;
@@ -245,19 +244,10 @@ export default function PdfListScreen() {
   // ---- PDFs --------------------------------------------------------------
 
   const loadPdfs = useCallback(async () => {
-    // A post must be picked before we can list. This is guarded by the
-    // UI, but we no-op defensively if called without one.
     if (!selectedPostId) {
       pdfsLoadRef.current?.abort();
       pdfsLoadRef.current = null;
       setPdfs([]);
-      return;
-    }
-    if (!userHasPremiumAccess(user)) {
-      pdfsLoadRef.current?.abort();
-      pdfsLoadRef.current = null;
-      setPdfs([]);
-      setPdfsError(null);
       return;
     }
     pdfsLoadRef.current?.abort();
@@ -266,7 +256,10 @@ export default function PdfListScreen() {
     setPdfsError(null);
     setPdfsLoading(true);
     try {
-      const data = await getPdfNotes(selectedPostId, { signal: ac.signal });
+      const data = await getPdfNotes(selectedPostId, {
+        signal: ac.signal,
+        cacheTier: userHasPremiumAccess(user) ? 'premium' : 'discovery',
+      });
       if (pdfsLoadRef.current !== ac) return;
       setPdfs(Array.isArray(data?.pdfs) ? data.pdfs : []);
     } catch (e) {
@@ -309,8 +302,7 @@ export default function PdfListScreen() {
             reason: 'pdf_focus',
           });
           if (ac.signal.aborted) return;
-          const next = buildSavedPdfIdSet(data);
-          setSavedPdfIds(next);
+          setSavedPdfIds(buildSavedPdfIdSet(data));
         } catch (e) {
           if (ac.signal.aborted || isRequestCancelled(e)) return;
           if (!cached) {
@@ -327,86 +319,109 @@ export default function PdfListScreen() {
 
   // ---- Actions -----------------------------------------------------------
 
-  /**
-   * Open the PDF inside the app using `expo-web-browser`. On Android
-   * this materialises as a Chrome Custom Tab, on iOS as an
-   * SFSafariViewController — both render Cloudinary-hosted PDFs
-   * directly, keep the user "inside" our app, and return control here
-   * when the sheet is dismissed.
-   *
-   * The toolbar colours are wired to our brand so the sheet doesn't
-   * look like a foreign window. `presentationStyle: 'pageSheet'` is an
-   * iOS-only hint that gives the modal rounded top corners on iOS 13+;
-   * it's ignored on Android.
-   */
-  const handleOpenPdf = useCallback(async (pdf) => {
-    if (isGlobalOpening(openingId) || !tryAcquireLock(pdfOpenLockRef)) return;
-    const id = pdf?._id;
-    if (!id) {
-      releaseLockAfter(pdfOpenLockRef, 0);
-      Alert.alert('Cannot open', 'This PDF has no valid link.');
-      return;
-    }
-    const browserOpts = {
-      toolbarColor: colors.primary,
-      controlsColor: colors.textOnPrimary,
-      enableBarCollapsing: true,
-      showTitle: true,
-      dismissButtonStyle: 'close',
-      presentationStyle:
-        WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
-    };
-    if (__DEV__) {
-      logger.debug('PDF open:', { _id: pdf?._id, fileName: pdf?.fileName });
-    }
-    setOpeningId(id);
-    try {
-      try {
-        await showBeforePdf({ user });
-      } catch (_) {
-        /* ads must never block PDF open */
+  const handleOpenPdf = useCallback(
+    async (pdf) => {
+      if (isPdfLocked(pdf) || !userHasPremiumAccess(user)) {
+        trackPremiumPdfEvent('premium_pdf_locked_open_attempt', {
+          hasId: !!(pdf?._id || pdf?.pdfId),
+        });
+        trackPremiumPdfEvent('premium_pdf_card_clicked', { locked: true });
+        openUpgrade('locked_open');
+        return;
       }
-      await openPdfInAppBrowser(pdf, browserOpts, {
-        pdfId: String(id || ''),
-        onRefreshed: (signedUrl) => {
-          setPdfs((prev) =>
-            prev.map((p) => (String(p._id) === String(id) ? { ...p, signedUrl } : p))
-          );
-        },
-      });
-    } catch (err) {
-      Alert.alert('Could not open PDF', getPdfOpenUserMessage(err));
-    } finally {
-      setOpeningId(null);
-      releaseLockAfter(pdfOpenLockRef, PDF_OPEN_LOCK_MS);
-    }
-  }, [openingId, user]);
+      if (isGlobalOpening(openingId) || !tryAcquireLock(pdfOpenLockRef)) return;
+      const id = pdf?._id || pdf?.pdfId;
+      if (!id) {
+        releaseLockAfter(pdfOpenLockRef, 0);
+        Alert.alert('Cannot open', 'This PDF has no valid link.');
+        return;
+      }
+      trackPremiumPdfEvent('premium_pdf_card_clicked', { locked: false });
+      const browserOpts = {
+        toolbarColor: colors.primary,
+        controlsColor: colors.textOnPrimary,
+        enableBarCollapsing: true,
+        showTitle: true,
+        dismissButtonStyle: 'close',
+        presentationStyle:
+          WebBrowser.WebBrowserPresentationStyle?.PAGE_SHEET ?? 'pageSheet',
+      };
+      if (__DEV__) {
+        logger.debug('PDF open:', { _id: id, fileName: pdf?.fileName });
+      }
+      setOpeningId(id);
+      try {
+        try {
+          await showBeforePdf({ user });
+        } catch (_) {
+          /* ads must never block PDF open */
+        }
+        await openPdfInAppBrowser(pdf, browserOpts, {
+          pdfId: String(id || ''),
+          onRefreshed: (signedUrl) => {
+            setPdfs((prev) =>
+              prev.map((p) =>
+                String(p._id || p.pdfId) === String(id) ? { ...p, signedUrl, locked: false } : p
+              )
+            );
+          },
+        });
+      } catch (err) {
+        Alert.alert('Could not open PDF', getPdfOpenUserMessage(err));
+      } finally {
+        setOpeningId(null);
+        releaseLockAfter(pdfOpenLockRef, PDF_OPEN_LOCK_MS);
+      }
+    },
+    [openingId, user, openUpgrade]
+  );
 
-  const handleToggleSave = useCallback(async (pdf) => {
-    const pdfId = String(pdf?._id || '').trim();
-    if (!pdfId) return;
-    if (!userHasPremiumAccess(user)) {
-      Alert.alert(SAVE_ALERT_TITLE, SAVE_ALERT_MESSAGE, [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'See plans', onPress: () => navigation.navigate('Premium', { from: 'saved-materials' }) },
-      ]);
-      return;
-    }
-    setSavingId(pdfId);
-    try {
-      const result = await toggleSavedMaterial({ materialType: 'pdf', pdfId });
-      setSavedPdfIds((prev) => {
-        const next = new Set(prev);
-        if (result?.saved) next.add(pdfId);
-        else next.delete(pdfId);
-        return next;
-      });
-    } catch (e) {
-      Alert.alert('Could not update saved materials', getApiErrorMessage(e) || PREMIUM_SAVE_MESSAGE);
-    } finally {
-      setSavingId(null);
-    }
-  }, [navigation, user]);
+  const handleToggleSave = useCallback(
+    async (pdf) => {
+      const pdfId = String(pdf?._id || pdf?.pdfId || '').trim();
+      if (!pdfId) return;
+      if (!userHasPremiumAccess(user) || isPdfLocked(pdf)) {
+        openUpgrade('save');
+        return;
+      }
+      setSavingId(pdfId);
+      try {
+        const result = await toggleSavedMaterial({ materialType: 'pdf', pdfId });
+        setSavedPdfIds((prev) => {
+          const next = new Set(prev);
+          if (result?.saved) next.add(pdfId);
+          else next.delete(pdfId);
+          return next;
+        });
+      } catch (e) {
+        Alert.alert(
+          'Could not update saved materials',
+          getApiErrorMessage(e) || PREMIUM_SAVE_MESSAGE
+        );
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [user, openUpgrade]
+  );
+
+  const onChangeSearch = useCallback((text) => {
+    setSearchQuery(text);
+    if (searchTrackTimer.current) clearTimeout(searchTrackTimer.current);
+    searchTrackTimer.current = setTimeout(() => {
+      const q = String(text || '').trim();
+      if (q.length >= 2) {
+        trackPremiumPdfEvent('premium_pdf_search', { qLen: q.length });
+      }
+    }, 450);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (searchTrackTimer.current) clearTimeout(searchTrackTimer.current);
+    },
+    []
+  );
 
   // ---- Render helpers ----------------------------------------------------
 
@@ -414,6 +429,20 @@ export default function PdfListScreen() {
     () => posts.filter((p) => p?.isActive !== false),
     [posts]
   );
+
+  const filteredPdfs = useMemo(() => {
+    const q = String(searchQuery || '')
+      .trim()
+      .toLowerCase();
+    if (!q) return pdfs;
+    return pdfs.filter((p) => {
+      const hay = [p?.title, p?.fileName, p?.postTitle]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [pdfs, searchQuery]);
 
   const renderPostChips = useCallback(() => {
     if (postsLoading) {
@@ -471,11 +500,30 @@ export default function PdfListScreen() {
   const renderPdf = useCallback(
     ({ item }) => {
       const anyOpening = isGlobalOpening(openingId);
-      const pdfId = String(item?._id || '');
+      const pdfId = String(item?._id || item?.pdfId || '');
+      const locked = isPdfLocked(item) || !isPremium;
+
+      if (locked) {
+        return (
+          <PremiumPdfCard
+            title={item?.title || item?.fileName || 'Untitled PDF'}
+            subtitle={item?.postTitle || ''}
+            pages={item?.pages}
+            fileSize={item?.fileSize}
+            createdAt={item?.createdAt}
+            locked
+            onUnlockPress={() => {
+              trackPremiumPdfEvent('premium_pdf_card_clicked', { locked: true });
+              openUpgrade('card');
+            }}
+          />
+        );
+      }
+
       return (
-        <PdfRow
+        <UnlockedPdfRow
           item={item}
-          isOpening={anyOpening && String(openingId) === String(item?._id)}
+          isOpening={anyOpening && String(openingId) === pdfId}
           anyOpening={anyOpening}
           isSaved={savedPdfIds.has(pdfId)}
           isSaving={savingId != null && String(savingId) === pdfId}
@@ -484,10 +532,30 @@ export default function PdfListScreen() {
         />
       );
     },
-    [openingId, savedPdfIds, savingId, handleOpenPdf, handleToggleSave]
+    [
+      openingId,
+      savedPdfIds,
+      savingId,
+      handleOpenPdf,
+      handleToggleSave,
+      isPremium,
+      openUpgrade,
+    ]
   );
 
-  const keyExtractor = useCallback((item, idx) => String(item?._id ?? idx), []);
+  const keyExtractor = useCallback(
+    (item, idx) => String(item?._id ?? item?.pdfId ?? idx),
+    []
+  );
+
+  const statsLabel = useMemo(() => {
+    const n = filteredPdfs.length;
+    if (!selectedPostId || pdfsLoading || pdfsError) return null;
+    if (isPremium) {
+      return n === 1 ? '1 Note Available' : `${n} Notes Available`;
+    }
+    return n === 1 ? '1 Premium Note Available' : `${n} Premium Notes Available`;
+  }, [filteredPdfs.length, selectedPostId, pdfsLoading, pdfsError, isPremium]);
 
   const listHeader = useMemo(
     () => (
@@ -497,15 +565,59 @@ export default function PdfListScreen() {
             title={PDF_UPSELL_TITLE}
             subtitle={PDF_UPSELL_SUB}
             icon="document-text-outline"
-            onPress={() => navigation.navigate('Premium', { from: 'pdf' })}
+            onPress={() => {
+              trackPremiumPdfEvent('premium_pdf_upgrade_clicked', { source: 'upsell' });
+              openUpgrade('upsell');
+            }}
           />
         ) : null}
+
+        <View style={styles.statsBlock}>
+          <Text style={styles.statsTitle}>PDF Notes</Text>
+          {statsLabel ? <Text style={styles.statsCount}>{statsLabel}</Text> : null}
+          {showPremiumUpsell ? (
+            <Text style={styles.statsLibrary}>Premium Library</Text>
+          ) : null}
+        </View>
+
         <Text style={styles.sectionTitle}>Post</Text>
         {renderPostChips()}
-        <Text style={[styles.sectionTitle, styles.pdfSectionTitle]}>PDF Notes</Text>
+
+        <View style={styles.searchWrap}>
+          <Ionicons name="search-outline" size={18} color={colors.muted} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={onChangeSearch}
+            placeholder="Search PDFs"
+            placeholderTextColor={colors.muted}
+            style={styles.searchInput}
+            autoCorrect={false}
+            autoCapitalize="none"
+            clearButtonMode="while-editing"
+            returnKeyType="search"
+          />
+          {searchQuery ? (
+            <Pressable
+              onPress={() => onChangeSearch('')}
+              hitSlop={8}
+              accessibilityLabel="Clear search"
+            >
+              <Ionicons name="close-circle" size={18} color={colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <Text style={[styles.sectionTitle, styles.pdfSectionTitle]}>Results</Text>
       </>
     ),
-    [showPremiumUpsell, navigation, renderPostChips]
+    [
+      showPremiumUpsell,
+      statsLabel,
+      renderPostChips,
+      searchQuery,
+      onChangeSearch,
+      openUpgrade,
+    ]
   );
 
   const listEmpty = useMemo(() => {
@@ -530,42 +642,83 @@ export default function PdfListScreen() {
         </View>
       );
     }
+    if (searchQuery.trim() && pdfs.length > 0) {
+      return (
+        <View style={styles.card}>
+          <EmptyState
+            compact
+            title="No matching PDFs"
+            subtitle="Try another search term or post filter."
+            glyph="filter"
+          />
+        </View>
+      );
+    }
     return (
       <View style={styles.card}>
         <EmptyState compact {...EMPTY.PDF_NONE} />
       </View>
     );
-  }, [selectedPostId, pdfsLoading, pdfsError, loadPdfs]);
+  }, [selectedPostId, pdfsLoading, pdfsError, loadPdfs, searchQuery, pdfs.length]);
 
   const visiblePdfs = useMemo(
-    () => (selectedPostId && !pdfsLoading && !pdfsError ? pdfs : []),
-    [selectedPostId, pdfsLoading, pdfsError, pdfs]
+    () => (selectedPostId && !pdfsLoading && !pdfsError ? filteredPdfs : []),
+    [selectedPostId, pdfsLoading, pdfsError, filteredPdfs]
   );
 
   return (
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      data={visiblePdfs}
-      keyExtractor={keyExtractor}
-      renderItem={renderPdf}
-      ItemSeparatorComponent={PdfSeparator}
-      ListHeaderComponent={listHeader}
-      ListEmptyComponent={listEmpty}
-      initialNumToRender={8}
-      maxToRenderPerBatch={8}
-      updateCellsBatchingPeriod={50}
-      windowSize={7}
-      removeClippedSubviews={Platform.OS === 'android'}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    />
+    <>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        data={visiblePdfs}
+        keyExtractor={keyExtractor}
+        renderItem={renderPdf}
+        ItemSeparatorComponent={PdfSeparator}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === 'android'}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      />
+      <PremiumPdfUpgradeModal
+        visible={upgradeVisible}
+        onClose={closeUpgrade}
+        onUpgrade={goUpgrade}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, paddingBottom: 32 },
+
+  statsBlock: {
+    marginBottom: 16,
+  },
+  statsTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  statsCount: {
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primaryText,
+  },
+  statsLibrary: {
+    marginTop: 2,
+    fontSize: 13,
+    color: colors.accent,
+    fontWeight: '600',
+  },
 
   sectionTitle: {
     fontSize: 14,
@@ -575,9 +728,27 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  pdfSectionTitle: { marginTop: 20 },
+  pdfSectionTitle: { marginTop: 16 },
 
-  // ---- Post chips ----
+  searchWrap: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 4,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    paddingVertical: 6,
+  },
+
   chipsRow: {
     flexDirection: 'row',
     paddingBottom: 4,
@@ -604,7 +775,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
 
-  // ---- PDF list ----
   card: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -612,41 +782,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  listContent: { paddingBottom: 4 },
-  pdfCard: {
+  unlockedWrap: {
     position: 'relative',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  pdfMainArea: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    paddingRight: 44,
-  },
-  pdfIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  pdfIcon: { fontSize: 11, fontWeight: '800', color: colors.primary, letterSpacing: 0.6 },
-  pdfTextBlock: { flex: 1 },
-  pdfTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
-  pdfMeta: { fontSize: 12, color: colors.muted, marginTop: 3 },
-  chevron: { fontSize: 22, color: colors.muted, marginLeft: 8 },
   saveBtn: {
     position: 'absolute',
     top: 10,
     right: 10,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
@@ -654,6 +799,5 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     zIndex: 2,
   },
-
   btnDisabled: { opacity: 0.6 },
 });

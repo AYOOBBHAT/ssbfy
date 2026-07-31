@@ -21,6 +21,8 @@ import {
   useDevRenderTrace,
 } from '../utils/renderPerfDevLog';
 import { ENABLE_NOTES } from '../config/featureFlags';
+import { useAuth } from '../context/AuthContext';
+import { showBeforePdf } from '../services/ads/interstitialOrchestrator';
 
 const TABS = {
   PDF: 'pdf',
@@ -132,6 +134,7 @@ const SavedNoteRow = memo(function SavedNoteRow({
 
 export default function SavedMaterialsScreen() {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(TABS.PDF);
   const [loading, setLoading] = useState(() => !getSavedMaterialsSnapshot());
   const [error, setError] = useState(null);
@@ -171,6 +174,11 @@ export default function SavedMaterialsScreen() {
       return;
     }
     try {
+      try {
+        await showBeforePdf({ user });
+      } catch (_) {
+        /* ads must never block PDF open */
+      }
       await openPdfInAppBrowser(item, {
         toolbarColor: colors.primary,
         controlsColor: colors.textOnPrimary,
@@ -180,7 +188,7 @@ export default function SavedMaterialsScreen() {
     } catch (e) {
       Alert.alert('Could not open PDF', getPdfOpenUserMessage(e));
     }
-  }, []);
+  }, [user]);
 
   const openSavedNote = useCallback((item) => {
     const note = {

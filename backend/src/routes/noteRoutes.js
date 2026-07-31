@@ -33,8 +33,9 @@ router.get(
   pdfNoteController.signedUrl
 );
 
-// Premium or admin only; anonymous callers get 401. Admins may pass
-// `includeInactive=true` for the management UI.
+// Auth required. Free users get locked metadata (discovery); premium/admin
+// get signedUrl. Admins may pass `includeInactive=true` for the management UI.
+// Opening remains premium-gated via GET /pdfs/:id/signed-url.
 router.get(
   '/pdfs',
   authenticate,

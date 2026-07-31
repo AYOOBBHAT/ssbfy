@@ -207,9 +207,10 @@ const pdfNotesCache = new Map();
 const pdfNotesInFlight = new Map();
 const pdfListBgScheduled = new Set();
 
-function pdfListCacheKey(postId) {
+function pdfListCacheKey(postId, cacheTier = 'premium') {
   const id = resolveMongoId(postId, 'postId');
-  return id ? `p:${id}` : 'all';
+  const tier = cacheTier === 'discovery' ? 'discovery' : 'premium';
+  return id ? `p:${id}:${tier}` : `all:${tier}`;
 }
 
 export function clearPdfCaches() {
@@ -250,14 +251,23 @@ function schedulePdfListSwrRefresh(postId, key) {
  * returns every active PDF, which is what we want for the "All posts"
  * browse view.
  *
- * Returns `{ pdfs: [...] }`. Each item includes `signedUrl` (short-lived),
- * `pdfId`, `title`, `postTitle`, `createdAt`, and metadata — not a permanent public URL.
+ * Returns `{ pdfs: [...] }`. Each item includes metadata. Premium responses
+ * include short-lived `signedUrl` and `locked: false`. Discovery (free)
+ * responses set `locked: true` and omit `signedUrl`.
  *
  * @param {string|null|undefined} postId
- * @param {{ force?: boolean, swr?: boolean, signal?: AbortSignal }} [opts] — `swr` (default true) refreshes stale cache in background. With `signal`, skips in-flight dedupe so the request can be cancelled cleanly.
+ * @param {{
+ *   force?: boolean,
+ *   swr?: boolean,
+ *   signal?: AbortSignal,
+ *   cacheTier?: 'premium' | 'discovery',
+ * }} [opts]
  */
-export async function getPdfNotes(postId, { force = false, swr = true, signal } = {}) {
-  const key = pdfListCacheKey(postId);
+export async function getPdfNotes(
+  postId,
+  { force = false, swr = true, signal, cacheTier = 'premium' } = {}
+) {
+  const key = pdfListCacheKey(postId, cacheTier);
   const params = {};
   const post = resolveMongoId(postId, 'postId');
   if (post) params.postId = post;
@@ -299,6 +309,15 @@ export async function getPdfNotes(postId, { force = false, swr = true, signal } 
   } finally {
     pdfNotesInFlight.delete(key);
   }
+}
+
+/** True when a list/open row must not be opened (free discovery). */
+export function isPdfLocked(pdf) {
+  if (!pdf || typeof pdf !== 'object') return true;
+  if (pdf.locked === true) return true;
+  if (pdf.locked === false) return false;
+  // Legacy premium payloads omit `locked` but include signedUrl.
+  return !pdf.signedUrl;
 }
 
 /** Dedupe concurrent resign API calls per PDF id. */
@@ -448,7 +467,7 @@ async function preflightSignedPdfUrlOnce(url) {
 
 /** User-safe open errors (never echo storage XML). */
 export class PdfOpenError extends Error {
-  /** @param {'MISSING'|'EXPIRED'|'OFFLINE'|'TIMEOUT'|'SERVER'|'BROWSER'|'UNKNOWN'} code */
+  /** @param {'MISSING'|'EXPIRED'|'OFFLINE'|'TIMEOUT'|'SERVER'|'BROWSER'|'PREMIUM'|'UNKNOWN'} code */
   constructor(code, message) {
     super(message);
     this.name = 'PdfOpenError';
@@ -492,7 +511,12 @@ function pdfOpenErrorFromPreflight(pre) {
 
 /** Map any thrown value to a short user string (for Alert). */
 export function getPdfOpenUserMessage(error) {
-  if (error instanceof PdfOpenError) return error.message;
+  if (error instanceof PdfOpenError) {
+    if (error.code === 'PREMIUM') {
+      return error.message || 'Premium is required to open this PDF.';
+    }
+    return error.message;
+  }
   if (isOfflineError(error)) {
     return 'You appear to be offline. Check your connection and try again.';
   }
@@ -516,6 +540,9 @@ export function getPdfOpenUserMessage(error) {
  * @param {{ pdfId?: string, onRefreshed?: (signedUrl: string) => void }} [opts]
  */
 export async function openPdfInAppBrowser(pdf, browserOptions, opts = {}) {
+  if (isPdfLocked(pdf) && !opts.allowLocked) {
+    throw new PdfOpenError('PREMIUM', 'Premium is required to open this PDF.');
+  }
   const pdfId =
     resolveMongoId(opts.pdfId, 'pdfId') ??
     resolveMongoId(pdf?._id, 'pdfId') ??

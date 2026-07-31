@@ -34,10 +34,13 @@ import {
   formatFileSize,
   getPdfNotes,
   getPdfOpenUserMessage,
+  isPdfLocked,
   openPdfInAppBrowser,
 } from '../services/pdfService';
 import { getApiErrorCode, getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { ENABLE_NOTES } from '../config/featureFlags';
+import { showBeforePdf } from '../services/ads/interstitialOrchestrator';
+import { userHasPremiumAccess } from '../utils/premiumAccess';
 import {
   computeRetryListsFromResult,
   isQuestionDocRetryable as isQuestionRetryable,
@@ -1650,7 +1653,10 @@ export default function ResultScreen() {
           // lacked postIds in a legacy record). Treat that as "no pdfs"
           // rather than fetching every pdf in the catalog.
           recommendedPostId
-            ? getPdfNotes(recommendedPostId, { signal: ac.signal })
+            ? getPdfNotes(recommendedPostId, {
+                signal: ac.signal,
+                cacheTier: userHasPremiumAccess(user) ? 'premium' : 'discovery',
+              })
             : Promise.resolve({ pdfs: [] }),
         ]);
 
@@ -1701,7 +1707,7 @@ export default function ResultScreen() {
     return () => {
       ac.abort();
     };
-  }, [deepDeferredReady, recommendedPostId, resultIdentityKey, weakTopicIds]);
+  }, [deepDeferredReady, recommendedPostId, resultIdentityKey, weakTopicIds, user]);
 
   const handleOpenNote = (note) => {
     if (!note) return;
@@ -1715,10 +1721,19 @@ export default function ResultScreen() {
    */
   const handleOpenPdf = async (pdf) => {
     if (isGlobalOpening(openingPdfId)) return;
+    if (isPdfLocked(pdf) || !userHasPremiumAccess(user)) {
+      navigation.navigate('Premium', { from: 'pdf' });
+      return;
+    }
     const id = resolveMongoId(pdf?._id ?? pdf?.pdfId, 'pdfId');
     if (!id) return;
     setOpeningPdfId(id);
     try {
+      try {
+        await showBeforePdf({ user });
+      } catch (_) {
+        /* ads must never block PDF open */
+      }
       await openPdfInAppBrowser(pdf, {
         toolbarColor: colors.primary,
         controlsColor: colors.textOnPrimary,

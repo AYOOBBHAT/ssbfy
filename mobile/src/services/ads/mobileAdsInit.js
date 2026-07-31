@@ -4,12 +4,25 @@
  */
 
 import logger from '../../utils/logger';
+import { monitoringBreadcrumb } from '../../monitoring/sentry';
 import { getGoogleMobileAdsModule, isGoogleMobileAdsNativeAvailable } from './adsNative';
 import { ensureAdsConsentResolved, isAdsConsentReady } from './adsConsentGate';
+import { shouldUseProductionAdUnits } from '../../config/admob';
 
 let initPromise = null;
 let initialized = false;
 let initFailed = false;
+
+function trackInit(event, data = {}) {
+  try {
+    monitoringBreadcrumb('ads_interstitial', event, data);
+  } catch {
+    /* ignore */
+  }
+  if (__DEV__) {
+    logger.debug(`[ads] ${event}`, data);
+  }
+}
 
 export function isMobileAdsInitialized() {
   return initialized;
@@ -32,20 +45,27 @@ export async function initializeMobileAds() {
     try {
       if (!isGoogleMobileAdsNativeAvailable()) {
         initFailed = true;
-        if (__DEV__) logger.debug('[ads] init skipped — native unavailable');
+        trackInit('interstitial_sdk_init_failed', {
+          reason: 'native_unavailable',
+          usingProductionUnits: shouldUseProductionAdUnits(),
+        });
         return false;
       }
 
       const consent = await ensureAdsConsentResolved();
       if (consent === 'blocked') {
         initFailed = true;
-        if (__DEV__) logger.debug('[ads] init skipped — consent blocked');
+        trackInit('interstitial_consent_blocked', { phase: 'sdk_init' });
         return false;
       }
 
       const ads = getGoogleMobileAdsModule();
       if (!ads?.default) {
         initFailed = true;
+        trackInit('interstitial_sdk_init_failed', {
+          reason: 'module_missing',
+          usingProductionUnits: shouldUseProductionAdUnits(),
+        });
         return false;
       }
 
@@ -74,11 +94,11 @@ export async function initializeMobileAds() {
       return true;
     } catch (e) {
       initFailed = true;
-      if (__DEV__) {
-        logger.warn('[ads] initialize failed', {
-          message: e?.message ? String(e.message).slice(0, 120) : 'unknown',
-        });
-      }
+      trackInit('interstitial_sdk_init_failed', {
+        code: e?.code ?? null,
+        message: e?.message ? String(e.message).slice(0, 120) : 'unknown',
+        usingProductionUnits: shouldUseProductionAdUnits(),
+      });
       return false;
     } finally {
       // Keep promise so concurrent callers share the same attempt;
