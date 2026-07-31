@@ -35,7 +35,7 @@
           ]
         }
       ],
-      "versionCode": 32,
+      "versionCode": 33,
       "permissions": [
         "com.google.android.gms.permission.AD_ID"
       ],
