@@ -17,7 +17,7 @@ import { joinBattle, previewBattleInvite } from '../services/battleService';
 import { battleAccent, formatBattleRulesSummary } from '../theme/setupPresentation';
 import { colors } from '../theme/colors';
 import { setupPresentationDevLog } from '../utils/setupPresentationDevLog';
-import { tryAcquireLock } from '../utils/navigationGuard';
+import { NAV_TRANSITION_LOCK_MS, releaseLockAfter, tryAcquireLock } from '../utils/navigationGuard';
 import { pressCardStyle } from '../utils/pressFeedback';
 
 function BattleCodeInput({ value, onChangeText, onBlur, editable = true }) {
@@ -110,6 +110,7 @@ export default function BattleJoinScreen() {
       if (!isRequestCancelled(e)) setError(getApiErrorMessage(e));
     } finally {
       setJoining(false);
+      releaseLockAfter(lockRef, NAV_TRANSITION_LOCK_MS);
     }
   }, [code, navigation]);
 

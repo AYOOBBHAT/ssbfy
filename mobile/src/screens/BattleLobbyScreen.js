@@ -9,7 +9,7 @@ import BattleFramingBanner from '../components/battle/BattleFramingBanner';
 import { colors } from '../theme/colors';
 import { battleAccent, formatBattleTimerLabel } from '../theme/setupPresentation';
 import { setupPresentationDevLog } from '../utils/setupPresentationDevLog';
-import { NAV_TRANSITION_LOCK_MS, tryAcquireLock } from '../utils/navigationGuard';
+import { NAV_TRANSITION_LOCK_MS, releaseLockAfter, tryAcquireLock } from '../utils/navigationGuard';
 import { pressCardStyle } from '../utils/pressFeedback';
 import { MAIN_TABS } from '../navigation/testFlowNavigation';
 import { battleHistoryDevLog } from '../utils/battleHistoryDevLog';
@@ -139,6 +139,7 @@ export default function BattleLobbyScreen() {
       if (!isRequestCancelled(e)) setError(getApiErrorMessage(e));
     } finally {
       setStarting(false);
+      releaseLockAfter(startLockRef, NAV_TRANSITION_LOCK_MS);
     }
   }, [battleId, battle, myAttemptDone, navigation]);
 

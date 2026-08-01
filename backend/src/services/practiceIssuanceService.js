@@ -41,7 +41,7 @@ export const practiceIssuanceService = {
    * @param {string} userId
    * @param {string} practiceType
    * @param {import('mongoose').Types.ObjectId[]} orderedQuestionIds
-   * @param {{ sourceAttemptId?: string|null, allowInactiveScoring?: boolean, battleSessionId?: string|null }} [opts]
+   * @param {{ sourceAttemptId?: string|null, allowInactiveScoring?: boolean, battleSessionId?: string|null, issuanceId?: string|null }} [opts]
    */
   async createIssuance(userId, practiceType, orderedQuestionIds, opts = {}) {
     const type = normalizePracticeType(practiceType);
@@ -68,7 +68,12 @@ export const practiceIssuanceService = {
       ? orderedQuestionIds
       : toOidArray(orderedQuestionIds);
 
-    const doc = await practiceIssuanceRepository.create({
+    const predeterminedId =
+      opts.issuanceId && mongoose.Types.ObjectId.isValid(String(opts.issuanceId))
+        ? new mongoose.Types.ObjectId(String(opts.issuanceId))
+        : null;
+
+    const payload = {
       userId: new mongoose.Types.ObjectId(String(userId)),
       practiceType: type,
       questionIds: oids,
@@ -80,9 +85,24 @@ export const practiceIssuanceService = {
         : null,
       allowInactiveScoring: Boolean(opts.allowInactiveScoring),
       expiresAt: expiresAtFromNow(),
-    });
+    };
+    if (predeterminedId) {
+      payload._id = predeterminedId;
+    }
 
-    return doc;
+    try {
+      return await practiceIssuanceRepository.create(payload);
+    } catch (err) {
+      // Concurrent ensure with the same predetermined _id — return the winner's doc.
+      if (predeterminedId && err?.code === 11000) {
+        const existing = await practiceIssuanceRepository.findByIdForUser(
+          predeterminedId,
+          userId
+        );
+        if (existing) return existing;
+      }
+      throw err;
+    }
   },
 
   /**

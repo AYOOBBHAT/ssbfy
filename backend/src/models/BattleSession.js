@@ -1,6 +1,39 @@
 import mongoose from 'mongoose';
 import { BATTLE_STATUSES, BATTLE_TIMER_MODES } from '../constants/battle.js';
 
+/** Frozen copy of a Question at battle creation — gameplay + scoring. */
+const battleQuestionSnapshotSchema = new mongoose.Schema(
+  {
+    questionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Question',
+      required: true,
+    },
+    questionText: { type: String, required: true },
+    options: [{ type: String, required: true }],
+    questionType: { type: String, default: 'single_correct' },
+    questionImage: { type: String, default: '' },
+    correctAnswers: { type: [Number], default: [] },
+    correctAnswerIndex: { type: Number, default: null, min: 0 },
+    correctAnswerValue: { type: String, default: '' },
+    explanation: { type: String, default: '' },
+    subjectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subject',
+      required: true,
+    },
+    topicId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Topic',
+      required: true,
+    },
+    postIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Post' }],
+    difficulty: { type: String, default: 'medium' },
+    year: { type: Number, default: null },
+  },
+  { _id: false }
+);
+
 const battleSessionSchema = new mongoose.Schema(
   {
     inviteCode: {
@@ -44,6 +77,14 @@ const battleSessionSchema = new mongoose.Schema(
     questionIds: [
       { type: mongoose.Schema.Types.ObjectId, ref: 'Question', required: true },
     ],
+    /**
+     * Immutable question payloads frozen at creation.
+     * Absent / empty on legacy battles — those fall back to live questionIds.
+     */
+    questionSnapshots: {
+      type: [battleQuestionSnapshotSchema],
+      default: undefined,
+    },
     questionCount: { type: Number, required: true, min: 1 },
     timerMode: {
       type: String,

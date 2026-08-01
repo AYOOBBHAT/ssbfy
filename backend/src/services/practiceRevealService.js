@@ -10,6 +10,8 @@ import { getCanonicalTopicResolver } from './canonicalTopicResolver.js';
 import { scoreQuestionSession } from '../utils/questionScoring.js';
 import { practiceIssuanceRepository } from '../repositories/practiceIssuanceRepository.js';
 import { battleService } from './battleService.js';
+import { battleSessionRepository } from '../repositories/battleSessionRepository.js';
+import { questionsFromBattleSnapshots } from '../utils/battleQuestionSnapshot.js';
 import { logSecurityEvent } from '../utils/logger.js';
 
 const PRACTICE_REVEAL_MAX_QUESTIONS = 50;
@@ -287,18 +289,27 @@ export const practiceRevealService = {
 
     const userAnswersByQid = buildUserAnswersByQid(body?.userAnswers, questionIds);
 
-    const useInactiveAwareFetch = issuance.allowInactiveScoring === true;
-    const questions = useInactiveAwareFetch
-      ? await questionRepository.findByIdsForScoring(questionIds)
-      : await questionRepository.findActiveByIds(questionIds);
+    let questions = null;
+    if (issuedType === 'battle' && issuance.battleSessionId) {
+      const battle = await battleSessionRepository.findById(issuance.battleSessionId);
+      questions = questionsFromBattleSnapshots(battle, questionIds);
+    }
+
+    if (!questions) {
+      const useInactiveAwareFetch = issuance.allowInactiveScoring === true;
+      questions = useInactiveAwareFetch
+        ? await questionRepository.findByIdsForScoring(questionIds)
+        : await questionRepository.findActiveByIds(questionIds);
+    }
 
     const qMap = new Map(questions.map((q) => [q._id.toString(), q]));
     const missing = questionIds.filter((id) => !qMap.has(id.toString()));
     if (missing.length > 0) {
       logSecurityEvent('practice_reveal_questions_unavailable', {
         userIdSuffix: String(userId).slice(-8),
-        inactiveAware: useInactiveAwareFetch,
+        inactiveAware: issuance.allowInactiveScoring === true,
         missingCount: missing.length,
+        battleSnapshot: issuedType === 'battle',
       });
       throw new AppError(
         'Some questions are no longer available for review. Start a new practice session.',

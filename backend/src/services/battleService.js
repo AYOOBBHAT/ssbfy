@@ -24,8 +24,14 @@ import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { practiceIssuanceService } from './practiceIssuanceService.js';
+import { practiceIssuanceRepository } from '../repositories/practiceIssuanceRepository.js';
 import { projectPublicQuestions } from './questionService.js';
 import { learningSessionRepository } from '../repositories/learningSessionRepository.js';
+import {
+  buildBattleQuestionSnapshots,
+  questionsFromBattleSnapshots,
+} from '../utils/battleQuestionSnapshot.js';
+import { INITIAL_BATTLE_STATUS } from '../utils/battleStateMachine.js';
 
 const INVITE_MAX_ATTEMPTS = 12;
 
@@ -77,6 +83,21 @@ function roleForUser(battle, userId) {
   if (String(battle.creatorUserId) === uid) return 'creator';
   if (battle.opponentUserId && String(battle.opponentUserId) === uid) return 'opponent';
   return null;
+}
+
+/**
+ * Public questions for battle start / create responses.
+ * Prefers frozen snapshots; legacy battles fall back to live Question reads.
+ */
+async function loadBattlePlayQuestions(battle, orderedIds) {
+  const fromSnap = questionsFromBattleSnapshots(battle, orderedIds);
+  if (fromSnap) {
+    return projectPublicQuestions(fromSnap);
+  }
+  const live = await questionRepository.findActiveByIds(
+    orderedIds.map((id) => String(id))
+  );
+  return projectPublicQuestions(live);
 }
 
 /**
@@ -266,6 +287,7 @@ export const battleService = {
     }
 
     const questionIds = raw.map((q) => q._id);
+    const questionSnapshots = buildBattleQuestionSnapshots(raw);
 
     let inviteCode = null;
     let battle = null;
@@ -275,11 +297,12 @@ export const battleService = {
         battle = await battleSessionRepository.create({
           inviteCode,
           creatorUserId: new mongoose.Types.ObjectId(String(userId)),
-          status: 'waiting',
+          status: INITIAL_BATTLE_STATUS,
           subjectId: new mongoose.Types.ObjectId(subjectId),
           topicId: new mongoose.Types.ObjectId(topicId),
           difficulty: difficulty || 'all',
           questionIds,
+          questionSnapshots,
           questionCount,
           timerMode,
           timerSeconds: timerMode === 'none' ? null : timerSeconds,
@@ -417,7 +440,6 @@ export const battleService = {
 
     const attemptField = role === 'creator' ? 'creatorAttemptId' : 'opponentAttemptId';
     const issuanceField = role === 'creator' ? 'creatorIssuanceId' : 'opponentIssuanceId';
-    const startedField = role === 'creator' ? 'creatorStartedAt' : 'opponentStartedAt';
 
     if (battle[attemptField]) {
       throw new AppError('You already completed this battle', HTTP_STATUS.CONFLICT, null, {
@@ -425,49 +447,89 @@ export const battleService = {
       });
     }
 
-    if (battle[issuanceField]) {
-      const existingId = String(battle[issuanceField]);
-      const questions = await questionRepository.findActiveByIds(
-        (battle.questionIds || []).map((id) => String(id))
-      );
-      return {
-        practiceSessionId: existingId,
-        questions: projectPublicQuestions(questions),
-        battle: toPublicBattle(battle, userId, { includeQuestionIds: true }),
-      };
-    }
-
     const orderedIds = (battle.questionIds || []).map((id) =>
       id instanceof mongoose.Types.ObjectId ? id : new mongoose.Types.ObjectId(String(id))
     );
 
+    const respondWithExistingIssuance = async (battleDoc) => {
+      const existingId = battleDoc[issuanceField];
+      let issuance = await practiceIssuanceRepository.findByIdForUser(existingId, userId);
+      if (!issuance) {
+        // Claim won but create not visible yet (or interrupted) — ensure same _id.
+        issuance = await practiceIssuanceService.createIssuance(userId, 'battle', orderedIds, {
+          battleSessionId: String(battleDoc._id),
+          issuanceId: String(existingId),
+        });
+      }
+      const questions = await loadBattlePlayQuestions(battleDoc, orderedIds);
+      const payload = {
+        practiceSessionId: String(existingId),
+        questions,
+        battle: toPublicBattle(battleDoc, userId, { includeQuestionIds: true }),
+      };
+      if (issuance?.expiresAt) {
+        payload.expiresAt = issuance.expiresAt;
+      }
+      return payload;
+    };
+
+    if (battle[issuanceField]) {
+      return respondWithExistingIssuance(battle);
+    }
+
+    // Claim first with a predetermined id so only one concurrent start creates an issuance.
+    const issuanceId = new mongoose.Types.ObjectId();
+    const claimed = await battleSessionRepository.claimSideStart(battle._id, {
+      role,
+      issuanceId,
+      startedAt: new Date(),
+      userId,
+    });
+
+    if (!claimed) {
+      const latest = await battleSessionRepository.findById(battleId);
+      if (!latest) {
+        throw new AppError('Battle not found', HTTP_STATUS.NOT_FOUND);
+      }
+      if (latest[attemptField]) {
+        throw new AppError('You already completed this battle', HTTP_STATUS.CONFLICT, null, {
+          code: 'BATTLE_ALREADY_PLAYED',
+        });
+      }
+      if (latest.status === 'completed') {
+        throw new AppError('This battle is finished', HTTP_STATUS.CONFLICT, null, {
+          code: 'BATTLE_ALREADY_COMPLETED',
+        });
+      }
+      if (latest[issuanceField]) {
+        return respondWithExistingIssuance(latest);
+      }
+      const expired = await battleSessionRepository.markExpiredIfNeeded(latest);
+      assertBattleNotExpired(expired);
+      throw new AppError('Unable to start battle', HTTP_STATUS.CONFLICT, null, {
+        code: 'BATTLE_START_CONFLICT',
+      });
+    }
+
     const issuance = await practiceIssuanceService.createIssuance(userId, 'battle', orderedIds, {
       battleSessionId: String(battle._id),
+      issuanceId: String(issuanceId),
     });
 
-    const now = new Date();
-    await battleSessionRepository.updateById(battle._id, {
-      [issuanceField]: issuance._id,
-      [startedField]: now,
-      status: battle.status === 'waiting' ? 'active' : battle.status,
-    });
-
-    const questions = await questionRepository.findActiveByIds(
-      orderedIds.map((id) => String(id))
-    );
-
-    const refreshed = await battleSessionRepository.findById(battleId);
+    const questions = await loadBattlePlayQuestions(claimed, orderedIds);
 
     return {
       practiceSessionId: String(issuance._id),
       expiresAt: issuance.expiresAt,
-      questions: projectPublicQuestions(questions),
-      battle: toPublicBattle(refreshed, userId, { includeQuestionIds: true }),
+      questions,
+      battle: toPublicBattle(claimed, userId, { includeQuestionIds: true }),
     };
   },
 
   /**
    * Called from practiceRevealService after a battle reveal finalizes.
+   * Side scores are written atomically; winner/completion is a single
+   * conditional update so concurrent reveals cannot double-complete.
    */
   async onRevealComplete({
     userId,
@@ -483,6 +545,13 @@ export const battleService = {
     let battle = await battleSessionRepository.findById(battleSessionId);
     if (!battle) return null;
 
+    if (battle.status === 'completed') {
+      return {
+        battle: toPublicBattle(battle, userId),
+        winnerUserId: battle.winnerUserId ? String(battle.winnerUserId) : null,
+      };
+    }
+
     const role = roleForUser(battle, userId);
     if (!role) {
       logSecurityEvent('battle_reveal_wrong_user', {
@@ -492,9 +561,6 @@ export const battleService = {
     }
 
     const attemptField = role === 'creator' ? 'creatorAttemptId' : 'opponentAttemptId';
-    const scoreField = role === 'creator' ? 'creatorScore' : 'opponentScore';
-    const wrongField = role === 'creator' ? 'creatorIncorrect' : 'opponentIncorrect';
-    const timeField = role === 'creator' ? 'creatorTimeTakenMs' : 'opponentTimeTakenMs';
     const startedField = role === 'creator' ? 'creatorStartedAt' : 'opponentStartedAt';
 
     if (battle[attemptField] && String(battle[attemptField]) !== String(learningSessionId)) {
@@ -514,42 +580,68 @@ export const battleService = {
     const score = Number(summary?.score) || 0;
     const incorrect = Number(summary?.incorrect) || 0;
 
-    const patch = {
-      [attemptField]: new mongoose.Types.ObjectId(String(learningSessionId)),
-      [scoreField]: score,
-      [wrongField]: incorrect,
-      [timeField]: timeTakenMs,
-    };
+    battle = await battleSessionRepository.recordSideReveal(battle._id, {
+      role,
+      learningSessionId,
+      score,
+      incorrect,
+      timeTakenMs,
+      userId,
+    });
 
-    const creatorComplete =
-      role === 'creator' ? true : Boolean(battle.creatorAttemptId);
-    const opponentComplete =
-      role === 'opponent' ? true : Boolean(battle.opponentAttemptId);
+    if (!battle) {
+      // Lost to completion/expiry, or conflicting attempt — return latest.
+      battle = await battleSessionRepository.findById(battleSessionId);
+      if (!battle) return null;
+      return {
+        battle: toPublicBattle(battle, userId),
+        winnerUserId: battle.winnerUserId ? String(battle.winnerUserId) : null,
+      };
+    }
 
-    if (battle.opponentUserId && creatorComplete && opponentComplete) {
+    if (battle.status === 'completed') {
+      return {
+        battle: toPublicBattle(battle, userId),
+        winnerUserId: battle.winnerUserId ? String(battle.winnerUserId) : null,
+      };
+    }
+
+    const bothSidesDone =
+      Boolean(battle.opponentUserId) &&
+      Boolean(battle.creatorAttemptId) &&
+      Boolean(battle.opponentAttemptId);
+
+    if (bothSidesDone) {
       const creatorStats = {
         userId: String(battle.creatorUserId),
         completed: true,
-        score: role === 'creator' ? score : battle.creatorScore,
-        timeTakenMs: role === 'creator' ? timeTakenMs : battle.creatorTimeTakenMs,
-        incorrect: role === 'creator' ? incorrect : battle.creatorIncorrect,
+        score: battle.creatorScore,
+        timeTakenMs: battle.creatorTimeTakenMs,
+        incorrect: battle.creatorIncorrect,
       };
       const opponentStats = {
         userId: String(battle.opponentUserId),
         completed: true,
-        score: role === 'opponent' ? score : battle.opponentScore,
-        timeTakenMs: role === 'opponent' ? timeTakenMs : battle.opponentTimeTakenMs,
-        incorrect: role === 'opponent' ? incorrect : battle.opponentIncorrect,
+        score: battle.opponentScore,
+        timeTakenMs: battle.opponentTimeTakenMs,
+        incorrect: battle.opponentIncorrect,
       };
 
       const winnerId = computeBattleWinner(creatorStats, opponentStats);
-      patch.winnerUserId = winnerId ? new mongoose.Types.ObjectId(winnerId) : null;
-      patch.status = 'completed';
-    } else if (battle.status === 'waiting') {
-      patch.status = 'active';
-    }
+      const completed = await battleSessionRepository.tryMarkCompleted(
+        battle._id,
+        winnerId,
+        { userId }
+      );
 
-    battle = await battleSessionRepository.updateById(battle._id, patch);
+      if (completed) {
+        battle = completed;
+      } else {
+        // Another reveal already completed the battle — never overwrite.
+        battle = await battleSessionRepository.findById(battleSessionId);
+        if (!battle) return null;
+      }
+    }
 
     return {
       battle: toPublicBattle(battle, userId),

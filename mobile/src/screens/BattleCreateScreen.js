@@ -17,7 +17,7 @@ import { SETUP_MODE, battleSetupSections } from '../theme/setupPresentation';
 import { setupPresentationDevLog } from '../utils/setupPresentationDevLog';
 import { LoadingState, EmptyState } from '../components/StateView';
 import { colors } from '../theme/colors';
-import { NAV_TRANSITION_LOCK_MS, tryAcquireLock } from '../utils/navigationGuard';
+import { NAV_TRANSITION_LOCK_MS, releaseLockAfter, tryAcquireLock } from '../utils/navigationGuard';
 import { resolveTopicId } from '../utils/topicRef';
 import { resolveMongoId } from '../utils/mongoId';
 import { userHasPremiumAccess } from '../utils/premiumAccess';
@@ -171,6 +171,7 @@ export default function BattleCreateScreen() {
       }
     } finally {
       setCreating(false);
+      releaseLockAfter(startLockRef, NAV_TRANSITION_LOCK_MS);
     }
   }, [
     canStart,
