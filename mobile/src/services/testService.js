@@ -10,6 +10,8 @@ import { getDeviceId } from '../utils/deviceId.js';
 import { getActiveCacheUserId } from '../utils/authScopedCache.js';
 import { focusRefetchDevLog } from '../utils/focusRefetchDevLog.js';
 import { getCacheAgeMs, isCacheFresh } from '../utils/requestFreshness.js';
+import { sanitizePersonalRankPayload } from '../utils/mockPersonalRank';
+import { buildGetTestsParams } from '../utils/previousYearPapers';
 
 export const MOCK_QUOTA_STALE_AFTER_MS = 60 * 1000;
 export const MY_TEST_STATUS_STALE_AFTER_MS = 90 * 1000;
@@ -138,10 +140,21 @@ export function invalidateMyTestStatusCache(reason = 'manual') {
   focusRefetchDevLog('test_status_invalidate', { reason });
 }
 
-/** @returns {Promise<{ tests: object[] }>} */
+/**
+ * Catalog discovery.
+ * Default (no `kind`) remains mock tests. Pass `kind: 'previous_year'` for PYQs.
+ * Optional `postId` / `year` apply only to previous-year discovery.
+ *
+ * @returns {Promise<{ tests: object[] }>}
+ */
 export async function getTests(opts = {}) {
-  const { signal } = opts;
-  const { data } = await api.get('/tests', { signal });
+  const { signal, kind, postId, year } = opts;
+  const params = buildGetTestsParams({ kind, postId, year });
+  const config = { signal };
+  if (Object.keys(params).length > 0) {
+    config.params = params;
+  }
+  const { data } = await api.get('/tests', config);
   return data?.data ?? { tests: [] };
 }
 
@@ -194,6 +207,20 @@ export async function getTestAttempts(testId, opts = {}) {
   const { signal } = opts;
   const { data } = await api.get(`/tests/${id}/attempts`, { signal });
   return data?.data ?? { attempts: [] };
+}
+
+/**
+ * Personal standing for the current user on one mock (no other users returned).
+ * @returns {Promise<{ testId: string, rank: number, totalParticipants: number, percentile: number|null, score: number, attemptId: string }|null>}
+ */
+export async function getTestRank(testId, opts = {}) {
+  const id = resolveMongoId(testId, 'testId');
+  if (!id) return null;
+  const { signal } = opts;
+  const { data } = await api.get(`/tests/${id}/rank`, { signal });
+  const payload = data?.data ?? null;
+  if (!payload || typeof payload !== 'object') return null;
+  return sanitizePersonalRankPayload(payload);
 }
 
 /** @returns {Promise<{ status: Record<string, {hasOpenAttempt:boolean, hasCompletedAttempt:boolean, canRetry:boolean}> }>} */

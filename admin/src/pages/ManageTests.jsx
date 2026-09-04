@@ -28,6 +28,26 @@ const TYPE_LABELS = {
   mixed: 'Mixed',
 };
 
+const KIND_MOCK = 'mock';
+const KIND_PYQ = 'previous_year';
+
+const KIND_LABELS = {
+  [KIND_MOCK]: 'Mock Test',
+  [KIND_PYQ]: 'Previous Year Paper',
+};
+
+function examLabel(test) {
+  const post = test?.postId;
+  if (post && typeof post === 'object' && (post.name || post.slug)) {
+    return post.name || post.slug;
+  }
+  return '—';
+}
+
+function testKind(test) {
+  return test?.kind === KIND_PYQ ? KIND_PYQ : KIND_MOCK;
+}
+
 /**
  * Manage mock tests — soft disable only (no hard delete).
  *
@@ -42,6 +62,7 @@ export default function ManageTests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [kindFilter, setKindFilter] = useState('all');
   const [togglingId, setTogglingId] = useState(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -66,18 +87,23 @@ export default function ManageTests() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    if (statusFilter === 'all') return tests;
-    return tests.filter((t) => (t.status || 'active') === statusFilter);
-  }, [tests, statusFilter]);
+    return tests.filter((t) => {
+      if (statusFilter !== 'all' && (t.status || 'active') !== statusFilter) return false;
+      if (kindFilter !== 'all' && testKind(t) !== kindFilter) return false;
+      return true;
+    });
+  }, [tests, statusFilter, kindFilter]);
 
   const requestToggle = (test, nextStatus) => {
     const title = test?.title || 'Untitled test';
+    const pyq = testKind(test) === KIND_PYQ;
+    const noun = pyq ? 'previous year paper' : 'mock test';
     if (nextStatus === 'disabled') {
       setConfirm({
         test,
         nextStatus,
-        title: 'Disable mock test?',
-        body: `Disable "${title}"? It will be hidden from new students starting this mock. Existing attempts and historical reviews will remain accessible. Users with an in-progress attempt can still finish.`,
+        title: pyq ? 'Disable previous year paper?' : 'Disable mock test?',
+        body: `Disable "${title}"? It will be hidden from new students starting this ${noun}. Existing attempts and historical reviews will remain accessible. Users with an in-progress attempt can still finish.`,
         danger: true,
       });
       return;
@@ -85,7 +111,7 @@ export default function ManageTests() {
     setConfirm({
       test,
       nextStatus,
-      title: 'Enable mock test?',
+      title: pyq ? 'Enable previous year paper?' : 'Enable mock test?',
       body: `Re-enable "${title}" for new attempts?`,
       danger: false,
     });
@@ -116,7 +142,8 @@ export default function ManageTests() {
         <div>
           <h1 className="page-title">Manage Tests</h1>
           <p className="page-subtitle">
-            Soft-disable mock tests without deleting attempts, scores, or historical reviews.
+            Soft-disable mock tests and previous year papers without deleting attempts, scores, or
+            historical reviews.
           </p>
         </div>
         <Link to="/create-test" className="btn btn-primary">
@@ -142,6 +169,19 @@ export default function ManageTests() {
             <option value="disabled">Disabled</option>
           </select>
         </label>
+        <label className="field-inline">
+          <span className="field-label">Type</span>
+          <select
+            className="input"
+            value={kindFilter}
+            onChange={(e) => setKindFilter(e.target.value)}
+            disabled={loading}
+          >
+            <option value="all">All</option>
+            <option value={KIND_MOCK}>Mock Tests</option>
+            <option value={KIND_PYQ}>Previous Year Papers</option>
+          </select>
+        </label>
         <button type="button" className="btn btn-secondary" onClick={load} disabled={loading}>
           Refresh
         </button>
@@ -159,10 +199,12 @@ export default function ManageTests() {
             <thead>
               <tr>
                 <th>Title</th>
-                <th>Type</th>
+                <th>Exam / Post</th>
+                <th>Year</th>
                 <th>Questions</th>
                 <th>Duration</th>
                 <th>Status</th>
+                <th>Type</th>
                 <th>Updated</th>
                 <th aria-label="Actions" />
               </tr>
@@ -173,6 +215,8 @@ export default function ManageTests() {
                 const active = (t.status || 'active') === 'active';
                 const qCount = Array.isArray(t.questionIds) ? t.questionIds.length : 0;
                 const busy = togglingId === id;
+                const kind = testKind(t);
+                const year = kind === KIND_PYQ && t.year != null ? t.year : '—';
                 return (
                   <tr key={id}>
                     <td>
@@ -180,8 +224,12 @@ export default function ManageTests() {
                       {qCount === 0 ? (
                         <div className="cell-hint warn">No active questions</div>
                       ) : null}
+                      {TYPE_LABELS[t.type] ? (
+                        <div className="cell-hint">{TYPE_LABELS[t.type]}</div>
+                      ) : null}
                     </td>
-                    <td>{TYPE_LABELS[t.type] || t.type || '—'}</td>
+                    <td>{kind === KIND_PYQ ? examLabel(t) : '—'}</td>
+                    <td>{year}</td>
                     <td>{qCount}</td>
                     <td>{t.duration ? `${t.duration} min` : '—'}</td>
                     <td>
@@ -189,6 +237,7 @@ export default function ManageTests() {
                         {active ? 'Active' : 'Disabled'}
                       </span>
                     </td>
+                    <td>{KIND_LABELS[kind]}</td>
                     <td className="nowrap">{formatDate(t.disabledAt || t.updatedAt)}</td>
                     <td className="actions-cell">
                       <button

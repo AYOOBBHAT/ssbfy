@@ -10,11 +10,11 @@ import VerifyOtpScreen from '../screens/VerifyOtpScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import HomeScreen from '../screens/HomeScreen';
 import TestsListScreen from '../screens/TestsListScreen';
+import PreviousYearPapersScreen from '../screens/PreviousYearPapersScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import TestScreen from '../screens/TestScreen';
 import ResultScreen from '../screens/ResultScreen';
 import ReviewAnswersScreen from '../screens/ReviewAnswersScreen';
-import LeaderboardScreen from '../screens/LeaderboardScreen';
 import PdfListScreen from '../screens/PdfListScreen';
 import NotesListScreen from '../screens/NotesListScreen';
 import NoteDetailScreen from '../screens/NoteDetailScreen';
@@ -36,7 +36,7 @@ const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
 const PracticeStack = createNativeStackNavigator();
 const TestsStack = createNativeStackNavigator();
-const LeaderboardStack = createNativeStackNavigator();
+const PapersStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 
 const themedHeader = {
@@ -54,6 +54,11 @@ function HomeStackNavigator() {
         name="HomeMain"
         component={HomeScreen}
         options={{ title: brand.name }}
+      />
+      <HomeStack.Screen
+        name="PreviousYearPapers"
+        component={PreviousYearPapersScreen}
+        options={{ title: 'Previous Year Papers' }}
       />
     </HomeStack.Navigator>
   );
@@ -83,15 +88,15 @@ function TestsStackNavigator() {
   );
 }
 
-function LeaderboardStackNavigator() {
+function PapersStackNavigator() {
   return (
-    <LeaderboardStack.Navigator screenOptions={{ ...themedHeader }}>
-      <LeaderboardStack.Screen
-        name="LeaderboardMain"
-        component={LeaderboardScreen}
-        options={{ title: 'Leaderboard' }}
+    <PapersStack.Navigator screenOptions={{ ...themedHeader }}>
+      <PapersStack.Screen
+        name="PapersMain"
+        component={PreviousYearPapersScreen}
+        options={{ title: 'Previous Year Papers' }}
       />
-    </LeaderboardStack.Navigator>
+    </PapersStack.Navigator>
   );
 }
 
@@ -111,7 +116,7 @@ const tabIcons = {
   Home: 'home-outline',
   Practice: 'book-outline',
   Tests: 'clipboard-outline',
-  Leaderboard: 'trophy-outline',
+  Papers: 'document-text-outline',
   Profile: 'person-outline',
 };
 
@@ -166,9 +171,9 @@ function MainTabs() {
         options={{ tabBarLabel: 'Tests' }}
       />
       <Tab.Screen
-        name="Leaderboard"
-        component={LeaderboardStackNavigator}
-        options={{ tabBarLabel: 'Leaderboard' }}
+        name="Papers"
+        component={PapersStackNavigator}
+        options={{ tabBarLabel: 'Papers' }}
       />
       <Tab.Screen
         name="Profile"

@@ -24,6 +24,8 @@
     "backfill:attempt-snapshots:apply": "node scripts/backfill-attempt-result-snapshots.mjs --apply",
     "verify:practice-scoring": "node scripts/verify-practice-scoring.mjs",
     "verify:learning-analytics": "node scripts/verify-learning-analytics.mjs",
+    "verify:mock-test-rank": "node scripts/verify-mock-test-rank.mjs",
+    "verify:previous-year-papers": "node scripts/verify-previous-year-papers.mjs",
     "backfill:canonical-topics": "node scripts/backfill-canonical-topics.mjs"
   },
   "engines": {

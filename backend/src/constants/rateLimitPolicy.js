@@ -24,7 +24,7 @@
  *   - POST /payments/webhook (webhookLimiter, allowWithoutRedis when unset)
  *
  * Intentionally lighter / unscoped paths (no dedicated limiter mount here):
- *   - healthRoutes, /subjects, /topics, /leaderboard, /daily-practice, etc.
+ *   - healthRoutes, /subjects, /topics, /daily-practice, etc.
  */
 
 export const RateLimitSensitivity = {

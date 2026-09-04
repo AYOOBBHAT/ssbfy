@@ -118,8 +118,6 @@ export default function HomeScreen() {
   };
 
   const name = user?.name || 'there';
-  const streak = Number(user?.streakCount) || 0;
-  const streakLabel = streak === 1 ? 'day' : 'days';
   const greet = greetingForHour();
   const showPremiumBanner = !userHasPremiumAccess(user);
   const { quota, loading: quotaLoading, showQuota } = useMockQuota();
@@ -132,7 +130,6 @@ export default function HomeScreen() {
       showPremiumBanner,
       showQuota,
       quotaLoading,
-      streak,
     }),
     { logEvery: 6, slowRenderMs: 18 }
   );
@@ -163,36 +160,20 @@ export default function HomeScreen() {
       <View style={styles.heroCard}>
         <View style={styles.heroTop}>
           <View>
-            <Text style={styles.heroKicker}>Today&apos;s practice</Text>
-            <Text style={styles.heroTitle}>10 questions</Text>
-            <Text style={styles.heroSub}>Sharpen skills with a quick, focused drill.</Text>
+            <Text style={styles.heroTitle}>Previous Year Papers</Text>
+            <Text style={styles.heroSub}>
+              Practice with real previous-year questions
+            </Text>
           </View>
         </View>
-        <View style={styles.streakRow}>
-          <Ionicons name="trophy" size={18} color={colors.primaryDark} />
-          <Text style={styles.streakText}>
-            {streak === 0
-              ? "Start your streak — finish today's practice"
-              : `${streak} ${streakLabel} streak · keep the momentum`}
-          </Text>
-        </View>
-        {dailyError ? (
-          <View style={styles.inlineAlert}>
-            <Text style={styles.err}>{dailyError}</Text>
-          </View>
-        ) : null}
         <Pressable
-          onPress={handleStartDailyPractice}
-          disabled={dailyLoading}
-          style={({ pressed }) => [
-            styles.heroBtn,
-            pressFeedbackStyle(pressed, dailyLoading),
-          ]}
+          onPress={() => navigation.navigate('PreviousYearPapers')}
+          accessibilityRole="button"
+          accessibilityLabel="Explore previous year papers"
+          style={({ pressed }) => [styles.heroBtn, pressFeedbackStyle(pressed)]}
         >
-          <Ionicons name="play" size={18} color={colors.textOnPrimary} />
-          <Text style={styles.heroBtnText}>
-            {dailyLoading ? 'Starting…' : 'Start daily practice'}
-          </Text>
+          <Text style={styles.heroBtnText}>Explore Papers</Text>
+          <Ionicons name="arrow-forward" size={18} color={colors.textOnPrimary} />
         </Pressable>
       </View>
 
@@ -255,6 +236,31 @@ export default function HomeScreen() {
         </View>
         <Ionicons name="chevron-forward" size={22} color={colors.muted} />
       </Pressable>
+
+      <View style={styles.dailyCard}>
+        <View style={styles.linkIcon}>
+          <Ionicons name="sunny-outline" size={22} color={colors.primary} />
+        </View>
+        <View style={styles.linkBody}>
+          <Text style={styles.linkTitle}>Daily Practice</Text>
+          <Text style={styles.linkSub}>10 questions today</Text>
+          {dailyError ? <Text style={styles.err}>{dailyError}</Text> : null}
+        </View>
+        <Pressable
+          onPress={handleStartDailyPractice}
+          disabled={dailyLoading}
+          accessibilityRole="button"
+          accessibilityLabel={dailyLoading ? 'Starting daily practice' : 'Practice'}
+          style={({ pressed }) => [
+            styles.dailyBtn,
+            pressFeedbackStyle(pressed, dailyLoading),
+          ]}
+        >
+          <Text style={styles.dailyBtnText}>
+            {dailyLoading ? 'Starting…' : 'Practice'}
+          </Text>
+        </Pressable>
+      </View>
       {showQuota ? (
         <View style={styles.mockQuotaWrap}>
           <MockQuotaBanner quota={quota} loading={quotaLoading} />
@@ -344,14 +350,6 @@ const styles = StyleSheet.create({
   heroTop: {
     marginBottom: 16,
   },
-  heroKicker: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-  },
   heroTitle: {
     fontSize: 26,
     fontWeight: '800',
@@ -364,24 +362,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 20,
     maxWidth: '88%',
-  },
-  streakRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.bg,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  streakText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    flex: 1,
   },
   heroBtn: {
     flexDirection: 'row',
@@ -411,6 +391,37 @@ const styles = StyleSheet.create({
   mockQuotaWrap: {
     marginTop: -4,
     marginBottom: 20,
+  },
+  dailyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  dailyBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginLeft: 8,
+  },
+  dailyBtnText: {
+    color: colors.textOnPrimary,
+    fontSize: 14,
+    fontWeight: '700',
   },
   linkCard: {
     flexDirection: 'row',
@@ -497,6 +508,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  inlineAlert: { marginBottom: 12 },
-  err: { color: colors.danger, fontSize: 13, marginBottom: 4 },
+  err: { color: colors.danger, fontSize: 12, marginTop: 6 },
 });

@@ -347,6 +347,13 @@ select.input {
   user-select: none;
 }
 
+.kind-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 4px;
+}
+
 .option-letter {
   font-weight: 700;
   font-size: 13px;

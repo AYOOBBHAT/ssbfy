@@ -1,13 +1,23 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { TEST_TYPE } from '../constants/testType.js';
 import { TEST_STATUS, isTestDisabled } from '../constants/testStatus.js';
+import { TEST_KIND } from '../constants/testKind.js';
 import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
 import { AppError } from '../utils/AppError.js';
 import { testRepository } from '../repositories/testRepository.js';
 import { questionRepository } from '../repositories/questionRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
+import { postRepository } from '../repositories/postRepository.js';
+import { pdfNoteRepository } from '../repositories/pdfNoteRepository.js';
 import { logger } from '../utils/logger.js';
+import {
+  assembleTestCreateDocument,
+  applyStudentDiscoveryRules,
+  buildCreateKindFields,
+  buildTestDiscoveryMongoFilter,
+  withTestKindDefaults,
+} from '../utils/testKind.js';
 
 /**
  * Walk Question → (Subject, Topic) and split the provided id list into:
@@ -174,25 +184,30 @@ export const testService = {
    * - Mid-attempt disable → resume + submit succeed.
    * - Re-enable → new starts allowed again.
    */
-  async listForDiscovery(userId = null) {
-    const mapped = await mapTestsWithFilteredQuestions(await testRepository.findAll({}));
+  async listForDiscovery(userId = null, query = {}) {
+    const mongoFilter = buildTestDiscoveryMongoFilter(query);
+    const mapped = await mapTestsWithFilteredQuestions(await testRepository.findAll(mongoFilter));
     let openTestIds = new Set();
     if (userId) {
       const ids = await testAttemptRepository.distinctOpenTestIdsByUser(userId);
       openTestIds = new Set(ids.map(String));
     }
 
-    return mapped.filter((t) => {
-      const hasQuestions = (t.questionIds || []).length > 0;
-      if (!hasQuestions) return false;
-      if (!isTestDisabled(t)) return true;
-      return userId && openTestIds.has(String(t._id));
-    });
+    return applyStudentDiscoveryRules(mapped, {
+      userId,
+      openTestIds,
+      kind: query.kind,
+      postId: query.postId,
+      year: query.year,
+    }).map(withTestKindDefaults);
   },
 
   /** Admin catalog: all tests including disabled and empty question sets. */
   async listAdmin() {
-    return mapTestsWithFilteredQuestions(await testRepository.findAll({}));
+    const mapped = await mapTestsWithFilteredQuestions(
+      await testRepository.findAll({}, { populatePost: true })
+    );
+    return mapped.map(withTestKindDefaults);
   },
 
   /** @deprecated alias — use listForDiscovery */
@@ -206,7 +221,7 @@ export const testService = {
       throw new AppError('Test not found', HTTP_STATUS.NOT_FOUND);
     }
     const filtered = await withFilteredQuestionIds(test);
-    return { ...filtered, status: filtered.status || TEST_STATUS.ACTIVE };
+    return withTestKindDefaults({ ...filtered, status: filtered.status || TEST_STATUS.ACTIVE });
   },
 
   async assertAvailableForNewStart(testId) {
@@ -236,11 +251,12 @@ export const testService = {
       testId: String(id),
       status,
     });
-    return withFilteredQuestionIds(updated);
+    return withTestKindDefaults(await withFilteredQuestionIds(updated));
   },
 
   async create(data) {
     const { title, type: requestedType, questionIds, duration, negativeMarking } = data;
+    const kindFields = buildCreateKindFields(data);
 
     const uniqueIds = [...new Set(questionIds.map((id) => String(id)))];
     if (uniqueIds.length !== questionIds.length) {
@@ -272,6 +288,22 @@ export const testService = {
       );
     }
 
+    if (kindFields.kind === TEST_KIND.PREVIOUS_YEAR) {
+      const post = await postRepository.findById(kindFields.postId);
+      if (!post) {
+        throw new AppError('Post not found', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (post.isActive === false) {
+        throw new AppError('Post is inactive', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (kindFields.pdfNoteId) {
+        const pdf = await pdfNoteRepository.findById(kindFields.pdfNoteId);
+        if (!pdf) {
+          throw new AppError('PDF note not found', HTTP_STATUS.BAD_REQUEST);
+        }
+      }
+    }
+
     const inferred = await inferTestType(uniqueIds);
     const type =
       requestedType !== undefined &&
@@ -280,14 +312,18 @@ export const testService = {
         ? String(requestedType).trim()
         : inferred;
 
-    return testRepository.create({
-      title: title.trim(),
-      type,
-      questionIds: uniqueIds,
-      duration,
-      negativeMarking: negativeMarking ?? 0,
-      status: TEST_STATUS.ACTIVE,
-      disabledAt: null,
-    });
+    const created = await testRepository.create(
+      assembleTestCreateDocument({
+        title: title.trim(),
+        type,
+        questionIds: uniqueIds,
+        duration,
+        negativeMarking: negativeMarking ?? 0,
+        status: TEST_STATUS.ACTIVE,
+        disabledAt: null,
+        kindFields,
+      })
+    );
+    return withTestKindDefaults(created);
   },
 };

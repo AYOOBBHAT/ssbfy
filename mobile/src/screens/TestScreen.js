@@ -20,6 +20,7 @@ import { submitTest, saveTestProgress, getQuestionsByIds } from '../services/tes
 import { completeDailyPractice } from '../services/dailyPracticeService';
 import { pickUserAnswersForQuestions, revealPractice } from '../services/practiceService';
 import { filterValidMongoIds, resolveMongoId } from '../utils/mongoId.js';
+import { isPreviousYearPaperSession } from '../utils/previousYearPapers';
 import { buildResultParamsFromReveal } from '../utils/resultReviewPayload';
 import { putLearningSessionCache } from '../utils/learningSessionCache';
 import { incrementStandardMockCompletion } from '../services/ads/mockTestAdCounter';
@@ -65,6 +66,7 @@ import {
   MAIN_TABS,
   buildMainReturnRoute,
   consumeHardwareBackDuringTransition,
+  resolveTimedTestOriginMainTab,
 } from '../navigation/testFlowNavigation';
 import { clearTestSessionTimers } from '../utils/testSessionCleanup';
 import {
@@ -159,8 +161,9 @@ export default function TestScreen() {
     params.sourceAttemptId != null ? String(params.sourceAttemptId) : null;
   const practiceSessionId =
     params.practiceSessionId != null ? String(params.practiceSessionId) : null;
-  /** Tab to restore on leave/finish (Practice | Home | Profile). */
+  /** Tab to restore on leave/finish (Practice | Home | Tests | Papers | Profile). */
   const originMainTab = params.originMainTab || null;
+  const isPyqSession = isPreviousYearPaperSession({ kind: params.kind });
   const isLocal = isRetry || isPractice || isDaily || isBattle;
   const questionIds = isLocal
     ? (Array.isArray(params.questionIds) ? params.questionIds : [])
@@ -684,7 +687,12 @@ export default function TestScreen() {
           );
           return true;
         }
-        Alert.alert('Leave test?', 'Your progress is saved — you can resume later from Mock tests.', [
+        Alert.alert(
+          'Leave test?',
+          isPyqSession
+            ? 'Your progress is saved — you can resume later from Previous Year Papers.'
+            : 'Your progress is saved — you can resume later from Mock tests.',
+          [
           { text: 'Stay', style: 'cancel' },
           {
             text: 'Leave',
@@ -692,10 +700,10 @@ export default function TestScreen() {
             onPress: () => {
               void flushDraftSoon();
               void syncProgressToServer();
-              navigation.navigate('Main', {
-                screen: MAIN_TABS.TESTS,
-                params: { screen: 'TestsMain' },
-              });
+              const mainRoute = buildMainReturnRoute(
+                resolveTimedTestOriginMainTab(originMainTab)
+              );
+              navigation.navigate(mainRoute.name, mainRoute.params);
             },
           },
         ]);
@@ -707,6 +715,7 @@ export default function TestScreen() {
       isPractice,
       isDaily,
       originMainTab,
+      isPyqSession,
       navigation,
       transitionBackCtx,
       flushDraftSoon,
@@ -823,7 +832,7 @@ export default function TestScreen() {
           : undefined);
 
       const committed = resetStackToResult(navigation, {
-        originMainTab: MAIN_TABS.TESTS,
+        originMainTab: resolveTimedTestOriginMainTab(originMainTab),
         resultParams: {
           testId,
           score: payload.score ?? 0,
@@ -844,6 +853,7 @@ export default function TestScreen() {
           attemptId,
           mockAdCompletionKey,
           learningSessionId: undefined,
+          kind: params.kind,
         },
         commitRef: navigationCommittedRef,
       });
@@ -862,6 +872,8 @@ export default function TestScreen() {
       answers,
       skippedQuestionIds,
       markedForReviewIds,
+      originMainTab,
+      params.kind,
     ]
   );
 

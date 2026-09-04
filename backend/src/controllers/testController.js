@@ -2,6 +2,8 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { env } from '../config/env.js';
 import { testService } from '../services/testService.js';
 import { testAttemptService } from '../services/testAttemptService.js';
+import { testRankService } from '../services/testRankService.js';
+import { authenticatedUserIdFromRequest } from '../utils/mockTestRank.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { deviceUsageRepository } from '../repositories/deviceUsageRepository.js';
 import { testAttemptRepository } from '../repositories/testAttemptRepository.js';
@@ -14,7 +16,11 @@ import { logger } from '../utils/logger.js';
 export const testController = {
   list: asyncHandler(async (req, res) => {
     const userId = req.user?.id ?? null;
-    const tests = await testService.listForDiscovery(userId);
+    const tests = await testService.listForDiscovery(userId, {
+      kind: req.query.kind,
+      postId: req.query.postId,
+      year: req.query.year,
+    });
     return sendSuccess(res, { tests }, 'Tests');
   }),
 
@@ -114,6 +120,18 @@ export const testController = {
   attemptsHistory: asyncHandler(async (req, res) => {
     const attempts = await testAttemptService.listHistory(req.user.id, req.params.id);
     return sendSuccess(res, { attempts }, 'Test attempts');
+  }),
+
+  /**
+   * GET /tests/:id/rank — current user's personal standing for this mock.
+   * userId is taken only from the JWT (`req.user.id`). Query/body user ids are ignored.
+   */
+  getRank: asyncHandler(async (req, res) => {
+    const payload = await testRankService.getPersonalRank(
+      authenticatedUserIdFromRequest(req),
+      req.params.id
+    );
+    return sendSuccess(res, payload, 'Test rank');
   }),
 
   /**

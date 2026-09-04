@@ -5,6 +5,7 @@
  * - Practice → Finish → Result → Android back → Practice tab (not stale Test).
  * - Daily → Finish → Result → Android back → Home tab.
  * - Mock submit → Result → Android back / footer → Tests tab (not Home).
+ * - PYQ from Papers → Result / leave → Papers; PYQ from Home → Home.
  * - Spam Android back during “Finishing…” / Submitting → back consumed, single Result.
  * - Retry chain: Result → Test → Finish Retry → one Result; returnMainTab preserved.
  * - Finish while app backgrounds → no duplicate reset / orphaned Test (see testTransitionLifecycle.js).
@@ -20,6 +21,7 @@ export const MAIN_TABS = {
   PRACTICE: 'Practice',
   HOME: 'Home',
   TESTS: 'Tests',
+  PAPERS: 'Papers',
   PROFILE: 'Profile',
 };
 
@@ -27,8 +29,22 @@ const NESTED_MAIN = {
   [MAIN_TABS.PRACTICE]: 'PracticeMain',
   [MAIN_TABS.HOME]: 'HomeMain',
   [MAIN_TABS.TESTS]: 'TestsMain',
+  [MAIN_TABS.PAPERS]: 'PapersMain',
   [MAIN_TABS.PROFILE]: 'ProfileMain',
 };
+
+const VALID_ORIGIN_TABS = new Set(Object.values(MAIN_TABS));
+
+/**
+ * Timed Test/Result origin. Use a supplied tab when it is a real main tab;
+ * otherwise keep the historic mock fallback (Tests).
+ */
+export function resolveTimedTestOriginMainTab(originMainTab) {
+  if (typeof originMainTab === 'string' && VALID_ORIGIN_TABS.has(originMainTab)) {
+    return originMainTab;
+  }
+  return MAIN_TABS.TESTS;
+}
 
 /**
  * True while finish/submit/navigation-reset is in flight.
@@ -108,6 +124,9 @@ export function resolveResultBackTarget(params) {
   }
   if (tab === MAIN_TABS.TESTS) {
     return { label: 'Back to Tests', route: buildMainReturnRoute(MAIN_TABS.TESTS) };
+  }
+  if (tab === MAIN_TABS.PAPERS) {
+    return { label: 'Back to Papers', route: buildMainReturnRoute(MAIN_TABS.PAPERS) };
   }
   if (tab === MAIN_TABS.PROFILE || params?.viewingHistoricalAttempt || params?.historicalAttemptMode) {
     return { label: 'Back to Profile', route: buildMainReturnRoute(MAIN_TABS.PROFILE) };

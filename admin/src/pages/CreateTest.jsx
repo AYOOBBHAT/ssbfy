@@ -5,16 +5,26 @@ import {
   getSubjects,
   getTopics,
   getPosts,
+  getPdfNotes,
   getApiErrorMessage,
 } from '../services/api';
 
 const DIFFICULTIES = ['', 'easy', 'medium', 'hard'];
 const PAGE_SIZE = 30;
+const KIND_MOCK = 'mock';
+const KIND_PYQ = 'previous_year';
+const YEAR_MIN = 1900;
+const YEAR_MAX = 2100;
 
 const initialForm = {
+  kind: KIND_MOCK,
   title: '',
   duration: 30,
   negativeMarking: 0,
+  year: '',
+  postId: '',
+  description: '',
+  pdfNoteId: '',
 };
 
 function inferPreviewType(metaById) {
@@ -71,6 +81,8 @@ export default function CreateTest() {
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [pdfNotes, setPdfNotes] = useState([]);
+  const [loadingPdfs, setLoadingPdfs] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchText.trim()), 320);
@@ -101,6 +113,33 @@ export default function CreateTest() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (form.kind !== KIND_PYQ) {
+      setPdfNotes([]);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingPdfs(true);
+        const res = await getPdfNotes({
+          includeInactive: true,
+          ...(form.postId ? { postId: form.postId } : {}),
+        });
+        if (cancelled) return;
+        const list = Array.isArray(res) ? res : res?.pdfs || [];
+        setPdfNotes(list);
+      } catch {
+        if (!cancelled) setPdfNotes([]);
+      } finally {
+        if (!cancelled) setLoadingPdfs(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.kind, form.postId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,6 +383,13 @@ export default function CreateTest() {
     if (!Number.isFinite(neg) || neg < 0) {
       return 'Negative marking must be 0 or greater.';
     }
+    if (form.kind === KIND_PYQ) {
+      if (!form.postId) return 'Exam / Post is required for a previous year paper.';
+      const y = Number(form.year);
+      if (!Number.isInteger(y) || y < YEAR_MIN || y > YEAR_MAX) {
+        return `Year must be an integer between ${YEAR_MIN} and ${YEAR_MAX}.`;
+      }
+    }
     return null;
   }
 
@@ -360,17 +406,25 @@ export default function CreateTest() {
     }
 
     const payload = {
+      kind: form.kind === KIND_PYQ ? KIND_PYQ : KIND_MOCK,
       title: form.title.trim(),
       questionIds: Array.from(selected),
       duration: Number(form.duration),
       negativeMarking: Number(form.negativeMarking) || 0,
     };
+    if (payload.kind === KIND_PYQ) {
+      payload.year = Number(form.year);
+      payload.postId = form.postId;
+      if (form.description.trim()) payload.description = form.description.trim();
+      if (form.pdfNoteId) payload.pdfNoteId = form.pdfNoteId;
+    }
 
     try {
       setSubmitting(true);
       await createTest(payload);
+      const label = payload.kind === KIND_PYQ ? 'Previous year paper' : 'Test';
       setSuccessMsg(
-        `Test "${payload.title}" created with ${payload.questionIds.length} question(s).`
+        `${label} "${payload.title}" created with ${payload.questionIds.length} question(s).`
       );
       resetForm();
     } catch (err) {
@@ -378,6 +432,25 @@ export default function CreateTest() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function updateKind(kind) {
+    setForm((prev) => {
+      if (kind === KIND_PYQ) return { ...prev, kind };
+      return {
+        ...prev,
+        kind: KIND_MOCK,
+        year: '',
+        postId: '',
+        description: '',
+        pdfNoteId: '',
+      };
+    });
+  }
+
+  function onExamChange(postId) {
+    updateField('postId', postId);
+    onPostChange(postId);
   }
 
   function onPostChange(postId) {
@@ -401,14 +474,127 @@ export default function CreateTest() {
     <div>
       <h1 className="page-title">Create Test</h1>
       <p className="page-subtitle">
-        Subjects are global; filters narrow the question bank. Optional exam + “post tag” filter limits
-        to rows whose <code>postIds</code> include that exam. Test type is inferred on save.
+        Create a mock test or a previous year paper. Both use the same question picker and test
+        engine. Subjects are global; filters narrow the question bank. Optional exam + “post tag”
+        filter limits to rows whose <code>postIds</code> include that exam. Test type is inferred on
+        save.
       </p>
 
       <form className="form" onSubmit={handleSubmit}>
         <div className="card form">
           {successMsg ? <div className="alert alert-success">{successMsg}</div> : null}
           {errorMsg ? <div className="alert alert-error">{errorMsg}</div> : null}
+
+          <div className="form-row">
+            <span className="label">Test type *</span>
+            <div className="kind-choice">
+              <label className="radio-label">
+                <input
+                  type="radio"
+                  name="kind"
+                  value={KIND_MOCK}
+                  checked={form.kind !== KIND_PYQ}
+                  onChange={() => updateKind(KIND_MOCK)}
+                  disabled={submitting}
+                />
+                Mock Test
+              </label>
+              <label className="radio-label">
+                <input
+                  type="radio"
+                  name="kind"
+                  value={KIND_PYQ}
+                  checked={form.kind === KIND_PYQ}
+                  onChange={() => updateKind(KIND_PYQ)}
+                  disabled={submitting}
+                />
+                Previous Year Paper
+              </label>
+            </div>
+          </div>
+
+          {form.kind === KIND_PYQ ? (
+            <>
+              <div className="form-grid">
+                <div className="form-row">
+                  <label className="label" htmlFor="examPost">
+                    Exam / Post *
+                  </label>
+                  <select
+                    id="examPost"
+                    className="input"
+                    value={form.postId}
+                    onChange={(e) => onExamChange(e.target.value)}
+                    disabled={submitting || loadingPosts}
+                  >
+                    <option value="">
+                      {loadingPosts ? 'Loading posts…' : 'Select exam'}
+                    </option>
+                    {posts.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name || p.slug || p._id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-row">
+                  <label className="label" htmlFor="pyqYear">
+                    Year *
+                  </label>
+                  <input
+                    id="pyqYear"
+                    type="number"
+                    min={YEAR_MIN}
+                    max={YEAR_MAX}
+                    className="input"
+                    value={form.year}
+                    onChange={(e) => updateField('year', e.target.value)}
+                    placeholder="e.g. 2024"
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+              <div className="form-row">
+                <label className="label" htmlFor="description">
+                  Description (optional)
+                </label>
+                <textarea
+                  id="description"
+                  className="input"
+                  rows={3}
+                  value={form.description}
+                  onChange={(e) => updateField('description', e.target.value)}
+                  placeholder="Optional note about this paper"
+                  disabled={submitting}
+                />
+              </div>
+              <div className="form-row">
+                <label className="label" htmlFor="pdfNoteId">
+                  Source PDF (optional)
+                </label>
+                <select
+                  id="pdfNoteId"
+                  className="input"
+                  value={form.pdfNoteId}
+                  onChange={(e) => updateField('pdfNoteId', e.target.value)}
+                  disabled={submitting || loadingPdfs}
+                >
+                  <option value="">
+                    {loadingPdfs ? 'Loading PDFs…' : 'None'}
+                  </option>
+                  {pdfNotes.map((n) => (
+                    <option key={n._id} value={n._id}>
+                      {n.title || n.fileName || n._id}
+                    </option>
+                  ))}
+                </select>
+                <p className="helper">
+                  Supplementary only. Students attempt this as a test — the PDF is not required to
+                  play the paper.
+                </p>
+              </div>
+            </>
+          ) : null}
 
           <div className="form-row">
             <label className="label" htmlFor="title">
@@ -420,7 +606,11 @@ export default function CreateTest() {
               className="input"
               value={form.title}
               onChange={(e) => updateField('title', e.target.value)}
-              placeholder="e.g. JKSSB JE — Mock Test 1"
+              placeholder={
+                form.kind === KIND_PYQ
+                  ? 'e.g. JKSSB 2024 — Previous Year Paper'
+                  : 'e.g. JKSSB JE — Mock Test 1'
+              }
               disabled={submitting}
             />
           </div>
@@ -729,7 +919,11 @@ export default function CreateTest() {
             Reset
           </button>
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Creating…' : `Create test (${selected.size})`}
+            {submitting
+              ? 'Creating…'
+              : form.kind === KIND_PYQ
+                ? `Create previous year paper (${selected.size})`
+                : `Create test (${selected.size})`}
           </button>
         </div>
       </form>

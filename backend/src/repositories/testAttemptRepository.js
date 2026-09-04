@@ -279,4 +279,56 @@ export const testAttemptRepository = {
       .lean()
       .exec();
   },
+
+  /**
+   * Best completed attempt for one user+test (max score; earliest endTime on ties).
+   * Rank itself does not use time — this only picks which attemptId to return.
+   */
+  async findBestCompletedByUserAndTest(userId, testId) {
+    return TestAttempt.findOne({
+      userId,
+      testId,
+      endTime: { $ne: null },
+    })
+      .select('_id score')
+      .sort({ score: -1, endTime: 1 })
+      .lean()
+      .exec();
+  },
+
+  /**
+   * Personal-rank counts for one test. Mongo groups by userId; Node only
+   * receives two integers — never a list of users or scores.
+   *
+   * `betterCount` = distinct users whose max(score) is strictly greater than
+   * `bestScore` (accuracy and timeTaken are not part of this pipeline).
+   */
+  async aggregatePersonalRankStats(testId, bestScore) {
+    const testOid = new mongoose.Types.ObjectId(String(testId));
+    const scoreNum = Number(bestScore);
+    const rows = await TestAttempt.aggregate([
+      { $match: { testId: testOid, endTime: { $ne: null } } },
+      {
+        $group: {
+          _id: '$userId',
+          bestScore: { $max: '$score' },
+        },
+      },
+      {
+        $facet: {
+          total: [{ $count: 'n' }],
+          better: [
+            { $match: { bestScore: { $gt: scoreNum } } },
+            { $count: 'n' },
+          ],
+        },
+      },
+    ]).exec();
+
+    const facet = rows[0] || {};
+    return {
+      totalParticipants: Number(facet.total?.[0]?.n) || 0,
+      betterCount: Number(facet.better?.[0]?.n) || 0,
+    };
+  },
 };

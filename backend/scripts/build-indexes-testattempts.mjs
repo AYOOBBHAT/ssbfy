@@ -5,6 +5,7 @@
  * Indexes (must match `src/models/TestAttempt.js`):
  *   - idx_attempt_user_test_completed — per-test completed history
  *   - idx_attempt_user_completed_recent — profile / global recent completed
+ *   - idx_attempt_test_completed_rank — personal rank (testId-leading, completed only)
  *
  * Safety:
  *   - Uses `collection.createIndex()` only (never syncIndexes / dropIndexes)
@@ -36,6 +37,11 @@ const TARGET_INDEXES = [
     name: 'idx_attempt_user_completed_recent',
     key: { userId: 1, endTime: -1, createdAt: -1 },
     partialFilterExpression: { endTime: { $exists: true } },
+  },
+  {
+    name: 'idx_attempt_test_completed_rank',
+    key: { testId: 1, endTime: 1, score: -1, userId: 1 },
+    partialFilterExpression: { endTime: { $type: 'date' } },
   },
 ];
 

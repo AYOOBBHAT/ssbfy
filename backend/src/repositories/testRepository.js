@@ -6,8 +6,12 @@ export const testRepository = {
     return doc.toObject();
   },
 
-  async findAll(filter = {}) {
-    return Test.find(filter).sort({ createdAt: -1 }).lean().exec();
+  async findAll(filter = {}, { populatePost = false } = {}) {
+    let q = Test.find(filter).sort({ createdAt: -1 });
+    if (populatePost) {
+      q = q.populate('postId', 'name slug');
+    }
+    return q.lean().exec();
   },
 
   async findById(id) {

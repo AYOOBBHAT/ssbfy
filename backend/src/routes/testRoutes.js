@@ -18,7 +18,7 @@ import {
   submitTestValidators,
   testIdParam,
 } from '../validators/testAttemptValidators.js';
-import { createTestValidators, setTestStatusValidators } from '../validators/testValidators.js';
+import { createTestValidators, listTestsQueryValidators, setTestStatusValidators } from '../validators/testValidators.js';
 
 const router = Router();
 
@@ -63,6 +63,15 @@ router.get(
   testController.attemptsHistory
 );
 
+router.get(
+  '/:id/rank',
+  testsAttemptsReadLimiter,
+  authenticate,
+  ...testIdParam,
+  validateRequest,
+  testController.getRank
+);
+
 router.get('/status/mine', testsReadLimiter, authenticate, testController.statusMine);
 
 router.get(
@@ -95,7 +104,14 @@ router.patch(
   testController.setStatus
 );
 
-router.get('/', testsReadLimiter, authOptional, testController.list);
+router.get(
+  '/',
+  testsReadLimiter,
+  authOptional,
+  listTestsQueryValidators,
+  validateRequest,
+  testController.list
+);
 router.get('/:id', testsReadLimiter, ...testIdParam, validateRequest, testController.getById);
 
 export default router;

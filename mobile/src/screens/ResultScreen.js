@@ -89,6 +89,7 @@ import {
 } from '../utils/resultHydrationPayload';
 import PracticeResultHero from '../components/result/PracticeResultHero';
 import MockResultHero from '../components/result/MockResultHero';
+import MockPersonalRankCard from '../components/result/MockPersonalRankCard';
 import RetryResultHero from '../components/result/RetryResultHero';
 import WeakTopicFocusRow from '../components/result/WeakTopicFocusRow';
 import { resultPalette, resultShadows } from '../components/result/resultTheme';
@@ -104,6 +105,7 @@ import {
   MOCK_WEAK_SECTION,
   PRACTICE_WEAK_SECTION,
 } from '../utils/mockResultPresentation';
+import { isPreviousYearPaperSession } from '../utils/previousYearPapers';
 import {
   assertHydrationInvariants,
   classifyHydrationError,
@@ -112,6 +114,7 @@ import {
   resolveHistoricalHydrationErrorMessage,
 } from '../utils/resultHydrationTelemetry';
 import { useMockTestInterstitial } from '../hooks/useMockTestInterstitial';
+import { useMockPersonalRank } from '../hooks/useMockPersonalRank';
 
 /*
  * Manual QA — Result screen (mobile):
@@ -120,7 +123,7 @@ import { useMockTestInterstitial } from '../hooks/useMockTestInterstitial';
  * - Practice result: back → Practice; daily → Home.
  * - Retry chain preserves returnMainTab; finish retry → single Result on stack.
  * - Spam Android back during upstream “Finishing…” handled on TestScreen.
- * - Hierarchy: accuracy hero → stats → next steps (retry/review) → focus areas → history.
+ * - Hierarchy: accuracy hero → stats → personal rank (mock only) → next steps (retry/review) → focus areas → history.
  * - All-correct: perfect card + review primary; low score: encouraging tier + focus areas.
  * - Retry tone: "Practice missed" / focused retry — not punitive "wrong" / "failed" language.
  */
@@ -161,12 +164,15 @@ const TIER_LOW = {
   message: 'Every session builds skill — focus below',
 };
 
-function getSessionContext({ isRetry, isMock, returnMainTab, testTitle }) {
+function getSessionContext({ isRetry, isMock, isPreviousYearPaper, returnMainTab, testTitle }) {
   if (isRetry) {
     return {
       label: 'Second attempt complete',
       hint: testTitle ? `${formatMockExamHint(testTitle)} · recovery` : 'Focused recovery session',
     };
+  }
+  if (isMock && isPreviousYearPaper) {
+    return { label: 'Previous Year Paper complete', hint: testTitle || 'Timed exam' };
   }
   if (isMock) return { label: 'Mock test complete', hint: testTitle || 'Timed exam' };
   if (returnMainTab === MAIN_TABS.PRACTICE) {
@@ -965,6 +971,8 @@ export default function ResultScreen() {
     practiceRevealed = false,
     mockAdCompletionKey = null,
     attemptId: liveAttemptId = null,
+    sessionType = null,
+    kind: resultKind = null,
   } = reviewParams;
 
   const isRetry = !!reviewParams.retry;
@@ -982,6 +990,15 @@ export default function ResultScreen() {
     deferredHydrationState.key === resultIdentityKey && deferredHydrationState.deepReady;
 
   const isMock = !!testId && !isRetry;
+  const rankHydrationReady = !needsServerHydration || (!histLoading && !!historicalExtras);
+  const { status: rankStatus, rank: personalRank } = useMockPersonalRank({
+    testId,
+    isRetry,
+    sessionType,
+    enabled: rankHydrationReady,
+  });
+  const showPersonalRankCard =
+    isMock && !isRetry && (rankStatus === 'loading' || rankStatus === 'ready');
   const interstitialAttemptKey =
     !isHistoricalAttempt && isMock
       ? String(
@@ -1867,10 +1884,11 @@ export default function ResultScreen() {
       getSessionContext({
         isRetry,
         isMock,
+        isPreviousYearPaper: isPreviousYearPaperSession({ kind: resultKind }),
         returnMainTab,
         testTitle: _testTitle,
       }),
-    [isRetry, isMock, returnMainTab, _testTitle]
+    [isRetry, isMock, resultKind, returnMainTab, _testTitle]
   );
 
   const progressInsight = useMemo(() => {
@@ -2497,6 +2515,13 @@ export default function ResultScreen() {
           </>
         ) : null}
       </View>
+
+      {showPersonalRankCard ? (
+        <MockPersonalRankCard
+          loading={rankStatus === 'loading'}
+          rank={rankStatus === 'ready' ? personalRank : null}
+        />
+      ) : null}
 
       {isPracticeSession && !isRetry ? (
         <>

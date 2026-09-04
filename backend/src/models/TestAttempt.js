@@ -163,6 +163,8 @@ const testAttemptSchema = new mongoose.Schema(
  * - Max attempt number: getMaxAttemptNumber sort → idx_attempt_user_test_attempt_num_desc.
  * - Open attempts for user: listInProgressByUser, distinctOpenTestIds → idx_attempt_user_open_recent.
  * - Admin usage: questionIds count → idx_attempt_question_ids.
+ * - Personal mock rank: aggregatePersonalRankStats → idx_attempt_test_completed_rank
+ *   (testId-leading; completed docs only).
  */
 
 /** General (userId, testId) equality — resume checks, submit guards. */
@@ -238,6 +240,18 @@ testAttemptSchema.index(
     name: 'uniq_attempt_user_test_attempt_num',
     unique: true,
     partialFilterExpression: { attemptNumber: { $type: 'number' } },
+  }
+);
+
+/**
+ * Personal rank for one mock — group completed attempts by userId for a testId.
+ * Partial `$type: 'date'` excludes open rows (`endTime: null`) using an Atlas-safe filter.
+ */
+testAttemptSchema.index(
+  { testId: 1, endTime: 1, score: -1, userId: 1 },
+  {
+    name: 'idx_attempt_test_completed_rank',
+    partialFilterExpression: { endTime: { $type: 'date' } },
   }
 );
 

@@ -14,7 +14,7 @@
  * Critical hot paths (verify with explain in staging):
  *   - testAttemptRepository.aggregateProfileStats → idx_attempt_user_completed_recent
  *   - testAttemptRepository.findRecentCompletedByUser → idx_attempt_user_completed_recent
- *   - userRepository.findLeaderboard → idx_leaderboard_streak
+ *   - testAttemptRepository.aggregatePersonalRankStats → idx_attempt_test_completed_rank
  *   - questionRepository.findRandomByTopics → idx_question_topic_active
  *   - resultRepository.findByUser → idx_result_user_recent
  */
@@ -49,13 +49,13 @@ const EXPECTED_BY_COLLECTION = {
     { name: 'idx_question_admin_recent', key: { isActive: 1, createdAt: -1 } },
   ],
   users: [
-    { name: 'idx_leaderboard_streak', key: { streakCount: -1, _id: 1 } },
     { name: 'uniq_authProviders_google_sub', key: { 'authProviders.google.sub': 1 } },
   ],
   tests: [
     { name: 'idx_test_type', key: { type: 1 } },
     { name: 'idx_test_status_created', key: { status: 1, createdAt: -1 } },
     { name: 'idx_test_question_ids', key: { questionIds: 1 } },
+    { name: 'idx_test_pyq_discovery', key: { kind: 1, postId: 1, year: -1, status: 1 } },
   ],
   testattempts: [
     { name: 'idx_attempt_user_test', key: { userId: 1, testId: 1 } },
@@ -63,6 +63,7 @@ const EXPECTED_BY_COLLECTION = {
     { name: 'idx_attempt_user_completed_recent', key: { userId: 1, endTime: -1, createdAt: -1 } },
     { name: 'idx_attempt_user_open_recent', key: { userId: 1, createdAt: -1 } },
     { name: 'uniq_attempt_user_test_open', key: { userId: 1, testId: 1, endTime: 1 } },
+    { name: 'idx_attempt_test_completed_rank', key: { testId: 1, endTime: 1, score: -1, userId: 1 } },
     { name: 'idx_attempt_question_ids', key: { questionIds: 1 } },
   ],
   results: [

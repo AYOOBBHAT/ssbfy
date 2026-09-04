@@ -434,7 +434,8 @@ export async function commitImportQuestions(
 
 /**
  * Create a new test (admin only).
- * @param {object} payload  title, type, questionIds, duration, negativeMarking
+ * @param {object} payload  title, questionIds, duration, negativeMarking,
+ *   optional kind (`mock` | `previous_year`), year, postId, description, pdfNoteId
  */
 export async function createTest(payload) {
   const res = await api.post('/tests', payload);

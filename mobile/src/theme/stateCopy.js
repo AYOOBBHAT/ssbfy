@@ -9,15 +9,20 @@ export const EMPTY = {
     subtitle: 'New timed tests appear here when ready. Try Practice for untimed drills.',
     glyph: 'tests',
   },
+  PREVIOUS_YEAR_PAPERS: {
+    title: 'No previous year papers available yet.',
+    subtitle: 'Check back soon.',
+    glyph: 'practice',
+  },
+  PREVIOUS_YEAR_PAPERS_FILTER: {
+    title: 'No papers match these filters',
+    subtitle: 'Try another exam or year.',
+    glyph: 'filter',
+  },
   MOCK_ATTEMPTS: {
     title: "You haven't attempted a mock test yet",
     subtitle: 'Start your first timed test to track accuracy and progress.',
     glyph: 'tests',
-  },
-  LEADERBOARD: {
-    title: 'No streaks on the board yet',
-    subtitle: 'Finish daily practice to build a streak and appear here.',
-    glyph: 'trophy',
   },
   NOTES_NONE: {
     title: 'No notes here yet',
