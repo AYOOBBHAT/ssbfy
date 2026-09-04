@@ -73,7 +73,7 @@ paymentSchema.index({ userId: 1, createdAt: -1 });
 paymentSchema.index({ paymentStatus: 1, createdAt: -1 });
 paymentSchema.index(
   { razorpay_payment_id: 1 },
-  { unique: true, partialFilterExpression: { razorpay_payment_id: { $exists: true, $ne: null } } }
+  { unique: true, partialFilterExpression: { razorpay_payment_id: { $type: 'string' } } }
 );
 
 export const Payment = mongoose.model('Payment', paymentSchema);

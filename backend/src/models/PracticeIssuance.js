@@ -36,7 +36,7 @@ const practiceIssuanceSchema = new mongoose.Schema(
      * rows (retry from frozen attempt only). Never set for arbitrary topic/smart/etc.
      */
     allowInactiveScoring: { type: Boolean, default: false },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
     /** After first successful reveal + persist, only idempotent replays allowed. */
     revealFinalized: { type: Boolean, default: false, index: true },
     /** Client idempotency key used for the finalized reveal (empty string if absent). */

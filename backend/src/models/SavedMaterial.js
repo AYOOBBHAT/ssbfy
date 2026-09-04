@@ -47,11 +47,11 @@ savedMaterialSchema.pre('validate', function enforceExactlyOneMaterial(next) {
 
 savedMaterialSchema.index(
   { userId: 1, noteId: 1 },
-  { unique: true, partialFilterExpression: { noteId: { $exists: true, $ne: null } } }
+  { unique: true, partialFilterExpression: { noteId: { $type: 'objectId' } } }
 );
 savedMaterialSchema.index(
   { userId: 1, pdfId: 1 },
-  { unique: true, partialFilterExpression: { pdfId: { $exists: true, $ne: null } } }
+  { unique: true, partialFilterExpression: { pdfId: { $type: 'objectId' } } }
 );
 savedMaterialSchema.index({ userId: 1, createdAt: -1 });
 
