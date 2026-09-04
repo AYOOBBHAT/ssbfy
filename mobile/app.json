@@ -2,7 +2,7 @@
   "expo": {
     "name": "SSBFY",
     "slug": "ssbfy-mobile",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/new_icon.png",
     "userInterfaceStyle": "light",
@@ -35,7 +35,7 @@
           ]
         }
       ],
-      "versionCode": 34,
+      "versionCode": 35,
       "permissions": [
         "com.google.android.gms.permission.AD_ID"
       ],
