@@ -25,12 +25,28 @@ export const authService = {
     // SECURITY: role is hardcoded to USER. Admins must be promoted manually
     // (e.g. via DB or a future admin-only `PUT /api/users/:id/role`). Never
     // accept role from request input.
-    const user = await userRepository.create({
-      name,
-      email: email.toLowerCase(),
-      password: hashed,
-      role: ROLES.USER,
-    });
+    // Do not set authProviders.google.sub — omit the field (never null).
+    let user;
+    try {
+      user = await userRepository.create({
+        name,
+        email: email.toLowerCase(),
+        password: hashed,
+        role: ROLES.USER,
+      });
+    } catch (err) {
+      if (err?.code === 11000) {
+        const fields = Object.keys(err.keyPattern || err.keyValue || {});
+        if (fields.includes('authProviders.google.sub')) {
+          throw new AppError(
+            'Could not create this account. Please try again.',
+            HTTP_STATUS.CONFLICT
+          );
+        }
+        throw new AppError('Email already registered', HTTP_STATUS.CONFLICT);
+      }
+      throw err;
+    }
 
     const publicUser = toPublicUser(user);
     const token = signAuthToken({

@@ -26,7 +26,11 @@ const userSchema = new mongoose.Schema(
     avatarUrl: { type: String, default: null, trim: true },
     authProviders: {
       google: {
-        sub: { type: String, default: null, trim: true },
+        /**
+         * Google subject. No default — email/password users must omit this
+         * field. A `null` default plus a unique index collides on E11000.
+         */
+        sub: { type: String, trim: true },
         email: { type: String, default: null, lowercase: true, trim: true },
         linkedAt: { type: Date, default: null },
       },
@@ -83,11 +87,24 @@ const userSchema = new mongoose.Schema(
 // Unique email index comes from `unique: true` on the path — do not add a second `schema.index({ email })`.
 
 /**
- * One Google identity per account. Sparse so legacy users without Google stay unindexed.
+ * One Google identity per account. Partial `$type: 'string'` so missing/null
+ * subs (email/password users) are not indexed. Do not use sparse:true.
+ *
+ * Live DBs may still have the old sparse unique index under this same name.
+ * `createIndexes()` will not replace it. Do not `syncIndexes()`. Replace via
+ * Atlas: create `uniq_authProviders_google_sub_v2` (same key + this partial),
+ * verify, drop the old sparse `uniq_authProviders_google_sub`, then
+ * `npm run build:indexes` to create this name — then drop `_v2`.
  */
 userSchema.index(
   { 'authProviders.google.sub': 1 },
-  { unique: true, sparse: true, name: 'uniq_authProviders_google_sub' }
+  {
+    unique: true,
+    name: 'uniq_authProviders_google_sub',
+    partialFilterExpression: {
+      'authProviders.google.sub': { $type: 'string' },
+    },
+  }
 );
 
 export const User = mongoose.model('User', userSchema);
