@@ -22,7 +22,7 @@ const PRODUCTION_UNIT_IDS = Object.freeze({
   homeBanner: 'ca-app-pub-7420252276948628/8115027800',
   profileBanner: 'ca-app-pub-7420252276948628/6721366723',
   notesBanner: 'ca-app-pub-7420252276948628/6223361636',
-  mockTestInterstitial: 'ca-app-pub-7420252276948628/3197743041',
+  mockTestInterstitial: 'ca-app-pub-7420252276948628/3642433314',
 });
 
 /** Official Google sample units — fallback if TestIds cannot be read. */

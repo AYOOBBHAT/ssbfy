@@ -66,6 +66,7 @@ export function AdsReadyProvider({ children }) {
   useEffect(() => {
     if (initializing) return;
     onPremiumStatusChanged(user);
+    // Logout / missing user discards via onPremiumStatusChanged.
     // When a free user becomes available after init, warm the interstitial.
     if (
       isMobileAdsInitialized() &&

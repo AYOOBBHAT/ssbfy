@@ -2,12 +2,16 @@
  * Central interstitial orchestrator — the only place that decides/shows interstitials.
  *
  * Placements:
- * - before mock start / after mock finish
- * - before daily practice / after daily practice
+ * - before mock / PYQ start (after successful start/resume, before Test)
+ * - after mock / PYQ finish (before Result)
+ * - before Battle start (after successful attempt start, before Test)
+ * - after Battle finish (before Battle Result)
+ * - after daily practice (before Result)
  * - before PDF open
  *
  * Fail-safe: never throws; if ad unavailable, callers continue immediately.
- * Cooldown: minimum 45s between successful shows (starts only after open).
+ * Cooldown: 45–90s between successful shows (starts only after open).
+ * Skipped / failed shows do not start cooldown.
  *
  * Project convention is JS (+ JSDoc). File is .js (Expo has no TS check pipeline).
  */
@@ -21,12 +25,24 @@ import {
   showInterstitialAwaitingClose,
 } from './interstitialAdService';
 
-export const INTERSTITIAL_COOLDOWN_MS = 45_000;
+export const INTERSTITIAL_COOLDOWN_MIN_MS = 45_000;
+export const INTERSTITIAL_COOLDOWN_MAX_MS = 90_000;
+/** Active cooldown — keep at the 45s floor unless explicitly raised (max 90s). */
+export const INTERSTITIAL_COOLDOWN_MS = INTERSTITIAL_COOLDOWN_MIN_MS;
+
+export function clampInterstitialCooldownMs(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return INTERSTITIAL_COOLDOWN_MIN_MS;
+  return Math.min(
+    INTERSTITIAL_COOLDOWN_MAX_MS,
+    Math.max(INTERSTITIAL_COOLDOWN_MIN_MS, Math.floor(n))
+  );
+}
 /** Max wait for an in-flight load. Already-loaded ads show immediately. */
 export const INTERSTITIAL_READY_TIMEOUT_MS = 4000;
 export const INTERSTITIAL_CLOSE_WATCHDOG_MS = 15_000;
 
-/** @typedef {'before_mock_start' | 'after_mock_finish' | 'before_daily_practice' | 'after_daily_practice' | 'before_pdf'} InterstitialPlacement */
+/** @typedef {'before_mock_start' | 'before_pyq_start' | 'after_mock_finish' | 'before_battle_start' | 'after_battle_finish' | 'after_daily_practice' | 'before_pdf'} InterstitialPlacement */
 
 let lastShownAtMs = 0;
 let inFlight = false;
@@ -48,8 +64,9 @@ function track(event, data = {}) {
 
 function cooldownRemainingMs() {
   if (!lastShownAtMs) return 0;
+  const windowMs = clampInterstitialCooldownMs(INTERSTITIAL_COOLDOWN_MS);
   const elapsed = Date.now() - lastShownAtMs;
-  return elapsed >= INTERSTITIAL_COOLDOWN_MS ? 0 : INTERSTITIAL_COOLDOWN_MS - elapsed;
+  return elapsed >= windowMs ? 0 : windowMs - elapsed;
 }
 
 /**
@@ -147,13 +164,23 @@ export function showBeforeMockStart(opts = {}) {
 }
 
 /** @param {{ user?: object | null }} [opts] */
+export function showBeforePyqStart(opts = {}) {
+  return runPlacement('before_pyq_start', opts);
+}
+
+/** @param {{ user?: object | null }} [opts] */
 export function showAfterMockFinish(opts = {}) {
   return runPlacement('after_mock_finish', opts);
 }
 
 /** @param {{ user?: object | null }} [opts] */
-export function showBeforeDailyPractice(opts = {}) {
-  return runPlacement('before_daily_practice', opts);
+export function showBeforeBattleStart(opts = {}) {
+  return runPlacement('before_battle_start', opts);
+}
+
+/** @param {{ user?: object | null }} [opts] */
+export function showAfterBattleFinish(opts = {}) {
+  return runPlacement('after_battle_finish', opts);
 }
 
 /** @param {{ user?: object | null }} [opts] */

@@ -8,6 +8,8 @@ import {
   isRequestCancelled,
 } from '../services/api';
 import { getTests, startTest } from '../services/testService';
+import { showBeforePyqStart } from '../services/ads/interstitialOrchestrator';
+import { useAuth } from '../context/AuthContext';
 import {
   NAV_TRANSITION_LOCK_MS,
   releaseLockAfter,
@@ -17,8 +19,6 @@ import {
   buildMockAttemptNavSnapshot,
   logNavigationPayload,
 } from '../utils/navigationPayloadStore';
-import { useAuth } from '../context/AuthContext';
-import { showBeforeMockStart } from '../services/ads/interstitialOrchestrator';
 import {
   TEST_KIND_PREVIOUS_YEAR,
   keepPreviousYearPapers,
@@ -27,9 +27,9 @@ import {
 
 export function usePreviousYearPapers() {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const route = useRoute();
   const originMainTab = resolvePyqOriginMainTab(route?.name);
-  const { user } = useAuth();
   const startLockRef = useRef(false);
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,9 +99,9 @@ export function usePreviousYearPapers() {
         source: 'pyq_start',
       });
       try {
-        await showBeforeMockStart({ user });
+        await showBeforePyqStart({ user });
       } catch (_) {
-        /* ads must never block paper start */
+        /* ads must never block test navigation */
       }
       navigation.navigate('Test', testParams);
     } catch (e) {

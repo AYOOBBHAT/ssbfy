@@ -4,6 +4,8 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getApiErrorMessage, isRequestCancelled } from '../services/api';
 import { getBattle, startBattleAttempt } from '../services/battleService';
+import { showBeforeBattleStart } from '../services/ads/interstitialOrchestrator';
+import { useAuth } from '../context/AuthContext';
 import { questionIdsFromDocs } from '../utils/mongoId';
 import BattleFramingBanner from '../components/battle/BattleFramingBanner';
 import { colors } from '../theme/colors';
@@ -34,6 +36,7 @@ async function copyToClipboard(text) {
 
 export default function BattleLobbyScreen() {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const route = useRoute();
   const battleId = String(route.params?.battleId ?? '');
   const created = !!route.params?.created;
@@ -134,6 +137,11 @@ export default function BattleLobbyScreen() {
         includeDebug: true,
         source: 'battle_start',
       });
+      try {
+        await showBeforeBattleStart({ user });
+      } catch (_) {
+        /* ads must never block battle navigation */
+      }
       navigation.navigate('Test', testParams);
     } catch (e) {
       if (!isRequestCancelled(e)) setError(getApiErrorMessage(e));
@@ -141,7 +149,7 @@ export default function BattleLobbyScreen() {
       setStarting(false);
       releaseLockAfter(startLockRef, NAV_TRANSITION_LOCK_MS);
     }
-  }, [battleId, battle, myAttemptDone, navigation]);
+  }, [battleId, battle, myAttemptDone, navigation, user]);
 
   const handleViewResult = useCallback(() => {
     if (!battleId) return;

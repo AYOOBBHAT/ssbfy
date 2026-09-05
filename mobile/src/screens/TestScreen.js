@@ -23,12 +23,11 @@ import { filterValidMongoIds, resolveMongoId } from '../utils/mongoId.js';
 import { isPreviousYearPaperSession } from '../utils/previousYearPapers';
 import { buildResultParamsFromReveal } from '../utils/resultReviewPayload';
 import { putLearningSessionCache } from '../utils/learningSessionCache';
-import { incrementStandardMockCompletion } from '../services/ads/mockTestAdCounter';
 import {
+  showAfterBattleFinish,
   showAfterDailyPractice,
   showAfterMockFinish,
 } from '../services/ads/interstitialOrchestrator';
-import { userHasPremiumAccess } from '../utils/premiumAccess';
 import { useAuth } from '../context/AuthContext';
 import {
   buildRevealReceiptKey,
@@ -937,17 +936,6 @@ export default function TestScreen() {
           return;
         }
         submissionCompletedRef.current = true;
-        // Standard mock only (this path is not used for practice/daily/retry/battle).
-        if (!userHasPremiumAccess(user)) {
-          try {
-            const attemptKey =
-              resolveMongoId(data?.attempt?._id ?? data?.attemptId, 'attemptId') ||
-              `mock:${String(testId)}:${data?.score ?? 0}:${data?.accuracy ?? 0}:${data?.timeTaken ?? 0}`;
-            await incrementStandardMockCompletion(attemptKey);
-          } catch (_) {
-            /* ads counter must never block result navigation */
-          }
-        }
         try {
           await clearDraft(testId);
           await clearOpenAttempt(testId);
@@ -1003,19 +991,6 @@ export default function TestScreen() {
               isStaleTransitionGeneration(transitionGenRef, gen)
             ) {
               return;
-            }
-            if (!userHasPremiumAccess(user)) {
-              try {
-                const attemptKey =
-                  resolveMongoId(
-                    recovery?.attempt?._id ?? recovery?.attemptId,
-                    'attemptId'
-                  ) ||
-                  `mock:${String(testId)}:${recovery?.score ?? 0}:${recovery?.accuracy ?? 0}:${recovery?.timeTaken ?? 0}`;
-                await incrementStandardMockCompletion(attemptKey);
-              } catch (_) {
-                /* ads counter must never block result navigation */
-              }
             }
             try {
               await showAfterMockFinish({ user });
@@ -1294,6 +1269,23 @@ export default function TestScreen() {
         ) {
           try {
             await showAfterDailyPractice({ user });
+          } catch (_) {
+            /* ads must never block result navigation */
+          }
+          if (
+            !mountedRef.current ||
+            navigationCommittedRef.current ||
+            submissionCompletedRef.current ||
+            (transitionGen != null &&
+              isStaleTransitionGeneration(transitionGenRef, transitionGen))
+          ) {
+            return;
+          }
+        }
+
+        if (practiceType === 'battle' && isBattle && battleId) {
+          try {
+            await showAfterBattleFinish({ user });
           } catch (_) {
             /* ads must never block result navigation */
           }

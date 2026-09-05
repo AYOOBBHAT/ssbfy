@@ -8,6 +8,8 @@ import {
   isRequestCancelled,
 } from '../services/api';
 import { getTests, startTest } from '../services/testService';
+import { showBeforeMockStart } from '../services/ads/interstitialOrchestrator';
+import { useAuth } from '../context/AuthContext';
 import { keepMockTests } from '../utils/previousYearPapers';
 import {
   NAV_TRANSITION_LOCK_MS,
@@ -18,8 +20,6 @@ import {
   buildMockAttemptNavSnapshot,
   logNavigationPayload,
 } from '../utils/navigationPayloadStore';
-import { useAuth } from '../context/AuthContext';
-import { showBeforeMockStart } from '../services/ads/interstitialOrchestrator';
 
 export function useMockTests() {
   const navigation = useNavigation();
@@ -91,7 +91,7 @@ export function useMockTests() {
       try {
         await showBeforeMockStart({ user });
       } catch (_) {
-        /* ads must never block test start */
+        /* ads must never block test navigation */
       }
       navigation.navigate('Test', testParams);
     } catch (e) {

@@ -421,6 +421,11 @@ export async function showInterstitialAwaitingClose(opts = {}) {
 
 export function onPremiumStatusChanged(user) {
   premiumUserRef = user;
+  if (!user) {
+    discardLoadedAd();
+    track('interstitial_discarded_logout', { phase: 'auth_changed' });
+    return;
+  }
   if (userHasPremiumAccess(user)) {
     discardLoadedAd();
     track('interstitial_skipped_premium', { phase: 'premium_changed' });

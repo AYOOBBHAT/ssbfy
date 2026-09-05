@@ -37,7 +37,6 @@ import {
   storeSessionQuestionSnapshot,
 } from '../utils/navigationPayloadStore';
 import AppBannerAd from '../components/ads/AppBannerAd';
-import { showBeforeDailyPractice } from '../services/ads/interstitialOrchestrator';
 import { ENABLE_NOTES } from '../config/featureFlags';
 
 function greetingForHour() {
@@ -100,11 +99,6 @@ export default function HomeScreen() {
         includeDebug: true,
         source: 'daily_start',
       });
-      try {
-        await showBeforeDailyPractice({ user });
-      } catch (_) {
-        /* ads must never block daily practice start */
-      }
       navigation.navigate('Test', testParams);
     } catch (e) {
       if (isRequestCancelled(e) || dailyAbortRef.current !== ac) return;
