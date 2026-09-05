@@ -22,6 +22,7 @@
  *
  * LOW — provider errors: fail-open + structured security log:
  *   - POST /payments/webhook (webhookLimiter, allowWithoutRedis when unset)
+ *   - GET /app/version (appVersionLimiter, allowWithoutRedis when unset)
  *
  * Intentionally lighter / unscoped paths (no dedicated limiter mount here):
  *   - healthRoutes, /subjects, /topics, /daily-practice, etc.

@@ -13,6 +13,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import UpdateRequiredScreen from './src/components/UpdateRequiredScreen';
+import { useAppVersionGate } from './src/hooks/useAppVersionGate';
 import { battleDeepLinkDevLog, parseBattleInviteFromUrl } from './src/utils/battleDeepLinkDevLog';
 import { AdsReadyProvider } from './src/services/ads/AdsReadyProvider';
 import { colors } from './src/theme/colors';
@@ -112,6 +114,7 @@ const linking = {
 function AppBootstrapRoot() {
   const navigationRef = useNavigationContainerRef();
   const { initializing } = useAuth();
+  const { checking: versionChecking, updateRequired } = useAppVersionGate();
   const [navigationReady, setNavigationReady] = useState(false);
   const [rootLaidOut, setRootLaidOut] = useState(false);
   const [appContentVisible, setAppContentVisible] = useState(false);
@@ -130,7 +133,24 @@ function AppBootstrapRoot() {
 
   const maybeHideSplash = useCallback(async () => {
     if (splashHiddenRef.current) return;
-    if (initializing || !navigationReady || !rootLaidOut) return;
+    if (versionChecking || !rootLaidOut) return;
+    if (updateRequired) {
+      splashHiddenRef.current = true;
+      try {
+        await SplashScreen.hideAsync();
+        markStartup('SPLASH_HIDE', { routeName: 'UpdateRequired' });
+        await waitForPaintFrames(2);
+        markStartup('splash_hidden', { routeName: 'UpdateRequired' });
+      } catch {
+        markStartup('splash_hide_failed', { routeName: 'UpdateRequired' });
+      } finally {
+        setAppContentVisible(true);
+        markStartup('APP_REVEAL', { routeName: 'UpdateRequired' });
+        markStartup('first_screen_rendered', { routeName: 'UpdateRequired' });
+      }
+      return;
+    }
+    if (initializing || !navigationReady) return;
     splashHiddenRef.current = true;
     const routeName = navigationRef.getCurrentRoute()?.name ?? null;
     try {
@@ -145,7 +165,14 @@ function AppBootstrapRoot() {
       markStartup('APP_REVEAL', { routeName });
       markStartup('first_screen_rendered', { routeName });
     }
-  }, [initializing, navigationReady, rootLaidOut, navigationRef]);
+  }, [
+    versionChecking,
+    updateRequired,
+    initializing,
+    navigationReady,
+    rootLaidOut,
+    navigationRef,
+  ]);
 
   useEffect(() => {
     void maybeHideSplash();
@@ -173,14 +200,18 @@ function AppBootstrapRoot() {
           pointerEvents={appContentVisible ? 'auto' : 'none'}
           style={[styles.appContent, !appContentVisible && styles.appContentHidden]}
         >
-          <NavigationContainer
-            ref={navigationRef}
-            theme={navigationTheme}
-            linking={linking}
-            onReady={handleNavigationReady}
-          >
-            <AppNavigator />
-          </NavigationContainer>
+          {updateRequired ? (
+            <UpdateRequiredScreen />
+          ) : versionChecking ? null : (
+            <NavigationContainer
+              ref={navigationRef}
+              theme={navigationTheme}
+              linking={linking}
+              onReady={handleNavigationReady}
+            >
+              <AppNavigator />
+            </NavigationContainer>
+          )}
         </View>
         <StatusBar style="dark" />
       </GestureHandlerRootView>

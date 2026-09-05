@@ -14,6 +14,7 @@
     "verify:papers-tab": "node ./scripts/verify-papers-tab.cjs",
     "verify:pyq-origin-navigation": "node ./scripts/verify-pyq-origin-navigation.cjs",
     "verify:pyq-copy": "node ./scripts/verify-pyq-copy.cjs",
+    "verify:app-version-gate": "node ./scripts/verify-app-version-gate.cjs",
     "eas:preview:android": "eas build --profile preview --platform android",
     "eas:preview:ios": "eas build --profile preview --platform ios",
     "eas:production:android": "eas build --profile production --platform android",

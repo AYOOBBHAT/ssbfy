@@ -26,6 +26,7 @@
     "verify:learning-analytics": "node scripts/verify-learning-analytics.mjs",
     "verify:mock-test-rank": "node scripts/verify-mock-test-rank.mjs",
     "verify:previous-year-papers": "node scripts/verify-previous-year-papers.mjs",
+    "verify:app-version": "node scripts/verify-app-version.mjs",
     "backfill:canonical-topics": "node scripts/backfill-canonical-topics.mjs"
   },
   "engines": {

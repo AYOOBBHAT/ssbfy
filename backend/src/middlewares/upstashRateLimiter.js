@@ -210,6 +210,19 @@ export const otpLimiter = createUpstashLimiter({
   sensitivity: RateLimitSensitivity.HIGH,
 });
 
+/**
+ * GET /api/app/version — public startup probe.
+ * Fail-open without Redis so local/dev and Redis outages do not 503 this
+ * endpoint (mobile already fail-opens on errors).
+ */
+export const appVersionLimiter = createUpstashLimiter({
+  windowSeconds: 60,
+  maxRequests: 60,
+  routeName: 'app_version',
+  allowWithoutRedis: true,
+  sensitivity: RateLimitSensitivity.LOW,
+});
+
 /** General API — 1 min, 60. */
 export const apiLimiter = createUpstashLimiter({
   windowSeconds: 60,

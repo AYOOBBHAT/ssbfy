@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { resolveAndroidVersionPolicy } from '../constants/appVersion.js';
 import {
   DEFAULT_ADMIN_JWT_EXPIRES_IN,
   DEFAULT_USER_JWT_EXPIRES_IN,
@@ -102,6 +103,17 @@ export const env = {
     .split(',')
     .map((s) => normalizeCorsOrigin(s))
     .filter(Boolean),
+
+  /**
+   * Android force-update policy (GET /api/app/version). Not stored in Mongo.
+   * Unset → safe defaults (minimum 1, forceUpdate false). Does not silently
+   * set production minimum to the current store versionCode.
+   */
+  androidVersion: resolveAndroidVersionPolicy({
+    ANDROID_MINIMUM_VERSION_CODE: process.env.ANDROID_MINIMUM_VERSION_CODE,
+    ANDROID_LATEST_VERSION_CODE: process.env.ANDROID_LATEST_VERSION_CODE,
+    ANDROID_FORCE_UPDATE: process.env.ANDROID_FORCE_UPDATE,
+  }),
 };
 
 export const isProd = env.nodeEnv === 'production';
