@@ -1,0 +1,10 @@
+{
+  "marker": "PHASE9_SMOKE_TEST_2026",
+  "database": "ssbfy",
+  "createdAt": "2026-09-08T10:24:50.990Z",
+  "postId": "6a9fe271a6683cc1b21ccded",
+  "name": "PHASE9_SMOKE_TEST_2026 — JKSSB Structured Question Test",
+  "slug": "phase9-smoke-test-2026-jkssb-structured-question-test",
+  "isActive": true,
+  "description": "Smoke-test exam tag for Phase 9 structured-question flow. Not a real JKSSB post."
+}
