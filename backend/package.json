@@ -33,6 +33,8 @@
     "verify:set-a-metadata-mapping": "node scripts/verify-set-a-metadata-mapping.mjs",
     "verify:set-a-taxonomy-proposal": "node scripts/verify-set-a-taxonomy-proposal.mjs",
     "verify:set-a-metadata-import-ready": "node scripts/verify-set-a-metadata-import-ready.mjs",
+    "verify:set-a-phase6": "node scripts/verify-set-a-phase6.mjs",
+    "verify:set-a-test-plan": "node scripts/verify-set-a-test-plan.mjs",
     "apply:set-a-catalog": "node scripts/apply-set-a-catalog.mjs --gate-1-approved",
     "dump:set-a-taxonomy": "node scripts/dump-live-subject-topic-taxonomy.mjs",
     "audit:set-a-database-identity": "node scripts/audit-database-identity.mjs",
