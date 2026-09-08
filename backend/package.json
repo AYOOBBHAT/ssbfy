@@ -32,6 +32,7 @@
     "verify:set-a-import-ready": "node scripts/verify-set-a-import-ready.mjs",
     "verify:set-a-metadata-mapping": "node scripts/verify-set-a-metadata-mapping.mjs",
     "dump:set-a-taxonomy": "node scripts/dump-live-subject-topic-taxonomy.mjs",
+    "audit:set-a-database-identity": "node scripts/audit-database-identity.mjs",
     "verify:learning-analytics": "node scripts/verify-learning-analytics.mjs",
     "verify:mock-test-rank": "node scripts/verify-mock-test-rank.mjs",
     "verify:previous-year-papers": "node scripts/verify-previous-year-papers.mjs",
