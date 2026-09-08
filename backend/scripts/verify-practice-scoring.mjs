@@ -77,6 +77,40 @@ function run() {
   assert.deepEqual(again.summary, exact.summary, 'idempotent summary');
   assert.equal(again.correctAnswers.length, exact.correctAnswers.length, 'idempotent payload size');
 
+  // Presentation metadata must not change scoring (correctAnswers[] vs selectedOptionIndexes[]).
+  const qStructured = {
+    ...qSingle,
+    presentationKind: 'two_statements',
+    content: {
+      intro: 'Consider the following:',
+      statements: [
+        { label: 'Statement – I', text: 'Alpha' },
+        { label: 'Statement – II', text: 'Beta' },
+      ],
+      prompt: 'Which is correct?',
+    },
+  };
+  const withPresentation = scoreQuestionSession({
+    orderedQuestionIds: [Q1],
+    questionsById: new Map([[Q1.toString(), qStructured]]),
+    userAnswersByQid: new Map([[Q1.toString(), [1]]]),
+  });
+  const withoutPresentation = scoreQuestionSession({
+    orderedQuestionIds: [Q1],
+    questionsById: new Map([[Q1.toString(), qSingle]]),
+    userAnswersByQid: new Map([[Q1.toString(), [1]]]),
+  });
+  assert.deepEqual(
+    withPresentation.summary,
+    withoutPresentation.summary,
+    'presentation fields must not change scoring summary'
+  );
+  assert.deepEqual(
+    withPresentation.correctAnswers[0].correctAnswers,
+    [1],
+    'scoring still uses correctAnswers[]'
+  );
+
   console.log('verify-practice-scoring: all checks passed');
 }
 

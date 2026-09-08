@@ -1,0 +1,1818 @@
+{
+  "source": "SET_A_import_ready.jsonl",
+  "status": "proposed",
+  "totalQuestions": 250,
+  "taxonomyInspection": {
+    "liveDatabase": "blocked",
+    "reason": "backend/.env missing; MONGODB_URI unset. connectDb() was not used (would enable autoIndex in development). Native find/aggregate was not attempted without credentials.",
+    "inspectedSubjects": [],
+    "inspectedTopics": [],
+    "importerExpects": {
+      "subjectField": "subject",
+      "topicField": "topic",
+      "value": "exact existing name (case-insensitive) or Mongo ObjectId string",
+      "required": true,
+      "topicsMustAlreadyExist": true,
+      "topicMustBelongToResolvedSubject": true
+    },
+    "nonAuthoritativeFixtureNames": {
+      "note": "Import-test / CSV-template strings only. Not the live SSBFY catalog. Must not be used as mapping targets.",
+      "examples": [
+        {
+          "subject": "Geography",
+          "topic": "States and Capitals",
+          "source": "CSV_TEMPLATE / valid.jsonl"
+        },
+        {
+          "subject": "Geography",
+          "topic": "Agriculture",
+          "source": "valid.jsonl"
+        },
+        {
+          "subject": "Geography",
+          "topic": "Physical Geography",
+          "source": "valid.jsonl"
+        },
+        {
+          "subject": "Polity",
+          "topic": "Union Executive",
+          "source": "valid-array.json / valid.jsonl"
+        },
+        {
+          "subject": "Polity",
+          "topic": "Directive Principles",
+          "source": "valid.jsonl"
+        },
+        {
+          "subject": "Maths",
+          "topic": "Arithmetic",
+          "source": "valid-array.json"
+        }
+      ]
+    }
+  },
+  "safety": {
+    "mongoWrites": false,
+    "importDryRun": false,
+    "importCommit": false
+  },
+  "summary": {
+    "mapped": 0,
+    "unmapped": 250,
+    "high": 0,
+    "medium": 0,
+    "low": 250
+  },
+  "mappings": [
+    {
+      "questionNumber": 1,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: transgender identity certificate vs Registration of Births and Deaths Act 1969."
+    },
+    {
+      "questionNumber": 2,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: ISRO SpaDeX docking mission."
+    },
+    {
+      "questionNumber": 3,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/history of science: Indian scientist epithet (Bose/Sarabhai/Ramanujan/Raman)."
+    },
+    {
+      "questionNumber": 4,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: Household Consumption Expenditure Survey 2023-24."
+    },
+    {
+      "questionNumber": 5,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/S&T: ethical AI in finance (MuleHunter, RBI sandbox, NSAI, DPDP)."
+    },
+    {
+      "questionNumber": 6,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography/culture: Kashmir Chillai Kalan / Pheran Day."
+    },
+    {
+      "questionNumber": 7,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence: Bayraktar Akinci UCAV manufacturer."
+    },
+    {
+      "questionNumber": 8,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: wetlands/BHS sites in news (Vembanad, Kaas, Yaya Tso)."
+    },
+    {
+      "questionNumber": 9,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture/sports: Kho-Kho / Chakravyuha origin."
+    },
+    {
+      "questionNumber": 10,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: Fundamental Rights available only to citizens (Arts 16, 19, 28, 29)."
+    },
+    {
+      "questionNumber": 11,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/judiciary: rarest-of-rare / RG Kar death-penalty statements."
+    },
+    {
+      "questionNumber": 12,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: continents and highest peaks."
+    },
+    {
+      "questionNumber": 13,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: Non-Alcoholic Steatohepatitis (NASH)."
+    },
+    {
+      "questionNumber": 14,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: ILO as tripartite UN agency / Treaty of Versailles."
+    },
+    {
+      "questionNumber": 15,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/IR: US withdrawal from Paris Agreement impacts."
+    },
+    {
+      "questionNumber": 16,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Kalaripayattu linked to Parasurama."
+    },
+    {
+      "questionNumber": 17,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: History/art: Ratnagiri Buddhist excavations."
+    },
+    {
+      "questionNumber": 18,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: Enemy Property Act / CEPI."
+    },
+    {
+      "questionNumber": 19,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: One Nation One Election constitutional amendments."
+    },
+    {
+      "questionNumber": 20,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/trade: Diamond Imprest Authorisation Scheme."
+    },
+    {
+      "questionNumber": 21,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/chemistry: synthetic dye Rhodamine B."
+    },
+    {
+      "questionNumber": 22,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: grey market trading definition."
+    },
+    {
+      "questionNumber": 23,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/schemes: Beti Bachao Beti Padhao."
+    },
+    {
+      "questionNumber": 24,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: food-borne pathogens (norovirus, Campylobacter, TB)."
+    },
+    {
+      "questionNumber": 25,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history: Subhas Chandra Bose organisations."
+    },
+    {
+      "questionNumber": 26,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: Guillain-Barré Syndrome."
+    },
+    {
+      "questionNumber": 27,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: snakebite envenoming and antivenoms."
+    },
+    {
+      "questionNumber": 28,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/energy law: Karnataka HC green-energy open-access ruling."
+    },
+    {
+      "questionNumber": 29,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Olive Ridley sea turtles."
+    },
+    {
+      "questionNumber": 30,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Pacific Ring of Fire."
+    },
+    {
+      "questionNumber": 31,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history/defence: Operation Gibraltar 1965."
+    },
+    {
+      "questionNumber": 32,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/physics: Semi-Dirac fermions."
+    },
+    {
+      "questionNumber": 33,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/reports: WEF Global Risks Report 2025."
+    },
+    {
+      "questionNumber": 34,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: oceanic trenches and locations."
+    },
+    {
+      "questionNumber": 35,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/defence: scramjet engine."
+    },
+    {
+      "questionNumber": 36,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Ramsar Wetland City Accreditation."
+    },
+    {
+      "questionNumber": 37,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: crypto exchanges and KYC in India."
+    },
+    {
+      "questionNumber": 38,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Ancient history/culture: Jalankantha / water-clock terminology."
+    },
+    {
+      "questionNumber": 39,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Ramsar wetland eligibility criteria."
+    },
+    {
+      "questionNumber": 40,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: martial law in the Constitution (Art. 34)."
+    },
+    {
+      "questionNumber": 41,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/geography: Chinar tree in Kashmir."
+    },
+    {
+      "questionNumber": 42,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: NVS-02 / NavIC."
+    },
+    {
+      "questionNumber": 43,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/health: Paraquat herbicide."
+    },
+    {
+      "questionNumber": 44,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: constitutional provisions ensuring liberty."
+    },
+    {
+      "questionNumber": 45,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: corpse flower."
+    },
+    {
+      "questionNumber": 46,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence: BrahMos vs other missile systems."
+    },
+    {
+      "questionNumber": 47,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Punjab state bird / goshawk."
+    },
+    {
+      "questionNumber": 48,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Sthala Vriksha."
+    },
+    {
+      "questionNumber": 49,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture: Nano Urea / IFFCO."
+    },
+    {
+      "questionNumber": 50,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/geography: Greenland strategic importance for the US."
+    },
+    {
+      "questionNumber": 51,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/S&T mixed: India’s 75-year achievements incl. Chandrayaan-3."
+    },
+    {
+      "questionNumber": 52,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: antibody / serology tests."
+    },
+    {
+      "questionNumber": 53,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence: Pralay missile."
+    },
+    {
+      "questionNumber": 54,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance: ASER survey (Pratham)."
+    },
+    {
+      "questionNumber": 55,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: parliamentary whip."
+    },
+    {
+      "questionNumber": 56,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Teesta River and hydropower."
+    },
+    {
+      "questionNumber": 57,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: Padma awards."
+    },
+    {
+      "questionNumber": 58,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/IR: Paris Agreement and India."
+    },
+    {
+      "questionNumber": 59,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history: freedom fighters and contributions."
+    },
+    {
+      "questionNumber": 60,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/trade: eCoO 2.0 certificates of origin."
+    },
+    {
+      "questionNumber": 61,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/resources: National Critical Mineral Mission list."
+    },
+    {
+      "questionNumber": 62,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/law: MMDR Act 2015 mining licences."
+    },
+    {
+      "questionNumber": 63,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: DeepSeek AI models and energy use."
+    },
+    {
+      "questionNumber": 64,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: India–Indonesia ties / exercises / G20."
+    },
+    {
+      "questionNumber": 65,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: Mutual Credit Guarantee Scheme for MSMEs."
+    },
+    {
+      "questionNumber": 66,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: SC split verdict on burial rights / Art. 21."
+    },
+    {
+      "questionNumber": 67,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: folk dances and states."
+    },
+    {
+      "questionNumber": 68,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/energy: OSOWOG / International Solar Alliance."
+    },
+    {
+      "questionNumber": 69,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: sleeping sickness (HAT)."
+    },
+    {
+      "questionNumber": 70,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Singtam and Munshithang bridges / Teesta."
+    },
+    {
+      "questionNumber": 71,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance: e-Shram microsites."
+    },
+    {
+      "questionNumber": 72,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: nuclear fusion vs fission bombs."
+    },
+    {
+      "questionNumber": 73,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/labour: Occupational Shortage Index."
+    },
+    {
+      "questionNumber": 74,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: eutrophication of lakes."
+    },
+    {
+      "questionNumber": 75,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/energy: EAST tokamak (China)."
+    },
+    {
+      "questionNumber": 76,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: Prohibition of Child Marriage Act 2006."
+    },
+    {
+      "questionNumber": 77,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/law: genocide definition and Genocide Convention."
+    },
+    {
+      "questionNumber": 78,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/energy: CNG, sour gas, LNG."
+    },
+    {
+      "questionNumber": 79,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture/economy: Indian agriculture GDP, milk, employment."
+    },
+    {
+      "questionNumber": 80,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health/S&T: Suzetrigine non-opioid painkiller."
+    },
+    {
+      "questionNumber": 81,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: Himachal cannabis project vs NDPS Act."
+    },
+    {
+      "questionNumber": 82,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Indian coastline origin and length."
+    },
+    {
+      "questionNumber": 83,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: fentanyl."
+    },
+    {
+      "questionNumber": 84,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Indian squid biology/IUCN."
+    },
+    {
+      "questionNumber": 85,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: mangrove “link strength”."
+    },
+    {
+      "questionNumber": 86,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: DRC land borders."
+    },
+    {
+      "questionNumber": 87,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/governance: C&D Waste Management Rules 2016."
+    },
+    {
+      "questionNumber": 88,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/law: Biodiversity Heritage Sites / Guneri."
+    },
+    {
+      "questionNumber": 89,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: Union Budget 2025-26 income-tax cut impacts."
+    },
+    {
+      "questionNumber": 90,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/S&T: SwaRail SuperApp."
+    },
+    {
+      "questionNumber": 91,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Indian states bordering Bangladesh."
+    },
+    {
+      "questionNumber": 92,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: new Ramsar sites (Jharkhand, Sikkim, Tamil Nadu)."
+    },
+    {
+      "questionNumber": 93,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: Bickerstaff encephalitis vs GBS."
+    },
+    {
+      "questionNumber": 94,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/agriculture: food nicknames (caviar, saffron, makhana, pine nuts)."
+    },
+    {
+      "questionNumber": 95,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: H-1B visa programme."
+    },
+    {
+      "questionNumber": 96,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/health: WHO membership (US, Liechtenstein, etc.)."
+    },
+    {
+      "questionNumber": 97,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture: extra-long staple cotton."
+    },
+    {
+      "questionNumber": 98,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/infra: Sagarmala."
+    },
+    {
+      "questionNumber": 99,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: Gaia spacecraft (ESA)."
+    },
+    {
+      "questionNumber": 100,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: Trojan asteroids."
+    },
+    {
+      "questionNumber": 101,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: fiscal deficit definition vs inflation."
+    },
+    {
+      "questionNumber": 102,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: genetic modification applications."
+    },
+    {
+      "questionNumber": 103,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/schemes: PM Internship Scheme."
+    },
+    {
+      "questionNumber": 104,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance: NAAC accreditation."
+    },
+    {
+      "questionNumber": 105,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/culture: sacred groves (Orans, Devara Kadu, Sarpa Kavu)."
+    },
+    {
+      "questionNumber": 106,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Mount Taranaki (New Zealand)."
+    },
+    {
+      "questionNumber": 107,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: brucellosis."
+    },
+    {
+      "questionNumber": 108,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/banking: SLR and LCR dual liquidity mandates."
+    },
+    {
+      "questionNumber": 109,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: Art. 25 and anti-conversion laws."
+    },
+    {
+      "questionNumber": 110,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture: Pulse Mission crops."
+    },
+    {
+      "questionNumber": 111,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: International Criminal Court / India."
+    },
+    {
+      "questionNumber": 112,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: Foreigners Tribunals."
+    },
+    {
+      "questionNumber": 113,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture/IR: Aga Khan IV restorations and Padma."
+    },
+    {
+      "questionNumber": 114,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: flue-gas desulphurisation at coal plants."
+    },
+    {
+      "questionNumber": 115,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence/history: Fort William renamed Vijay Durg."
+    },
+    {
+      "questionNumber": 116,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence: Stryker ICV."
+    },
+    {
+      "questionNumber": 117,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Arctic warming / albedo."
+    },
+    {
+      "questionNumber": 118,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: parole in India."
+    },
+    {
+      "questionNumber": 119,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: Bombay Prevention of Beggary Act 1959."
+    },
+    {
+      "questionNumber": 120,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/governance: Viksit Bharat 2047 Budget priorities."
+    },
+    {
+      "questionNumber": 121,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: Human Genome Project."
+    },
+    {
+      "questionNumber": 122,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/energy: Atomic Energy Act / CLNDA Budget 2025."
+    },
+    {
+      "questionNumber": 123,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture/schemes: PM-KISAN."
+    },
+    {
+      "questionNumber": 124,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health/S&T: GARBH-INi-DRISHTI / ferret facility."
+    },
+    {
+      "questionNumber": 125,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture/energy: ethanol feedstocks."
+    },
+    {
+      "questionNumber": 126,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/energy: nuclear power share and GHG intensity."
+    },
+    {
+      "questionNumber": 127,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/infra: Dedicated Freight Corridors."
+    },
+    {
+      "questionNumber": 128,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/infra: Indian Railways network and electrification."
+    },
+    {
+      "questionNumber": 129,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/schemes: NAMASTE sanitation."
+    },
+    {
+      "questionNumber": 130,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture: potash / potassium oxide."
+    },
+    {
+      "questionNumber": 131,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance: National Commission for Safai Karamcharis."
+    },
+    {
+      "questionNumber": 132,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: RBI repo-rate cut effects."
+    },
+    {
+      "questionNumber": 133,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: Governor’s assent (Art. 200)."
+    },
+    {
+      "questionNumber": 134,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: National Mission for Manuscripts."
+    },
+    {
+      "questionNumber": 135,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: NTCA / tiger reserves."
+    },
+    {
+      "questionNumber": 136,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/geography: Netzarim Corridor (Gaza)."
+    },
+    {
+      "questionNumber": 137,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: La Niña 2025 and global temperature."
+    },
+    {
+      "questionNumber": 138,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence/IR: India–UK Aero India 2025 agreements."
+    },
+    {
+      "questionNumber": 139,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/health: ASHA workers."
+    },
+    {
+      "questionNumber": 140,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Sambar deer / Satkosia."
+    },
+    {
+      "questionNumber": 141,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: Gross Domestic Knowledge Product."
+    },
+    {
+      "questionNumber": 142,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: President’s Rule."
+    },
+    {
+      "questionNumber": 143,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: India–UK Young Professionals Scheme."
+    },
+    {
+      "questionNumber": 144,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: rupee depreciation factors."
+    },
+    {
+      "questionNumber": 145,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: marine heatwaves."
+    },
+    {
+      "questionNumber": 146,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture/history: UNESCO WH sites and dynasties."
+    },
+    {
+      "questionNumber": 147,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence: INS Imphal / Project 15B."
+    },
+    {
+      "questionNumber": 148,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: human coronavirus HKU1."
+    },
+    {
+      "questionNumber": 149,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: CAG of India."
+    },
+    {
+      "questionNumber": 150,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/culture: GI tags (Katarni rice, Magahi paan, Shahi litchi)."
+    },
+    {
+      "questionNumber": 151,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history: R.G. Bhandarkar."
+    },
+    {
+      "questionNumber": 152,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: Raisina Dialogue."
+    },
+    {
+      "questionNumber": 153,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Shivaji temple in Maharashtra."
+    },
+    {
+      "questionNumber": 154,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history: Biswedari feudal system (Patiala)."
+    },
+    {
+      "questionNumber": 155,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history: Patharughat uprising."
+    },
+    {
+      "questionNumber": 156,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/reports: Future of Free Speech Index 2025."
+    },
+    {
+      "questionNumber": 157,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: audible enclaves."
+    },
+    {
+      "questionNumber": 158,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography/history: Ana Sagar Lake, Ajmer."
+    },
+    {
+      "questionNumber": 159,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture: arecanut cultivation."
+    },
+    {
+      "questionNumber": 160,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: vernal equinox."
+    },
+    {
+      "questionNumber": 161,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: soil erosion sequence (rill/gully/badland)."
+    },
+    {
+      "questionNumber": 162,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: Samarth incubation (telecom/IT)."
+    },
+    {
+      "questionNumber": 163,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance: Smart Cities Mission."
+    },
+    {
+      "questionNumber": 164,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: BHIM-UPI incentive scheme."
+    },
+    {
+      "questionNumber": 165,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence/S&T: sonic weapons."
+    },
+    {
+      "questionNumber": 166,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: Crew-9 ISS experiments."
+    },
+    {
+      "questionNumber": 167,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: ISS partner agencies."
+    },
+    {
+      "questionNumber": 168,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/energy: Indian nuclear plant–state pairs."
+    },
+    {
+      "questionNumber": 169,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/reports: World Happiness Report 2025."
+    },
+    {
+      "questionNumber": 170,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Red Sea littoral states."
+    },
+    {
+      "questionNumber": 171,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: ISRO YUVIKA."
+    },
+    {
+      "questionNumber": 172,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/reports: Global Residence Program Index (Henley)."
+    },
+    {
+      "questionNumber": 173,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture/schemes: National Programme for Dairy Development."
+    },
+    {
+      "questionNumber": 174,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/law: antitrust / Competition Act."
+    },
+    {
+      "questionNumber": 175,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: Inner Line Permit states."
+    },
+    {
+      "questionNumber": 176,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Ancient history: pottery wares by age."
+    },
+    {
+      "questionNumber": 177,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: World Water Day 2025."
+    },
+    {
+      "questionNumber": 178,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/S&T: Challenger 150 deep-sea initiative."
+    },
+    {
+      "questionNumber": 179,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: greenhouse gases."
+    },
+    {
+      "questionNumber": 180,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance: CPGRAMS."
+    },
+    {
+      "questionNumber": 181,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/schemes: PMJVK minority affairs."
+    },
+    {
+      "questionNumber": 182,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography/history: lapis lazuli / Badakhshan."
+    },
+    {
+      "questionNumber": 183,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Shigmotsav / Goan folk dances."
+    },
+    {
+      "questionNumber": 184,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Cook Strait."
+    },
+    {
+      "questionNumber": 185,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history/polity: Lohia’s Sapta Kranti."
+    },
+    {
+      "questionNumber": 186,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: IT Act s.69 blocking orders."
+    },
+    {
+      "questionNumber": 187,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Medieval history: Aurangzeb."
+    },
+    {
+      "questionNumber": 188,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Himalayan rivers and source glaciers."
+    },
+    {
+      "questionNumber": 189,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence/IR: Indian Navy IOS SAGAR / AIKEYME."
+    },
+    {
+      "questionNumber": 190,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Ancient history: Nalanda and Vikramshila."
+    },
+    {
+      "questionNumber": 191,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture: Indian cotton industry 2024-25."
+    },
+    {
+      "questionNumber": 192,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/IR: Mar-a-Lago Accord (US dollar)."
+    },
+    {
+      "questionNumber": 193,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Modern history: first woman legislator (Muthulakshmi Reddi clues)."
+    },
+    {
+      "questionNumber": 194,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/agriculture: Anthurium flower (Mizoram)."
+    },
+    {
+      "questionNumber": 195,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: DNA fingerprinting / STRs."
+    },
+    {
+      "questionNumber": 196,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: Equalisation Levy."
+    },
+    {
+      "questionNumber": 197,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: tuberculosis / NTEP."
+    },
+    {
+      "questionNumber": 198,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Ancient history: Poompuhar / Cholas / Pallavas."
+    },
+    {
+      "questionNumber": 199,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: tirzepatide weight-loss drug."
+    },
+    {
+      "questionNumber": 200,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture/governance: Bharatiya Beej Sahakari Samiti."
+    },
+    {
+      "questionNumber": 201,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/judiciary: HC judge transfers / Collegium."
+    },
+    {
+      "questionNumber": 202,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/schemes: PM Internship Scheme (again)."
+    },
+    {
+      "questionNumber": 203,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health/S&T: ICMR i-DRONE."
+    },
+    {
+      "questionNumber": 204,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography/S&T: Bedmap3 Antarctic mapping."
+    },
+    {
+      "questionNumber": 205,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/law: defamation."
+    },
+    {
+      "questionNumber": 206,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Defence: VL-SRSAM."
+    },
+    {
+      "questionNumber": 207,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: One Health approach."
+    },
+    {
+      "questionNumber": 208,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/judiciary: removal of SC judges."
+    },
+    {
+      "questionNumber": 209,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/environment: UN World Water Development Report (UNESCO)."
+    },
+    {
+      "questionNumber": 210,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: Commonwealth membership and Games."
+    },
+    {
+      "questionNumber": 211,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: wildlife health surveillance in India."
+    },
+    {
+      "questionNumber": 212,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/S&T: PRIP Pharma-MedTech scheme."
+    },
+    {
+      "questionNumber": 213,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: Gaia mission orbit (L2 vs L1)."
+    },
+    {
+      "questionNumber": 214,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Sangita Kalanidhi award."
+    },
+    {
+      "questionNumber": 215,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/physics: gravitational waves."
+    },
+    {
+      "questionNumber": 216,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/judiciary: Three Judges Cases."
+    },
+    {
+      "questionNumber": 217,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T: Abel Prize."
+    },
+    {
+      "questionNumber": 218,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity: Leader of Opposition."
+    },
+    {
+      "questionNumber": 219,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: orphan drugs."
+    },
+    {
+      "questionNumber": 220,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Sarhul festival (Jharkhand)."
+    },
+    {
+      "questionNumber": 221,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/governance: Sahkar Taxi cooperative."
+    },
+    {
+      "questionNumber": 222,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/physics: AMoRE neutrinoless double beta decay."
+    },
+    {
+      "questionNumber": 223,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/defence: Indian rescue operations and locations."
+    },
+    {
+      "questionNumber": 224,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment/health: asbestos."
+    },
+    {
+      "questionNumber": 225,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Myanmar earthquake / Sagaing Fault."
+    },
+    {
+      "questionNumber": 226,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture/S&T: Studio Ghibli / ChatGPT image style."
+    },
+    {
+      "questionNumber": 227,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR/geography: conflict locations (Aleppo, Khartoum, North Kivu)."
+    },
+    {
+      "questionNumber": 228,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: Kaffeklubben Island northernmost land."
+    },
+    {
+      "questionNumber": 229,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Gounsa Temple (Korea, not Bihar)."
+    },
+    {
+      "questionNumber": 230,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: SPEN / Whipple operation."
+    },
+    {
+      "questionNumber": 231,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Health: food adulteration / calcium carbide."
+    },
+    {
+      "questionNumber": 232,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography/environment: Sukhatal Lake / Naini Lake."
+    },
+    {
+      "questionNumber": 233,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance: Baalpan ki Kavita (MoE)."
+    },
+    {
+      "questionNumber": 234,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy: Gold Monetisation Scheme."
+    },
+    {
+      "questionNumber": 235,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Medieval history: Vijayanagara Empire."
+    },
+    {
+      "questionNumber": 236,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography: seismic seiches."
+    },
+    {
+      "questionNumber": 237,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Economy/IR: US tariff impacts."
+    },
+    {
+      "questionNumber": 238,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: Fram2 polar human spaceflight."
+    },
+    {
+      "questionNumber": 239,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture/history: Mahabodhi Temple."
+    },
+    {
+      "questionNumber": 240,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: Dragon-Elephant Tango (India–China)."
+    },
+    {
+      "questionNumber": 241,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Polity/IR: democratic backsliding."
+    },
+    {
+      "questionNumber": 242,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Governance/S&T: SAHYOG / I4C portal."
+    },
+    {
+      "questionNumber": 243,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: BIMSTEC members."
+    },
+    {
+      "questionNumber": 244,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: deep-sea mining / Clarion-Clipperton Zone."
+    },
+    {
+      "questionNumber": 245,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: S&T/space: Jupiter missions and agencies."
+    },
+    {
+      "questionNumber": 246,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Agriculture: farm mechanisation."
+    },
+    {
+      "questionNumber": 247,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: IR: UN Security Council composition."
+    },
+    {
+      "questionNumber": 248,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Environment: Green Credit Programme."
+    },
+    {
+      "questionNumber": 249,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Geography/infra: India’s first vertical-lift railway sea bridge."
+    },
+    {
+      "questionNumber": 250,
+      "subject": null,
+      "topic": null,
+      "confidence": "low",
+      "reason": "Unmapped: live SSBFY subject/topic catalog was not readable (no Mongo credentials). Do not invent a catalog name. Content: Art & culture: Indian painting styles and regions."
+    }
+  ]
+}

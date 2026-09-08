@@ -6,9 +6,9 @@ import {
   useBottomSafeInsetsDevLog,
 } from '../hooks/useBottomSafeInsets';
 import { EmptyState } from '../components/StateView';
+import QuestionPresentation from '../components/QuestionPresentation';
 import { colors } from '../theme/colors';
 import { EMPTY } from '../theme/stateCopy';
-import { typography } from '../theme/typography';
 import {
   useDevItemMountCounter,
   useDevMountTrace,
@@ -113,7 +113,6 @@ const styles = StyleSheet.create({
   },
   qHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   qIndex: { fontSize: 13, fontWeight: '800', color: MUTED },
-  qText: { ...typography.questionText, fontSize: 16, lineHeight: 24, marginBottom: 10 },
 
   multiBadge: {
     backgroundColor: colors.primarySoft,
@@ -208,7 +207,11 @@ const ReviewAnswerRow = memo(function ReviewAnswerRow({
           </View>
         ) : null}
       </View>
-      <Text style={styles.qText}>{question?.questionText ?? '(missing question)'}</Text>
+      <QuestionPresentation
+        question={question}
+        variant="review"
+        fallbackLabel="(missing question)"
+      />
       {options.map((opt, i) => (
         <View key={i} style={[styles.optionRow, getOptionStyle(i, correctSet, userSet)]}>
           <Text style={styles.optionText}>

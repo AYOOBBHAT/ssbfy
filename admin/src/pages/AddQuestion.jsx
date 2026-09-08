@@ -5,12 +5,22 @@ import {
   findSimilarQuestions,
   getQuestionForAdmin,
   getPosts,
-  getSubject,
   getSubjects,
   getTopics,
   getApiErrorMessage,
   updateQuestion,
 } from '../services/api';
+import QuestionPresentationFields from '../components/QuestionPresentationFields.jsx';
+import {
+  PRESENTATION_KINDS,
+  PRESENTATION_OPTIONS,
+  buildPresentationPayload,
+  contentDraftFromQuestion,
+  emptyContentDraft,
+  isStructuredPresentation,
+  normalizePresentationKind,
+  validatePresentation,
+} from '../utils/questionPresentationForm.js';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 const OPTION_COUNT = 4;
@@ -49,7 +59,9 @@ function looksLikeHttpUrl(s) {
 
 const initialForm = {
   questionType: 'single_correct',
+  presentationKind: PRESENTATION_KINDS.PLAIN,
   questionText: '',
+  content: emptyContentDraft(),
   options: emptyOptions(),
   correctAnswers: [0],
   questionImage: '',
@@ -205,7 +217,9 @@ export default function AddQuestion() {
 
         setForm({
           questionType: q.questionType || 'single_correct',
+          presentationKind: normalizePresentationKind(q.presentationKind),
           questionText: q.questionText || '',
+          content: contentDraftFromQuestion(q),
           options: normalizeOptionsFromServer(q.options),
           correctAnswers: answers,
           questionImage: q.questionImage || '',
@@ -233,6 +247,9 @@ export default function AddQuestion() {
   // duplicate detection to anything meaningful, and the server-side helper
   // refuses unscoped queries anyway.
   useEffect(() => {
+    if (normalizePresentationKind(form.presentationKind) !== PRESENTATION_KINDS.PLAIN) {
+      return undefined;
+    }
     const text = form.questionText.trim();
     if (!text || text.length < 8 || !form.subjectId) {
       setSimilar({ exactDuplicateId: null, similar: [] });
@@ -264,7 +281,7 @@ export default function AddQuestion() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [form.questionText, form.subjectId, editId]);
+  }, [form.questionText, form.subjectId, form.presentationKind, editId]);
 
   function updateField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -324,6 +341,13 @@ export default function AddQuestion() {
     });
   }
 
+  function changePresentationKind(nextKind) {
+    setForm((prev) => ({
+      ...prev,
+      presentationKind: normalizePresentationKind(nextKind),
+    }));
+  }
+
   function resetForm() {
     if (isEdit) {
       setErrorMsg('');
@@ -335,7 +359,8 @@ export default function AddQuestion() {
   }
 
   function validate() {
-    if (!form.questionText.trim()) return 'Question text is required.';
+    const presentationError = validatePresentation(form);
+    if (presentationError) return presentationError;
     const trimmedOptions = form.options.map((o) => o.trim());
     if (trimmedOptions.some((o) => !o)) return 'All 4 options are required.';
     if (!Array.isArray(form.correctAnswers) || form.correctAnswers.length === 0) {
@@ -383,7 +408,11 @@ export default function AddQuestion() {
     // (legacy data may already contain near-duplicates), so this is a
     // client-side speed bump. Admin can override by ticking
     // "Save anyway" — we never silently let an exact duplicate through.
-    if (similar.exactDuplicateId && !acknowledgedDuplicate) {
+    if (
+      normalizePresentationKind(form.presentationKind) === PRESENTATION_KINDS.PLAIN &&
+      similar.exactDuplicateId &&
+      !acknowledgedDuplicate
+    ) {
       setErrorMsg(
         'A question with the same text already exists in this subject. ' +
           'Tick "Save anyway" below the warning to insert it as a separate question, ' +
@@ -402,7 +431,7 @@ export default function AddQuestion() {
     // single-answer value pointed at the primary correct option.
     const payload = {
       questionType: form.questionType,
-      questionText: form.questionText.trim(),
+      ...buildPresentationPayload(form, { isEdit }),
       options: trimmedOptions,
       correctAnswers: sortedCorrect,
       correctAnswerIndex: primary,
@@ -430,7 +459,11 @@ export default function AddQuestion() {
     try {
       setSubmitting(true);
       if (isEdit) {
-        await updateQuestion(editId, payload);
+        const res = await updateQuestion(editId, payload);
+        const saved = res?.question || res;
+        if (saved && typeof saved.questionText === 'string') {
+          setForm((prev) => ({ ...prev, questionText: saved.questionText }));
+        }
         setSuccessMsg('Changes saved successfully.');
       } else {
         await createQuestion(payload);
@@ -446,6 +479,9 @@ export default function AddQuestion() {
 
   const isMulti = form.questionType === 'multiple_correct';
   const isImage = form.questionType === 'image_based';
+  const isStructured = isStructuredPresentation(form.presentationKind);
+  const presentationLabel =
+    PRESENTATION_OPTIONS.find((p) => p.value === form.presentationKind)?.label || 'Plain';
 
   const previewQuestion = form.questionText.trim() || 'Your question will appear here…';
   const previewOptions = form.options.map(
@@ -524,6 +560,29 @@ export default function AddQuestion() {
           )}
         </div>
 
+        <div className="form-row">
+          <label className="label" htmlFor="presentationKind">
+            Presentation *
+          </label>
+          <select
+            id="presentationKind"
+            className="input"
+            value={form.presentationKind}
+            onChange={(e) => changePresentationKind(e.target.value)}
+            disabled={submitting}
+          >
+            {PRESENTATION_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <p className="helper">
+            Question Type is how the answer works. Presentation is how the
+            question stem is displayed. They are independent.
+          </p>
+        </div>
+
         {isImage ? (
           <div className="form-row">
             <label className="label" htmlFor="questionImage">
@@ -545,20 +604,14 @@ export default function AddQuestion() {
           </div>
         ) : null}
 
-        <div className="form-row">
-          <label className="label" htmlFor="questionText">
-            Question text *
-          </label>
-          <textarea
-            id="questionText"
-            className="input"
-            rows={3}
-            value={form.questionText}
-            onChange={(e) => updateField('questionText', e.target.value)}
-            placeholder="Enter the question…"
-            disabled={submitting}
-          />
-        </div>
+        <QuestionPresentationFields
+          presentationKind={form.presentationKind}
+          content={form.content}
+          questionText={form.questionText}
+          disabled={submitting}
+          onContentChange={(content) => updateField('content', content)}
+          onQuestionTextChange={(value) => updateField('questionText', value)}
+        />
 
         <div className="form-row">
           <label className="label">
@@ -765,11 +818,11 @@ export default function AddQuestion() {
           ) : null}
         </div>
 
-        {similarLoading ? (
+        {isStructured ? null : similarLoading ? (
           <p className="helper">Checking for similar questions…</p>
         ) : null}
 
-        {!similarLoading && similar.exactDuplicateId ? (
+        {!isStructured && !similarLoading && similar.exactDuplicateId ? (
           <div className="alert alert-warning">
             <div>
               <strong>Possible exact duplicate.</strong> A question with the
@@ -805,7 +858,8 @@ export default function AddQuestion() {
           </div>
         ) : null}
 
-        {!similarLoading &&
+        {!isStructured &&
+        !similarLoading &&
         !similar.exactDuplicateId &&
         similar.similar.length > 0 ? (
           <div className="alert alert-info">
@@ -864,6 +918,7 @@ export default function AddQuestion() {
             <span className="preview-tag">
               {QUESTION_TYPES.find((t) => t.value === form.questionType)?.label}
             </span>
+            <span className="preview-tag preview-tag-muted">{presentationLabel}</span>
           </p>
           {previewImageUrl ? (
             <img
@@ -877,7 +932,65 @@ export default function AddQuestion() {
               }}
             />
           ) : null}
-          <p className="preview-question">{previewQuestion}</p>
+          {isStructured ? (
+            <div className="preview-structured">
+              {form.content?.intro?.trim() ? (
+                <p className="preview-question">{form.content.intro.trim()}</p>
+              ) : null}
+              {form.presentationKind === PRESENTATION_KINDS.TWO_STATEMENTS
+                ? (form.content.statements || []).map((row, i) => (
+                    <div key={i} className="preview-statement">
+                      <div className="preview-statement-label">{row.label || `Statement ${i + 1}`}</div>
+                      <div>{row.text || '…'}</div>
+                    </div>
+                  ))
+                : null}
+              {form.presentationKind === PRESENTATION_KINDS.NUMBERED_LIST
+                ? (form.content.items || []).map((item, i) => (
+                    <p key={i} className="preview-numbered-item">
+                      {item.n}. {item.text || '…'}
+                    </p>
+                  ))
+                : null}
+              {form.presentationKind === PRESENTATION_KINDS.TABLE ? (
+                <div className="presentation-table-wrap">
+                  <table className="presentation-table preview-table">
+                    <thead>
+                      <tr>
+                        {(form.content.columns || []).map((col, i) => (
+                          <th key={i}>{col || `Column ${i + 1}`}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(form.content.rows || []).map((row, r) => (
+                        <tr key={r}>
+                          {(row || []).map((cell, c) => (
+                            <td key={c}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {form.content?.prompt?.trim() ? (
+                <p className="preview-question">{form.content.prompt.trim()}</p>
+              ) : null}
+              {isEdit && form.questionText.trim() ? (
+                <p className="helper" style={{ marginBottom: 0 }}>
+                  Generated question text (from server, read-only):{' '}
+                  <span className="preview-generated-text">{form.questionText}</span>
+                </p>
+              ) : (
+                <p className="helper" style={{ marginBottom: 0 }}>
+                  Flattened question text is generated by the server on save.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="preview-question">{previewQuestion}</p>
+          )}
           <ul className="preview-options">
             {previewOptions.map((opt, i) => {
               const isCorrect = form.correctAnswers.includes(i);

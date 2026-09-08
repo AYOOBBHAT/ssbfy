@@ -21,6 +21,7 @@ import {
   buildCorrectAnswerPayload,
   computeWeakTopics,
 } from '../utils/questionScoring.js';
+import { presentationFieldsFromQuestion } from '../utils/questionPresentation.js';
 
 function dedupeQuestionIds(ids) {
   const seen = new Set();
@@ -140,6 +141,7 @@ function questionDocFromSnapshotItem(item) {
     options: Array.isArray(item.options) ? item.options : [],
     questionType: item.questionType || 'single_correct',
     questionImage: item.questionImage ?? '',
+    ...presentationFieldsFromQuestion(item),
     explanation: item.explanation ?? '',
     topicId: item.topicId ?? null,
     subjectId: item.subjectId ?? null,

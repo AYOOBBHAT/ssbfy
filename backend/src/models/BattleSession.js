@@ -13,6 +13,8 @@ const battleQuestionSnapshotSchema = new mongoose.Schema(
     options: [{ type: String, required: true }],
     questionType: { type: String, default: 'single_correct' },
     questionImage: { type: String, default: '' },
+    presentationKind: { type: String, default: 'plain' },
+    content: { type: mongoose.Schema.Types.Mixed, default: null },
     correctAnswers: { type: [Number], default: [] },
     correctAnswerIndex: { type: Number, default: null, min: 0 },
     correctAnswerValue: { type: String, default: '' },

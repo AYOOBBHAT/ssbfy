@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:question-presentation": "node ./scripts/verify-question-presentation.mjs"
   },
   "dependencies": {
     "@sentry/react": "^10.52.0",

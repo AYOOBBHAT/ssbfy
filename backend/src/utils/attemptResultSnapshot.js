@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { presentationFieldsFromQuestion } from './questionPresentation.js';
 
 export const WEAK_TOPIC_LIMIT = 10;
 
@@ -170,6 +171,7 @@ export function buildResultSnapshotAtSubmit(attemptQuestionIds, qMap, answerByQ,
       options: Array.isArray(q.options) ? [...q.options] : [],
       questionType: q.questionType || 'single_correct',
       questionImage: q.questionImage ?? '',
+      ...presentationFieldsFromQuestion(q),
       explanation: q.explanation ?? '',
       topicId: q.topicId ?? null,
       subjectId: q.subjectId ?? null,
@@ -200,6 +202,8 @@ function placeholderSnapshotItem(qid, ans) {
     options: [],
     questionType: 'single_correct',
     questionImage: '',
+    presentationKind: 'plain',
+    content: null,
     explanation: '',
     topicId: null,
     subjectId: null,
@@ -255,6 +259,7 @@ export function buildResultSnapshotForBackfill(attemptQuestionIds, qMap, answerB
       options: Array.isArray(q.options) ? [...q.options] : [],
       questionType: q.questionType || 'single_correct',
       questionImage: q.questionImage ?? '',
+      ...presentationFieldsFromQuestion(q),
       explanation: q.explanation ?? '',
       topicId: q.topicId ?? null,
       subjectId: q.subjectId ?? null,

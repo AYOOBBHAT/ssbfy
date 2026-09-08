@@ -1,0 +1,34 @@
+[
+  {
+    "questionType": "single_correct",
+    "presentationKind": "plain",
+    "questionText": "Phase4-JSON-array: What is 2 + 2?",
+    "options": ["3", "4", "5", "22"],
+    "correctAnswers": [1],
+    "subject": "Maths",
+    "topic": "Arithmetic",
+    "difficulty": "easy",
+    "explanation": "2 + 2 = 4",
+    "year": 2025,
+    "postIds": []
+  },
+  {
+    "questionType": "single_correct",
+    "presentationKind": "two_statements",
+    "content": {
+      "intro": "Consider the following statements:",
+      "statements": [
+        { "label": "Statement – I", "text": "JSON array import is supported." },
+        { "label": "Statement – II", "text": "JSONL remains the primary format." }
+      ],
+      "prompt": "Which one is correct?"
+    },
+    "options": ["Only I", "Only II", "Both I and II", "Neither"],
+    "correctAnswers": [2],
+    "subject": "Polity",
+    "topic": "Union Executive",
+    "difficulty": "medium",
+    "year": 2025,
+    "postIds": []
+  }
+]

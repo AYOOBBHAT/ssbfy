@@ -8,6 +8,7 @@ import { subjectRepository } from '../repositories/subjectRepository.js';
 import { learningSessionService } from './learningSessionService.js';
 import { getCanonicalTopicResolver } from './canonicalTopicResolver.js';
 import { scoreQuestionSession } from '../utils/questionScoring.js';
+import { presentationFieldsFromQuestion } from '../utils/questionPresentation.js';
 import { practiceIssuanceRepository } from '../repositories/practiceIssuanceRepository.js';
 import { battleService } from './battleService.js';
 import { battleSessionRepository } from '../repositories/battleSessionRepository.js';
@@ -91,6 +92,7 @@ function buildReviewQuestion(q, topicNameById) {
     options: Array.isArray(q.options) ? [...q.options] : [],
     questionType: q.questionType || 'single_correct',
     questionImage: q.questionImage || '',
+    ...presentationFieldsFromQuestion(q),
     explanation: typeof q.explanation === 'string' ? q.explanation : '',
     topicId: topicRef,
     ...(topicName ? { topicName } : {}),

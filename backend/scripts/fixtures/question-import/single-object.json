@@ -1,0 +1,11 @@
+{
+  "questionType": "single_correct",
+  "questionText": "Phase4-JSON-object: Capital of France?",
+  "options": ["Berlin", "Paris", "Rome", "Madrid"],
+  "correctAnswers": [1],
+  "subject": "Geography",
+  "topic": "Capitals",
+  "difficulty": "easy",
+  "year": 2024,
+  "postIds": []
+}

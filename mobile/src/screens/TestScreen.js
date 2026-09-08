@@ -37,6 +37,7 @@ import {
 import { getLearningSession } from '../services/learningSessionService';
 import logger from '../utils/logger';
 import AppButton from '../components/AppButton';
+import QuestionPresentation from '../components/QuestionPresentation';
 import SafeBottomActionBar from '../components/layout/SafeBottomActionBar';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateView';
 import { EMPTY } from '../theme/stateCopy';
@@ -49,7 +50,6 @@ import {
 import { colors } from '../theme/colors';
 import { battleAccent } from '../theme/setupPresentation';
 import { setupPresentationDevLog } from '../utils/setupPresentationDevLog';
-import { typography } from '../theme/typography';
 import { pressCardStyle } from '../utils/pressFeedback';
 import {
   loadDraft,
@@ -1681,9 +1681,12 @@ export default function TestScreen() {
         {isRetry ? 'Recovery' : 'Question'} {index + 1} / {total}
       </Text>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.question}>
-          {question?.questionText || '(question unavailable)'}
-        </Text>
+        <QuestionPresentation
+          question={question}
+          variant="test"
+          fallbackLabel="(question unavailable)"
+          emptyAsFallback
+        />
         {typeHelperText ? (
           <Text style={styles.typeHelper}>{typeHelperText}</Text>
         ) : null}
@@ -1752,7 +1755,6 @@ const styles = StyleSheet.create({
   header: { fontSize: 16, marginBottom: 12, fontWeight: '600', color: colors.text },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 8 },
-  question: { ...typography.questionText, marginBottom: 12 },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',

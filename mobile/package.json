@@ -15,6 +15,7 @@
     "verify:pyq-origin-navigation": "node ./scripts/verify-pyq-origin-navigation.cjs",
     "verify:pyq-copy": "node ./scripts/verify-pyq-copy.cjs",
     "verify:app-version-gate": "node ./scripts/verify-app-version-gate.cjs",
+    "verify:question-presentation": "node ./scripts/verify-question-presentation.cjs",
     "verify:interstitial-placements": "node ./scripts/verify-interstitial-placements.cjs",
     "eas:preview:android": "eas build --profile preview --platform android",
     "eas:preview:ios": "eas build --profile preview --platform ios",

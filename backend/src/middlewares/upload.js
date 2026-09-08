@@ -45,7 +45,7 @@ export const uploadPdfSingle = multer({
   },
 }).single('file');
 
-// ---- CSV upload (memory storage; file lives on `req.file.buffer`). ----
+// ---- CSV / JSONL / JSON upload (memory storage; file lives on `req.file.buffer`). ----
 //
 // Question imports are bounded (we cap to ~5MB which is roughly 50k rows)
 // and processed synchronously, so memory storage avoids the disk cleanup
@@ -59,16 +59,25 @@ function csvFileFilter(_req, file, cb) {
     file.mimetype === 'text/csv' ||
     file.mimetype === 'application/vnd.ms-excel' || // some browsers tag CSVs this way
     file.mimetype === 'application/csv' ||
-    file.mimetype === 'text/plain';
+    file.mimetype === 'text/plain' ||
+    file.mimetype === 'application/json' ||
+    file.mimetype === 'application/x-ndjson' ||
+    file.mimetype === 'text/json' ||
+    file.mimetype === 'text/x-jsonl';
   const fileExt = path.extname(file.originalname || '').toLowerCase();
-  const okExt = fileExt === '.csv' || fileExt === '.txt';
+  const okExt =
+    fileExt === '.csv' ||
+    fileExt === '.txt' ||
+    fileExt === '.jsonl' ||
+    fileExt === '.ndjson' ||
+    fileExt === '.json';
   if (okMime || okExt) {
     cb(null, true);
     return;
   }
   cb(
     new AppError(
-      'Only CSV files are allowed. Save as CSV from Excel/Sheets and re-upload.',
+      'Only CSV, JSONL, or JSON files are allowed.',
       HTTP_STATUS.BAD_REQUEST
     )
   );
@@ -90,7 +99,7 @@ export function handleCsvUpload(req, res, next) {
       const mapped =
         err.code === 'LIMIT_FILE_SIZE'
           ? new AppError(
-              `CSV too large. Max ${(CSV_MAX_BYTES / (1024 * 1024)).toFixed(0)} MB allowed.`,
+              `Import file too large. Max ${(CSV_MAX_BYTES / (1024 * 1024)).toFixed(0)} MB allowed.`,
               HTTP_STATUS.BAD_REQUEST
             )
           : new AppError(

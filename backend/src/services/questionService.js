@@ -8,6 +8,12 @@ import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
 import { postRepository } from '../repositories/postRepository.js';
 import { QUESTION_TYPES, QUESTION_TYPE_VALUES } from '../models/Question.js';
+import {
+  PRESENTATION_KINDS,
+  normalizePresentationKind,
+  prepareQuestionPresentation,
+  presentationFieldsFromQuestion,
+} from '../utils/questionPresentation.js';
 
 function isValidHttpUrl(s) {
   if (typeof s !== 'string' || s.trim() === '') return false;
@@ -180,6 +186,7 @@ function projectQuestion(q) {
     questionType: q.questionType || QUESTION_TYPES.SINGLE_CORRECT,
     questionImage: q.questionImage || '',
     correctAnswers,
+    ...presentationFieldsFromQuestion(q),
   };
 }
 
@@ -196,6 +203,7 @@ function projectAdminPickerRow(row, subj, top, posts) {
     options: Array.isArray(row.options) ? [...row.options] : [],
     questionType: row.questionType || QUESTION_TYPES.SINGLE_CORRECT,
     questionImage: row.questionImage || '',
+    presentationKind: presentationFieldsFromQuestion(row).presentationKind,
     subjectId: subj?._id ?? row.subjectId,
     topicId: top?._id ?? row.topicId,
     postIds,
@@ -240,6 +248,7 @@ export function projectPublicQuestion(q) {
     questionType: q.questionType || QUESTION_TYPES.SINGLE_CORRECT,
     questionImage: q.questionImage || '',
     year: q.year ?? null,
+    ...presentationFieldsFromQuestion(q),
   };
 }
 
@@ -284,6 +293,46 @@ async function resolveHierarchy(subjectId, topicId) {
   }
 
   return { subject, topic };
+}
+
+function applyPresentationOnUpdate(doc, patch) {
+  const kindTouched = Object.prototype.hasOwnProperty.call(patch, 'presentationKind');
+  const contentTouched = Object.prototype.hasOwnProperty.call(patch, 'content');
+  const textTouched = Object.prototype.hasOwnProperty.call(patch, 'questionText');
+
+  if (!kindTouched && !contentTouched) {
+    if (textTouched && normalizePresentationKind(doc.presentationKind) === PRESENTATION_KINDS.PLAIN) {
+      doc.questionText = patch.questionText;
+    }
+    return;
+  }
+
+  const nextKind = kindTouched ? patch.presentationKind : doc.presentationKind;
+  const kind = normalizePresentationKind(nextKind);
+  const nextText = textTouched ? patch.questionText : doc.questionText;
+
+  if (kind === PRESENTATION_KINDS.PLAIN) {
+    const prepared = prepareQuestionPresentation({
+      presentationKind: PRESENTATION_KINDS.PLAIN,
+      content: contentTouched ? patch.content : undefined,
+      questionText: nextText,
+    });
+    doc.presentationKind = prepared.presentationKind;
+    doc.questionText = prepared.questionText;
+    doc.content = undefined;
+    doc.set('content', undefined);
+    return;
+  }
+
+  const prepared = prepareQuestionPresentation({
+    presentationKind: kind,
+    content: contentTouched ? patch.content : doc.content,
+    questionText: nextText,
+  });
+  doc.presentationKind = prepared.presentationKind;
+  doc.content = prepared.content;
+  doc.questionText = prepared.questionText;
+  doc.markModified('content');
 }
 
 async function assertPostIds(postIds) {
@@ -759,8 +808,15 @@ export const questionService = {
     const reconciledPostIds = reconcilePostIds(postIds, subject.postId);
     await assertPostIds(reconciledPostIds);
 
-    const payload = {
+    const presentation = prepareQuestionPresentation({
+      presentationKind: body.presentationKind,
+      content: body.content,
       questionText,
+    });
+
+    const payload = {
+      questionText: presentation.questionText,
+      presentationKind: presentation.presentationKind,
       options,
       questionType,
       questionImage: questionImage || '',
@@ -774,6 +830,9 @@ export const questionService = {
     };
     if (difficulty !== undefined) {
       payload.difficulty = difficulty;
+    }
+    if (presentation.content !== undefined) {
+      payload.content = presentation.content;
     }
 
     const created = await questionRepository.create(payload);
@@ -791,9 +850,7 @@ export const questionService = {
       patch.postIds = [rawPatch.postId];
     }
 
-    if (patch.questionText !== undefined) {
-      doc.questionText = patch.questionText;
-    }
+    applyPresentationOnUpdate(doc, patch);
     if (patch.options !== undefined) {
       doc.options = patch.options;
     }

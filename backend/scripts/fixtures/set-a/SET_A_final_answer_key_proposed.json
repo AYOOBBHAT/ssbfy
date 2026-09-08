@@ -1,0 +1,1758 @@
+{
+  "source": "SET_A_answer_key.json",
+  "status": "proposed",
+  "answerOrigin": "externally_solved_and_audited",
+  "totalQuestions": 250,
+  "answers": [
+    {
+      "questionNumber": 1,
+      "answer": "D",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Statement I is overstated: a revised identity certificate is available after surgery. Statement II matches the historical RBD 1969 correction rule. D remains the best fit; RBD 2023 amendments add some nuance."
+    },
+    {
+      "questionNumber": 2,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "India is the fourth docking nation after US, Russia and China. Statement 2 is therefore not correct."
+    },
+    {
+      "questionNumber": 3,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Among the four names, J.C. Bose is the only figure recent commentary links to a Gandhi-like satyagraha in science. The exact epithet is not a settled textbook title."
+    },
+    {
+      "questionNumber": 4,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "HCES is MoSPI/NSSO, not Finance. Rural food-share remains higher than urban."
+    },
+    {
+      "questionNumber": 5,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Only MuleHunter.ai and the RBI sandbox are clearly finance-sector tools. NSAI and DPDP are national frameworks, not specifically ethical AI in finance. A is the strict reading; some keys may count all four."
+    },
+    {
+      "questionNumber": 6,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "“Chila/chilla” is a forty-day period, not “stay indoors”. Pheran Day on 21 Dec and Chillai-Khurd/Bachha are established. Only 2 and 3 hold."
+    },
+    {
+      "questionNumber": 7,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Baykar (Turkey)."
+    },
+    {
+      "questionNumber": 8,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "PDF table matches JSONL. Kaas Plateau is Maharashtra, not UP, so row 2 is wrong. Rows 1 and 3 hold. Two rows matched → B. Extraction wrapping does not change the pairs."
+    },
+    {
+      "questionNumber": 9,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 10,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Arts 16, 19 and 29 are citizen-only; Art. 28 is not."
+    },
+    {
+      "questionNumber": 11,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Rarest-of-rare is settled law. Statement II overstates RG Kar as a new restriction to “no reformation” only. C remains the best reading."
+    },
+    {
+      "questionNumber": 12,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NA/SA peaks are swapped. Elbrus/Elbruz (Europe) and Kosciuszko (Australia) are the usual pairs."
+    },
+    {
+      "questionNumber": 13,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Risk factors are metabolic (high lipids/BP); treatment is not primarily fat-removal surgery."
+    },
+    {
+      "questionNumber": 14,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Both statements are true; 1946 UN specialized-agency status does not explain tripartism."
+    },
+    {
+      "questionNumber": 15,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Item 5 is not a standard impact of Paris withdrawal."
+    },
+    {
+      "questionNumber": 16,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 17,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "2024–25 Ratnagiri work reported colossal Buddha heads, a monolithic elephant, votive stupas/inscriptions, and Bhaumakara-period mahavihara remains."
+    },
+    {
+      "questionNumber": 18,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "2017 amendments bar inheritance/transfer by heirs."
+    },
+    {
+      "questionNumber": 19,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "ONOE requires amending duration/session provisions including 83, 85, 172 and 174 (among others). Closest option."
+    },
+    {
+      "questionNumber": 20,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "DIA allows duty-free import up to (not above) ¼ carat; 10% value addition is required. Prompt asks which is not correct."
+    },
+    {
+      "questionNumber": 21,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 22,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 23,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "BBBP is a Centrally Sponsored Scheme under MoWCD, not a Central Sector scheme under HRD. Only statement 3 is clearly true → only one."
+    },
+    {
+      "questionNumber": 24,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "TB is not a typical food-borne pathogen."
+    },
+    {
+      "questionNumber": 25,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 26,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "GBS as autoimmune PNS disease is standard. “Primarily caused by … norovirus” overreaches. 1 only remains the safer answer."
+    },
+    {
+      "questionNumber": 27,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Indian antivenom is equine, not goat-derived."
+    },
+    {
+      "questionNumber": 28,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "5B.2: Brindavan Hydropower v. UoI (Karnataka HC, 20 Dec 2024). 1 true (central GEOA Rules 2022). 2 false (KERC 2022 rules were green open access, not non-renewable purchase). 3 true (Centre cannot use residual s.176(2) to override Electricity Act / SERC open-access powers). 1 and 3 only → B."
+    },
+    {
+      "questionNumber": 29,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "IUCN Vulnerable; tropical. Kemp’s ridley is the smallest; diet is not primarily plants."
+    },
+    {
+      "questionNumber": 30,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Statement 1 swaps the usual USGS 90% quake / 75% volcano figures. Valdivia 1960 is in the Ring of Fire. “15 countries” is a coaching-level rounding. Two correct remains reasonable."
+    },
+    {
+      "questionNumber": 31,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 32,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Semi-Dirac: massless in one direction. Majorana (not Dirac) fermions are their own antiparticles."
+    },
+    {
+      "questionNumber": 33,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "WEF report, not IMF. Armed conflict was the top 2025 short-term risk."
+    },
+    {
+      "questionNumber": 34,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Only Aleutian–North Pacific is right. Mariana is western Pacific; Tonga is South Pacific."
+    },
+    {
+      "questionNumber": 35,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Scramjets are air-breathing. DRDO 120s ground test is documented."
+    },
+    {
+      "questionNumber": 36,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Indore and Udaipur received Wetland City Accreditation."
+    },
+    {
+      "questionNumber": 37,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "1 and 2 describe crypto exchanges correctly. Physical-presence KYC is not mandated; V-CIP/digital KYC exists. Prompt asks which are not correct → 3 only."
+    },
+    {
+      "questionNumber": 38,
+      "answer": "C",
+      "confidence": "low",
+      "verdict": "CANNOT_VERIFY",
+      "notes": "PDF prints “Jalankantha”. Attested historical term is jalayantra/jala-yantra (water instrument/clock). Exact “Jalankantha” spelling is not independently established. C remains the only defensible option among the four; do not treat as confirmed. JSONL not edited."
+    },
+    {
+      "questionNumber": 39,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Ramsar uses 20,000 birds not 30,000. Criteria 2, 6 and 8 match items 2–4."
+    },
+    {
+      "questionNumber": 40,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Martial law is undefined; never formally declared in independent India. Art. 34 is real."
+    },
+    {
+      "questionNumber": 41,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 42,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NVS-02 carries indigenous clocks and L1. It was not placed “directly” into GEO; it went to GTO and failed orbit-raising. 1 only."
+    },
+    {
+      "questionNumber": 43,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Paraquat is WHO Class II (moderately hazardous), not “highly hazardous”. No reliable antidote. Still used in India and the US. Only 2 is correct."
+    },
+    {
+      "questionNumber": 44,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Preamble, 19 and 21. Art. 31 repealed; Art. 15 is equality not liberty."
+    },
+    {
+      "questionNumber": 45,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Native to Sumatra; bloom interval is not a rigid 20 years."
+    },
+    {
+      "questionNumber": 46,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 47,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Baaz / Northern Goshawk."
+    },
+    {
+      "questionNumber": 48,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 49,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Nano urea is foliar, not a soil drench. Prompt asks which is not correct."
+    },
+    {
+      "questionNumber": 50,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 51,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Life expectancy is ~70, not 75. Foodgrain rank, literacy ~74–77%, Chandrayaan-3, and fifth-largest economy hold. 2–5 true → C."
+    },
+    {
+      "questionNumber": 52,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 53,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Pralay is indigenous SR quasi-ballistic. It is not India’s longest SSM (Agni series). It is conventional, not nuclear. Only 1 is correct."
+    },
+    {
+      "questionNumber": 54,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 55,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Whip is a party direction, not a “choice”; it is not in a parliamentary statute; it is a British convention. All three incorrect."
+    },
+    {
+      "questionNumber": 56,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Origin is Sikkim (Pauhunri/Tso Lhamo), not Kailash. Teesta-III is in Sikkim."
+    },
+    {
+      "questionNumber": 57,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Bharat Ratna is higher; public nominations exist; committee is not headed by the President."
+    },
+    {
+      "questionNumber": 58,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "India signed and ratified in 2016. NDCs are nationally determined, not identical common targets. 1 only."
+    },
+    {
+      "questionNumber": 59,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "PDF itself swaps Savarkar and Libia Lobo. Only Bharati’s pair is right. Flattened JSONL matches the PDF, not an extraction error."
+    },
+    {
+      "questionNumber": 60,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "DGFT eCoO 2.0."
+    },
+    {
+      "questionNumber": 61,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "All four are on India’s critical-minerals list."
+    },
+    {
+      "questionNumber": 62,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "2015 MMDR introduced PL-cum-ML via state auction. “All leases” is the general rule with narrow exceptions, so both can be treated as correct in UPSC style."
+    },
+    {
+      "questionNumber": 63,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "R1 efficiency/MoE are documented. Japan-scale 2027 electricity is a general-AI IEA-style projection, not DeepSeek-specific. 1 and 3."
+    },
+    {
+      "questionNumber": 64,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Mitra Shakti is India–Sri Lanka. Indonesia is not India’s 2nd-largest trade partner. Both are in G20."
+    },
+    {
+      "questionNumber": 65,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Guarantee cover is 60%, not 100%. Udyam is required. Machinery is a minimum share of project cost, not 100% of project cost. 1 and 3 are not correct."
+    },
+    {
+      "questionNumber": 66,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 67,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Giddha is Punjab, not Gujarat. Other three pairs hold."
+    },
+    {
+      "questionNumber": 68,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "OSOWOG is an India/ISA idea and a transnational solar grid. Phase 1 is not primarily the Asia–Africa link. 3 is not correct."
+    },
+    {
+      "questionNumber": 69,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "HAT is parasitic, not bacterial."
+    },
+    {
+      "questionNumber": 70,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 71,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "e-Shram is Labour, not MSME."
+    },
+    {
+      "questionNumber": 72,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Fusion weapons are thermonuclear, not “atomic” (fission) bombs."
+    },
+    {
+      "questionNumber": 73,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "India’s OSI uses four sub-indicators: wage growth, employment growth, hours worked, under-qualified share. Migration and automation are extras. Only four."
+    },
+    {
+      "questionNumber": 74,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Indian lakes are largely eutrophic, not oligotrophic."
+    },
+    {
+      "questionNumber": 75,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 76,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 77,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Definition and 1948 UNGA treaty status hold. India signed in 1949 but ratified in 1959, so “signed and ratified in 1949” fails. 1 and 2 only."
+    },
+    {
+      "questionNumber": 78,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 79,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "GDP ~18% to ~15% band, milk/pulses/spices leadership, and ~45% workforce are rounded but in-band. All three can stand."
+    },
+    {
+      "questionNumber": 80,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 81,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Both statements are true; NDPS prohibition is why HP’s project is “controlled”. A is the intended explanation reading; B is the only real alternative."
+    },
+    {
+      "questionNumber": 82,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Faulted Cretaceous coast is NCERT-standard. Official coastline length was revised upward, not reduced. 1 only."
+    },
+    {
+      "questionNumber": 83,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Fentanyl is synthetic."
+    },
+    {
+      "questionNumber": 84,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Squid are molluscs, not arthropods. Genetic-similarity claims and IUCN LC are the parts keys treat as true. 2 and 3."
+    },
+    {
+      "questionNumber": 85,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 86,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Kenya does not border DRC. The other five do."
+    },
+    {
+      "questionNumber": 87,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Rules cover waste generators, not “companies only / not households”. Local bodies and the 20 t/day or 300 t/month plan are real. Only 2 and 3 → only two."
+    },
+    {
+      "questionNumber": 88,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Changed B→A. Statement 2 false: BD Act 2002 s.37 — State Government notifies BHS. Statement 3 false: Guneri inland mangrove is Gujarat’s first BHS (Gujarat govt/IE/ToI/ANI Jan 2025), not second. Only statement 1 holds → only one → A."
+    },
+    {
+      "questionNumber": 89,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Tax cuts do not by themselves reduce the fiscal deficit."
+    },
+    {
+      "questionNumber": 90,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "CRIS developed SwaRail. Food ordering is in the super-app scope, so 2 is not correct. Prompt: not correct → 2 only."
+    },
+    {
+      "questionNumber": 91,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Manipur does not border Bangladesh."
+    },
+    {
+      "questionNumber": 92,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "UK still leads in Ramsar count. Jharkhand/Sikkim first sites and Tamil Nadu’s lead are 2024 facts."
+    },
+    {
+      "questionNumber": 93,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "The two statements swap PNS vs CNS."
+    },
+    {
+      "questionNumber": 94,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "UNCERTAIN",
+      "notes": "PDF pairs match JSONL. No “none” option. Common/CA nicknames: saffron–red diamond is the only loosely matching pair; caviar/makhana/pine nuts appear swapped vs usual “black diamond/seed diamond” usage. Question is defective. Original A retained as least-bad letter, not confirmed."
+    },
+    {
+      "questionNumber": 95,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "One-time-only extension and a lifetime visa-count cap are the two false claims. Green-card path and ~70% Indian share are right. Two not correct."
+    },
+    {
+      "questionNumber": 96,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Liechtenstein is not a WHO member. Switzerland, Iran, DPRK are. US notified withdrawal 20 Jan 2025, effective 22 Jan 2026 — still a member in 2025. Options have no “only one”. Original A (US+Liechtenstein = only two) is the 2025 CA reading, not a strict contemporaneous-membership reading."
+    },
+    {
+      "questionNumber": 97,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "ELS is premium fine cotton, not coarse, and not grown in all cotton states."
+    },
+    {
+      "questionNumber": 98,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Sagarmala is port-led development; the 95%/70% trade split is reversed (volume vs value)."
+    },
+    {
+      "questionNumber": 99,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 100,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 101,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "FD excludes borrowings from receipts; FD and inflation are not inversely related."
+    },
+    {
+      "questionNumber": 102,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 103,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "MCA, not Commerce."
+    },
+    {
+      "questionNumber": 104,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 105,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Orans–Rajasthan; Devara Kadu–Karnataka; Sarpa Kavu–Kerala only."
+    },
+    {
+      "questionNumber": 106,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 107,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Also food-borne, not only direct contact."
+    },
+    {
+      "questionNumber": 108,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 109,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "There is no uniform national anti-conversion law. Prompt: not correct."
+    },
+    {
+      "questionNumber": 110,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Budget 2025 pulse mission: tur, urad, masoor."
+    },
+    {
+      "questionNumber": 111,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "ICC can also act on UNSC referral of non-parties, so “only State Party” is too tight. India is not a Rome Statute party. 2 only."
+    },
+    {
+      "questionNumber": 112,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Tribunals are an Assam mechanism, not JK/Arunachal."
+    },
+    {
+      "questionNumber": 113,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Padma Vibhushan 2015, AKTC restorations, and AKDN work in many countries are all attested. All three."
+    },
+    {
+      "questionNumber": 114,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "High SO2 removal and a MoEFCC FGD mandate are true. ~20% installed is high; a blanket “five years from 31 Dec 2024” is not a clean match. Two correct is the cautious count."
+    },
+    {
+      "questionNumber": 115,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Vijay Durg / Maratha naval heritage is the stated reason for Indianising the name."
+    },
+    {
+      "questionNumber": 116,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "8x8 Stryker is real. Chinook lift at combat weight is not. 800+ km range exceeds the usual ~500 km figure. Only 1 is clearly true."
+    },
+    {
+      "questionNumber": 117,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Melt lowers albedo; it does not increase ocean reflectivity."
+    },
+    {
+      "questionNumber": 118,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Parole is extra-legal vis-à-vis the 1894 Act. Definition is roughly right. Divisional Commissioner is the granting authority in several states, not a uniform national rule. Two is the usual key."
+    },
+    {
+      "questionNumber": 119,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 120,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Changed D→C. Union Budget 2025-26 speech (indiabudget.gov.in para 5) lists items 1–4 verbatim, but women in economic activities is seventy per cent, not hundred per cent. Four of five match → C."
+    },
+    {
+      "questionNumber": 121,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "HGP launched 1990; it was public+private, not purely private."
+    },
+    {
+      "questionNumber": 122,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "First Indian plant was Tarapur, not Kalpakkam."
+    },
+    {
+      "questionNumber": 123,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "PM-KISAN is ₹6,000, not ₹10,000."
+    },
+    {
+      "questionNumber": 124,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 125,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 126,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Nuclear is the second-largest low-carbon source after hydro; ~10% of 2021 generation is right. Lifecycle GHG is typically similar to or below solar, so “higher than solar and wind” is shaky. Two correct."
+    },
+    {
+      "questionNumber": 127,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Stem asks which route is not part of the DFCs (not “operational only”). A = Western DFC JNPT–Dadri. B = Eastern DFC Dankuni–Sahnewal. C = proposed East Coast DFC Kharagpur–Vijayawada (DFCCIL/IE). D Bangalore–Chennai is not a named DFC (Southern DFC is typically Madgaon–Chennai). D."
+    },
+    {
+      "questionNumber": 128,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "RIDF is NABARD, not a Railways fund."
+    },
+    {
+      "questionNumber": 129,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NAMASTE is Central Sector, not CSS. Prompt: not correct."
+    },
+    {
+      "questionNumber": 130,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Potash does not harden water."
+    },
+    {
+      "questionNumber": 131,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NCSK Act 1993 lapsed; the body is non-statutory. It does inquire/suo motu. It reports to the Central Government, not the President. 1 and 3 are not correct."
+    },
+    {
+      "questionNumber": 132,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Repo cuts lower, not raise, EMIs."
+    },
+    {
+      "questionNumber": 133,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "SC 2023: re-passed bill must be assented. Reservation under 201 is not of every bill."
+    },
+    {
+      "questionNumber": 134,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 135,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 136,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 137,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Late La Niña, high GHGs, aerosol decline, and a weak/short La Niña were the usual Jan 2025 explanations. All four is reasonable, not independently re-derived."
+    },
+    {
+      "questionNumber": 138,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "BDL–Thales MANPADS and IFEP for LPDs match Aero India 2025 notes. ASRAAM facility is Hyderabad, not Mumbai. 1 and 3."
+    },
+    {
+      "questionNumber": 139,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "ASHAs are incentive-based, not salaried. WHO 2022 Global Health Leaders Award is true. Age band is 25–45, not 25–40. Only one correct."
+    },
+    {
+      "questionNumber": 140,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Forest/woodland deer, not desert."
+    },
+    {
+      "questionNumber": 141,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "GDKP is a 2025 MoSPI proposal, not NITI 2021. Knowledge-sector measurement and IPP-in-GFCF are right. 2 and 3."
+    },
+    {
+      "questionNumber": 142,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 143,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 144,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "US rate hikes and trade wars can depreciate INR. Falling imports support the rupee. Two factors."
+    },
+    {
+      "questionNumber": 145,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "MHW definition is percentile-based; they are not summer-only; most are not “natural”."
+    },
+    {
+      "questionNumber": 146,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "PDF wrapping matches JSONL. Kandariya–Chandela and Rani-ki-Vav–Chaulukya/Chalukya hold as WH pairs. Chausath Yogini as WH+Kachchhapaghata is the mismatch (Khajuraho WH is Chandela; Mitaoli is not WH). One pair not correct → A."
+    },
+    {
+      "questionNumber": 147,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Range is thousands of nautical miles, not 400; the ship has anti-surface weapons too."
+    },
+    {
+      "questionNumber": 148,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "HKU1 is a common-cold coronavirus, not a COVID-like pandemic threat."
+    },
+    {
+      "questionNumber": 149,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "CAG is constitutional and audits PSUs. Removal is by President after parliamentary address, not a simple presidential dismissal. 1 and 3."
+    },
+    {
+      "questionNumber": 150,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Only Shahi Litchi–Bihar is right."
+    },
+    {
+      "questionNumber": 151,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Changed B→A. Prompt: which is not correct. B true (Paramhansa Sabha and Prarthana Samaj). C true (MGE/Huzurpaga co-founder). D true (BORI 1917 in his honour). A false: Imperial Legislative Council 1903 / Bombay Legislative Council 1904, not Governor’s Executive Council. A."
+    },
+    {
+      "questionNumber": 152,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Raisina is ORF with MEA, not MHA."
+    },
+    {
+      "questionNumber": 153,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Statement 1 (“first temple in India”) is false: it is described as Maharashtra’s first, and Srisailam predates it. HT reports murals and fort-inspired architecture, so 2 and 3 stand. How many are not correct → only one. Original A stands; confidence can rise."
+    },
+    {
+      "questionNumber": 154,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 155,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 156,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "India’s 24th rank is attested. Statement II (support reliably yields practice) is the generalisation the 2025 index itself undermines. C remains reasonable; B is the alternative if II is treated as a weak but true correlation."
+    },
+    {
+      "questionNumber": 157,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "All five listed uses appear in popular audible-enclave explainers. This is application-listing, not a hard fact set. Keep medium."
+    },
+    {
+      "questionNumber": 158,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Lake is artificial (Arnoraja), not tectonic; not built by Prithviraj; Baradari is Shah Jahan, not Aurangzeb. Seasonal drying is the only possibly true claim."
+    },
+    {
+      "questionNumber": 159,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Laterite/well-drained soils; Karnataka is the top producer."
+    },
+    {
+      "questionNumber": 160,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "It begins spring, not summer; day/night are not exactly 12 h everywhere."
+    },
+    {
+      "questionNumber": 161,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Rill → gully → ravine/canyon → badland."
+    },
+    {
+      "questionNumber": 162,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "TEC/DoT Samarth incubation."
+    },
+    {
+      "questionNumber": 163,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "SPVs and mixed finance are true. NE “most progress” and “<60% complete” were outdated by 2025. Two correct."
+    },
+    {
+      "questionNumber": 164,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "All three are wrong: threshold is not ₹10,000 as stated, “1% … ₹10,1000” is garbled, and MDR on these UPI P2M small-merchant txns is zero. All three incorrect."
+    },
+    {
+      "questionNumber": 165,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "They are classed as non-lethal."
+    },
+    {
+      "questionNumber": 166,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NASA Crew-9 science wrap-up: SoFIE-RTDFS flame spread; Arthrospira C CO2→O2; E4D cycling/rowing/resistance; ISS External Microorganisms (Wilmore swabbed ISS exterior). All four statements match → D."
+    },
+    {
+      "questionNumber": 167,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "ISRO is not an ISS partner agency."
+    },
+    {
+      "questionNumber": 168,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Only Gorakhpur–Haryana is right. Narora–UP, Kaiga–Karnataka, Kakrapar–Gujarat."
+    },
+    {
+      "questionNumber": 169,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Afghanistan last; India did not improve in 2025."
+    },
+    {
+      "questionNumber": 170,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Jordan has a Gulf of Aqaba/Red Sea coast."
+    },
+    {
+      "questionNumber": 171,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 172,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 173,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NPDD is DAHD, and women are a majority of the dairy workforce."
+    },
+    {
+      "questionNumber": 174,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "The statute is the Competition Act, 2002."
+    },
+    {
+      "questionNumber": 175,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "No ILP in Meghalaya."
+    },
+    {
+      "questionNumber": 176,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "PDF wrapping matches JSONL. None of the pottery pairings match standard associations (BRW/PGW/NBPW chronology). None correct → D."
+    },
+    {
+      "questionNumber": 177,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 178,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Challenger 150 is a UNESCO-linked deep-sea programme. SuBastian is a deep-sea ROV, not a surface/atmosphere monitor. 1 only."
+    },
+    {
+      "questionNumber": 179,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NO2 is not a Kyoto/GHG list gas; N2O is."
+    },
+    {
+      "questionNumber": 180,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "CPGRAMS is DARPG and a single portal to ministries/states. It is not “headed” by the Secretary, Personnel as a distinct body. 1 and 2."
+    },
+    {
+      "questionNumber": 181,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "PMJVK is CSS under Minority Affairs; 80% to education/health/skill is documented. Women earmark is one-third, not half. Only two."
+    },
+    {
+      "questionNumber": 182,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Badakhshan was a source region, not a Harappan “province” importing lapis."
+    },
+    {
+      "questionNumber": 183,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Shigmo/Phugadi are Goan, not Maharashtrian."
+    },
+    {
+      "questionNumber": 184,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 185,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Lohia’s Sapta Kranti includes gender equality, national freedom/anti-colonialism, racial equality, privacy/private life, and limitation of armaments."
+    },
+    {
+      "questionNumber": 186,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Statement 1 misstates s.69 as a blocking power and denies safeguards. Statement 2 (reasons in writing) matches the blocking-order requirement. Prompt asks which are not correct."
+    },
+    {
+      "questionNumber": 187,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Guru Arjan was executed under Jahangir, not Aurangzeb."
+    },
+    {
+      "questionNumber": 188,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Only Brahmaputra–Chemayungdung is right. Goriganga–Milam; Mandakini–Chorabari."
+    },
+    {
+      "questionNumber": 189,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 190,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Period and specialisation are reversed; Bakhtiyar’s destruction is the true part."
+    },
+    {
+      "questionNumber": 191,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "2024–25 output decline, GM-stagnation, and an import duty hold. India was a net importer, so exports>imports fails. 1, 2 and 4."
+    },
+    {
+      "questionNumber": 192,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 193,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 194,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 195,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "DNA fingerprinting is not only forensic."
+    },
+    {
+      "questionNumber": 196,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "6% ads levy (2016) remains the core. 2% e-commerce levy was withdrawn. Statement 2 is not correct."
+    },
+    {
+      "questionNumber": 197,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "NTEP target is 2025, not a 2030 launch-goal as worded."
+    },
+    {
+      "questionNumber": 198,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Pallavas did not follow after defeating the Cholas."
+    },
+    {
+      "questionNumber": 199,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "JSONL option B still contains a leftover source letter “b)”."
+    },
+    {
+      "questionNumber": 200,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "It is a 2023 multi-state seed cooperative, not a Companies Act cattle-AI body under DAHD."
+    },
+    {
+      "questionNumber": 201,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Transfers do not require the judge’s consent; the executive still issues the warrant after Collegium advice. Both can stand. Wording of “CJI’s recommendation” vs full Collegium is slightly loose."
+    },
+    {
+      "questionNumber": 202,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "The scheme is for youth not already in employment."
+    },
+    {
+      "questionNumber": 203,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Not confined to the Northeast."
+    },
+    {
+      "questionNumber": 204,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Bedmap3 maps the Antarctic bedrock, not the seabed."
+    },
+    {
+      "questionNumber": 205,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Libel is also criminal defamation."
+    },
+    {
+      "questionNumber": 206,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "PIB: indigenous DRDO/Navy ship-borne SAM (1 true). Not a French procurement (2 false). Statement 3 “up to 40 km”: early public figure; later parliamentary/defence notes cite ~80 km. Options omit “1 and 3”. B (1 only) if 3 is not treated as strictly correct."
+    },
+    {
+      "questionNumber": 207,
+      "answer": "C",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Vaccines/diagnostics, integrated surveillance, and pandemic expertise are One Health pillars. “Low-risk pathogens” is the odd one out. Only three."
+    },
+    {
+      "questionNumber": 208,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Removal is Art. 124, not 134. No successful impeachment."
+    },
+    {
+      "questionNumber": 209,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 210,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Statement 1 is the standard description. India is a 1949 London Declaration member of the modern Commonwealth (often called founding). Games are every four years, not five. 1 and 2."
+    },
+    {
+      "questionNumber": 211,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "2024–25 policy point was the lack of a single unified wildlife-health platform (multiple agencies). 1 only."
+    },
+    {
+      "questionNumber": 212,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "PRIP is Central Sector, not CSS."
+    },
+    {
+      "questionNumber": 213,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Gaia is at L2, not L1."
+    },
+    {
+      "questionNumber": 214,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Sangita Kalanidhi is the Music Academy’s top Carnatic honour. Posthumous awards have been given, so 2 is not correct."
+    },
+    {
+      "questionNumber": 215,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Gravitational waves travel at c, not faster."
+    },
+    {
+      "questionNumber": 216,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 217,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Awarded by the Norwegian Academy of Science and Letters, not IMU/EMS."
+    },
+    {
+      "questionNumber": 218,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "The floor is 10% of House strength, not 15%."
+    },
+    {
+      "questionNumber": 219,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 220,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 221,
+      "answer": "B",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "MSCS registration and full driver earnings are the clearer claims. “First national-scale cooperative” and UCB-only capital are overstated. Only two is a cautious count, not unique."
+    },
+    {
+      "questionNumber": 222,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Both statements match the AMoRE/2νββ description. Source PDF lettered these options e–h."
+    },
+    {
+      "questionNumber": 223,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Kaveri was Sudan; Raahat was Yemen. Maitri–Nepal and Brahma–Myanmar hold."
+    },
+    {
+      "questionNumber": 224,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "IARC Group 1, not Group 2. KV/JNV asbestos ban is real."
+    },
+    {
+      "questionNumber": 225,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Sagaing is strike-slip, not Himalayan-style India–Eurasia thrust."
+    },
+    {
+      "questionNumber": 226,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Studio Ghibli is Japanese, not Korean."
+    },
+    {
+      "questionNumber": 227,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Aleppo–Syria and Khartoum–Sudan are swapped. North Kivu–DRC is right."
+    },
+    {
+      "questionNumber": 228,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 229,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Gounsa is in South Korea (Jogye order), not Bihar."
+    },
+    {
+      "questionNumber": 230,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "SPENs are typically young women."
+    },
+    {
+      "questionNumber": 231,
+      "answer": "A",
+      "confidence": "medium",
+      "verdict": "PROBABLY_CORRECT",
+      "notes": "Statement 2 is clearly false (droppings/larvae are unintentional). 3 (carbide ripening) is true. Statement 1’s “deliberately” ignores unintentional adulteration, but many keys still treat 1 as the textbook definition. Original A (only one not correct) stands with residual doubt."
+    },
+    {
+      "questionNumber": 232,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 233,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 234,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "GMS 2015 is true. Short-term deposit rates are bank-determined, not GoI+RBI. Min 10 g / no max is the usual rule. 1 and 3 → only two."
+    },
+    {
+      "questionNumber": 235,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Hampi/Varaha and multilingual copper plates hold. Virupaksha long predates Devaraya I. 1 and 2."
+    },
+    {
+      "questionNumber": 236,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Both seiche statements are correct, so neither is incorrect."
+    },
+    {
+      "questionNumber": 237,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Tariffs more often support the dollar; they do not depreciate it as a first-round effect."
+    },
+    {
+      "questionNumber": 238,
+      "answer": "B",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Fram2 is SpaceX, not ISRO."
+    },
+    {
+      "questionNumber": 239,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 240,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 241,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "EU action against backsliding has been uneven (Hungary/Poland)."
+    },
+    {
+      "questionNumber": 242,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Sahyog is an MHA/I4C portal. Both statements hold. (Distinct from any MeitY research portal of similar name.)"
+    },
+    {
+      "questionNumber": 243,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 244,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "ISA deep seabed is generally >200 m, not a 2000 m cutoff. CCZ is in the Pacific, not the Atlantic. Both statements are not correct."
+    },
+    {
+      "questionNumber": 245,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Europa Clipper is NASA; JUICE is ESA. Only Juno–NASA is right."
+    },
+    {
+      "questionNumber": 246,
+      "answer": "C",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Mechanisation includes post-harvest; all-India level is well below 67%."
+    },
+    {
+      "questionNumber": 247,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": ""
+    },
+    {
+      "questionNumber": 248,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "Neither statement matches the programme: credits are not simply “one per tree after two years” as a settled rule, and work is on identified degraded forest land, not private non-forest plots chosen by ICFRE. Neither correct."
+    },
+    {
+      "questionNumber": 249,
+      "answer": "A",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "New Pamban vertical-lift sea bridge, Tamil Nadu."
+    },
+    {
+      "questionNumber": 250,
+      "answer": "D",
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "notes": "PDF wrapping matches JSONL, including spelling “Odissa”. All four pairs fail standard mapping. Prompt is how many are not correct → all four. Do not “correct” Odissa."
+    }
+  ]
+}

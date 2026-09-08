@@ -1,5 +1,12 @@
 import mongoose from 'mongoose';
 import { DIFFICULTY } from '../constants/difficulty.js';
+import {
+  PRESENTATION_KINDS,
+  PRESENTATION_KIND_VALUES,
+  prepareQuestionPresentation,
+} from '../utils/questionPresentation.js';
+
+export { PRESENTATION_KINDS, PRESENTATION_KIND_VALUES };
 
 /**
  * Supported question shapes.
@@ -24,6 +31,17 @@ const questionSchema = new mongoose.Schema(
   {
     questionText: { type: String, required: true },
     options: [{ type: String, required: true }],
+
+    // Presentation (how the stem is structured). Independent of questionType
+    // (how answers are scored). Missing on legacy docs; default reads as plain.
+    presentationKind: {
+      type: String,
+      enum: PRESENTATION_KIND_VALUES,
+      default: PRESENTATION_KINDS.PLAIN,
+    },
+    // Optional structured stem. Absent on legacy / plain questions — no default
+    // so existing documents stay field-absent until a structured write.
+    content: { type: mongoose.Schema.Types.Mixed },
 
     // NEW: flexible question classification. Defaults to `single_correct`
     // so every legacy doc read through Mongoose surfaces with this value
@@ -136,11 +154,32 @@ function isValidHttpUrl(s) {
  *      still use `correctAnswerIndex` / `correctAnswerValue` (e.g. scoring)
  *      keep seeing a valid primary answer even on multi-correct questions.
  *   5. If `questionImage` is present, require it to be a valid http(s) URL.
+ *   6. For structured presentations, generate `questionText` from `content`
+ *      so clients cannot drift two independent copies of the stem.
  */
 questionSchema.pre('validate', function normalizeAndValidateAnswers(next) {
   if (!Array.isArray(this.options) || this.options.length < 2) {
     return next(new Error('Question must have at least two options'));
   }
+
+  try {
+    const kind = this.presentationKind || PRESENTATION_KINDS.PLAIN;
+    if (kind && kind !== PRESENTATION_KINDS.PLAIN) {
+      const prepared = prepareQuestionPresentation({
+        presentationKind: kind,
+        content: this.content,
+        questionText: this.questionText,
+      });
+      this.presentationKind = prepared.presentationKind;
+      this.content = prepared.content;
+      this.questionText = prepared.questionText;
+    } else if (!this.presentationKind) {
+      this.presentationKind = PRESENTATION_KINDS.PLAIN;
+    }
+  } catch (err) {
+    return next(err instanceof Error ? err : new Error(String(err)));
+  }
+
   const n = this.options.length;
   const type = this.questionType || QUESTION_TYPES.SINGLE_CORRECT;
 

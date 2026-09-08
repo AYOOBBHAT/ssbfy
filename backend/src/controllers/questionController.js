@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { questionService } from '../services/questionService.js';
 import { practiceIssuanceService } from '../services/practiceIssuanceService.js';
 import {
-  parseCsvBuffer,
+  parseImportBuffer,
   analyzeRows,
   commitValidRows,
   CSV_TEMPLATE,
@@ -161,20 +161,20 @@ export const questionController = {
   }),
 
   /**
-   * POST /questions/admin/import/dry-run — multipart CSV, no writes.
+   * POST /questions/admin/import/dry-run — multipart CSV/JSONL/JSON, no writes.
    * Returns row-by-row analysis the admin can review before committing.
    */
   importDryRun: asyncHandler(async (req, res) => {
     if (!req.file?.buffer) {
-      throw new AppError('CSV file is required', HTTP_STATUS.BAD_REQUEST);
+      throw new AppError('Import file is required', HTTP_STATUS.BAD_REQUEST);
     }
-    const parsed = parseCsvBuffer(req.file.buffer);
+    const parsed = parseImportBuffer(req.file.buffer, req.file.originalname || '');
     const tagPostIds = parseImportTagPostIds(req.body);
     await validateImportTagPostsExist(tagPostIds);
     const analysis = await analyzeRows(parsed, { tagPostIds });
     // Strip per-row insert payloads from the wire response — the client doesn't
     // need them and they balloon the JSON for big imports. The commit endpoint
-    // re-derives payloads from the same CSV.
+    // re-derives payloads from the same file.
     const rowsForWire = analysis.rows.map(({ payload, ...rest }) => rest);
     return sendSuccess(
       res,
@@ -184,17 +184,17 @@ export const questionController = {
   }),
 
   /**
-   * POST /questions/admin/import/commit — multipart CSV, writes valid rows.
+   * POST /questions/admin/import/commit — multipart CSV/JSONL/JSON, writes valid rows.
    * Re-runs the same analysis server-side so we never trust client-supplied
    * payloads.
    */
   importCommit: asyncHandler(async (req, res) => {
     if (!req.file?.buffer) {
-      throw new AppError('CSV file is required', HTTP_STATUS.BAD_REQUEST);
+      throw new AppError('Import file is required', HTTP_STATUS.BAD_REQUEST);
     }
     const force =
       String(req.body?.forceImportDuplicates || '').toLowerCase() === 'true';
-    const parsed = parseCsvBuffer(req.file.buffer);
+    const parsed = parseImportBuffer(req.file.buffer, req.file.originalname || '');
     const tagPostIds = parseImportTagPostIds(req.body);
     await validateImportTagPostsExist(tagPostIds);
     const analysis = await analyzeRows(parsed, { tagPostIds });

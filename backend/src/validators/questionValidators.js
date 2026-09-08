@@ -3,6 +3,11 @@ import { body, param, query } from 'express-validator';
 import { DIFFICULTY_VALUES } from '../constants/difficulty.js';
 import { QUESTION_SORT_VALUES } from '../constants/questionSort.js';
 import { QUESTION_TYPE_VALUES } from '../models/Question.js';
+import {
+  PRESENTATION_KIND_VALUES,
+  PRESENTATION_KINDS,
+  prepareQuestionPresentation,
+} from '../utils/questionPresentation.js';
 
 /**
  * Cross-field check: at least one of `correctAnswers` (new) or
@@ -23,6 +28,38 @@ function ensureSomeAnswerForm(val) {
   if (!hasArray && !hasIndex) {
     throw new Error('Either correctAnswers or correctAnswerIndex is required');
   }
+  return true;
+}
+
+function assertCreatePresentation(val) {
+  prepareQuestionPresentation({
+    presentationKind: val?.presentationKind,
+    content: val?.content,
+    questionText: val?.questionText,
+  });
+  return true;
+}
+
+function assertUpdatePresentation(val) {
+  if (val?.presentationKind === undefined && val?.content === undefined) {
+    return true;
+  }
+  if (val.presentationKind === undefined) {
+    return true;
+  }
+  if (val.presentationKind === PRESENTATION_KINDS.PLAIN) {
+    prepareQuestionPresentation({
+      presentationKind: PRESENTATION_KINDS.PLAIN,
+      content: val.content,
+      questionText: val.questionText || 'plain',
+    });
+    return true;
+  }
+  prepareQuestionPresentation({
+    presentationKind: val.presentationKind,
+    content: val.content,
+    questionText: val.questionText,
+  });
   return true;
 }
 
@@ -130,7 +167,10 @@ export const listQuestionsQueryValidators = [
 ];
 
 export const createQuestionValidators = [
-  body('questionText').trim().notEmpty().withMessage('questionText is required'),
+  body('questionText')
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim(),
   body('options')
     .isArray({ min: 2 })
     .withMessage('options must be an array with at least 2 items'),
@@ -148,6 +188,12 @@ export const createQuestionValidators = [
     .trim()
     .isURL({ protocols: ['http', 'https'], require_protocol: true })
     .withMessage('questionImage must be a valid http(s) URL'),
+  body('presentationKind')
+    .optional()
+    .isIn(PRESENTATION_KIND_VALUES)
+    .withMessage(`presentationKind must be one of: ${PRESENTATION_KIND_VALUES.join(', ')}`),
+  body('content').optional({ nullable: true }),
+  body().custom(assertCreatePresentation),
   body('correctAnswers')
     .optional()
     .isArray({ min: 1 })
@@ -277,6 +323,12 @@ export const updateQuestionValidators = [
     .trim()
     .isURL({ protocols: ['http', 'https'], require_protocol: true })
     .withMessage('questionImage must be a valid http(s) URL'),
+  body('presentationKind')
+    .optional()
+    .isIn(PRESENTATION_KIND_VALUES)
+    .withMessage(`presentationKind must be one of: ${PRESENTATION_KIND_VALUES.join(', ')}`),
+  body('content').optional({ nullable: true }),
+  body().custom(assertUpdatePresentation),
   body('correctAnswers')
     .optional()
     .isArray({ min: 1 })
@@ -359,7 +411,7 @@ export const similarQueryValidators = [
 
 /**
  * POST /questions/admin/import/commit — body validation for the JSON branch
- * of the commit endpoint. (Multipart re-uploads use `parseCsvBuffer` again
+ * of the commit endpoint. (Multipart re-uploads use `parseImportBuffer` again
  * to re-validate from raw bytes.)
  *
  * `forceImportDuplicates`: when true, rows flagged as duplicates are

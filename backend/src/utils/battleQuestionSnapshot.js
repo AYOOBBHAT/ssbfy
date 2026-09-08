@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { presentationFieldsFromQuestion } from './questionPresentation.js';
 
 /**
  * Immutable question payload frozen on BattleSession at creation.
@@ -33,6 +34,7 @@ export function buildBattleQuestionSnapshot(q) {
     options,
     questionType: q.questionType || 'single_correct',
     questionImage: typeof q.questionImage === 'string' ? q.questionImage : '',
+    ...presentationFieldsFromQuestion(q),
     correctAnswers,
     correctAnswerIndex: primary,
     correctAnswerValue:
@@ -78,6 +80,7 @@ export function questionFromBattleSnapshot(snap) {
     options: Array.isArray(snap.options) ? [...snap.options] : [],
     questionType: snap.questionType || 'single_correct',
     questionImage: snap.questionImage || '',
+    ...presentationFieldsFromQuestion(snap),
     correctAnswers,
     correctAnswerIndex:
       snap.correctAnswerIndex != null

@@ -16,6 +16,7 @@ import {
   QUESTION_TYPES,
   QUESTION_TYPE_VALUES,
 } from '../models/Question.js';
+import { prepareQuestionPresentation } from '../utils/questionPresentation.js';
 
 /**
  * CSV columns. The header row is REQUIRED — admins copy this from the
@@ -221,6 +222,332 @@ export function parseCsvBuffer(buffer) {
     }
     return { line: userLine, raw: cleaned };
   });
+}
+
+function fileExtension(filename) {
+  const s = String(filename || '');
+  const i = s.lastIndexOf('.');
+  return i >= 0 ? s.slice(i).toLowerCase() : '';
+}
+
+function bufferToUtf8(buffer) {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new AppError('Import file is empty', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (buffer.length === 0) {
+    throw new AppError('Import file is empty', HTTP_STATUS.BAD_REQUEST);
+  }
+  return buffer.toString('utf8');
+}
+
+/**
+ * Detect CSV vs JSONL vs JSON. Extension wins; otherwise sniff the buffer.
+ * Unknown/empty sniff defaults to CSV so the existing importer stays unchanged.
+ */
+export function detectImportFormat(buffer, filename = '') {
+  const ext = fileExtension(filename);
+  if (ext === '.csv' || ext === '.txt') return 'csv';
+  if (ext === '.jsonl' || ext === '.ndjson') return 'jsonl';
+  if (ext === '.json') return 'json';
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return 'csv';
+  const trimmed = buffer.toString('utf8').replace(/^\uFEFF/, '').trim();
+  if (!trimmed) return 'csv';
+  if (trimmed.startsWith('[')) return 'json';
+  if (trimmed.startsWith('{')) {
+    try {
+      JSON.parse(trimmed);
+      return 'json';
+    } catch {
+      return 'jsonl';
+    }
+  }
+  return 'csv';
+}
+
+function asJsonObjectRecord(value, line) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return {
+      line,
+      raw: {},
+      format: 'json',
+      parseError: 'record must be a JSON object',
+    };
+  }
+  return { line, raw: value, format: 'json' };
+}
+
+/**
+ * One JSON object per line. Blank lines are skipped. A malformed line is
+ * kept as an invalid row (does not abort the rest of the file).
+ */
+export function parseJsonlBuffer(buffer) {
+  const text = bufferToUtf8(buffer).replace(/^\uFEFF/, '');
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineNo = i + 1;
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    try {
+      const value = JSON.parse(trimmed);
+      out.push(asJsonObjectRecord(value, lineNo));
+    } catch (err) {
+      out.push({
+        line: lineNo,
+        raw: {},
+        format: 'json',
+        parseError: `invalid JSON: ${err.message || 'parse error'}`,
+      });
+    }
+  }
+  if (!out.length) {
+    throw new AppError(
+      'JSONL file has no records. Each non-empty line must be one JSON object.',
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  return out;
+}
+
+/**
+ * JSON array of questions, or a single question object.
+ * File-level parse failure aborts (same as a corrupt CSV header).
+ */
+export function parseJsonBuffer(buffer) {
+  const text = bufferToUtf8(buffer).replace(/^\uFEFF/, '').trim();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    throw new AppError(
+      `JSON parse error: ${err.message || 'invalid format'}`,
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  if (Array.isArray(data)) {
+    if (!data.length) {
+      throw new AppError('JSON array has no records', HTTP_STATUS.BAD_REQUEST);
+    }
+    return data.map((item, i) => asJsonObjectRecord(item, i + 1));
+  }
+  if (data && typeof data === 'object') {
+    return [asJsonObjectRecord(data, 1)];
+  }
+  throw new AppError(
+    'JSON import must be an object or an array of objects',
+    HTTP_STATUS.BAD_REQUEST
+  );
+}
+
+export function parseImportBuffer(buffer, filename = '') {
+  const kind = detectImportFormat(buffer, filename);
+  if (kind === 'jsonl') return parseJsonlBuffer(buffer);
+  if (kind === 'json') return parseJsonBuffer(buffer);
+  return parseCsvBuffer(buffer);
+}
+
+function parseJsonPostIds(raw) {
+  const reasons = [];
+  const ids = [];
+  const value = raw?.postIds;
+  const tokens = [];
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (entry == null || entry === '') continue;
+      tokens.push(String(entry).trim());
+    }
+  } else if (value != null && String(value).trim() !== '') {
+    for (const tok of String(value).split(/[,;]+/)) {
+      const t = tok.trim();
+      if (t) tokens.push(t);
+    }
+  }
+  for (const t of tokens) {
+    if (!mongoose.isValidObjectId(t)) {
+      reasons.push(`invalid post id in postIds: ${t}`);
+    } else {
+      ids.push(t);
+    }
+  }
+  return { reasons, csvPostIds: [...new Set(ids)] };
+}
+
+function parseJsonOptions(raw) {
+  if (Array.isArray(raw?.options)) {
+    return raw.options.map((o) => (o == null ? '' : String(o).trim()));
+  }
+  return ['optionA', 'optionB', 'optionC', 'optionD'].map((k) =>
+    String(raw?.[k] ?? '').trim()
+  );
+}
+
+function parseJsonCorrectIndexes(raw, optionsLen) {
+  if (Object.prototype.hasOwnProperty.call(raw || {}, 'correctAnswers')
+    && raw.correctAnswers != null
+    && raw.correctAnswers !== '') {
+    if (!Array.isArray(raw.correctAnswers)) {
+      return {
+        indexes: null,
+        reason: 'correctAnswers must be an array of option indexes',
+      };
+    }
+    if (raw.correctAnswers.length === 0) {
+      return { indexes: [], reason: null };
+    }
+    const indexes = [];
+    for (const tok of raw.correctAnswers) {
+      const num = Number(tok);
+      if (!Number.isInteger(num) || num < 0 || num >= optionsLen) {
+        return {
+          indexes: null,
+          reason: `correctAnswers contains an invalid option index: ${tok}`,
+        };
+      }
+      indexes.push(num);
+    }
+    return { indexes: Array.from(new Set(indexes)).sort((a, b) => a - b), reason: null };
+  }
+  const fromLegacy = parseCorrectAnswer(raw?.correctAnswer, optionsLen);
+  if (fromLegacy === null) {
+    return {
+      indexes: null,
+      reason:
+        'correctAnswer must be one or more of A,B,C,D (or 0-based indexes) — got: ' +
+        String(raw?.correctAnswer ?? ''),
+    };
+  }
+  return { indexes: fromLegacy, reason: null };
+}
+
+/**
+ * Shape + presentation validation for one JSON/JSONL record.
+ * Reuses Phase 1 `prepareQuestionPresentation` (single flatten implementation).
+ * Does not derive questionType from presentationKind.
+ */
+export function validateJsonRecordShape(raw) {
+  const reasons = [];
+  let presentationKind = 'plain';
+  let questionText = '';
+  let content;
+
+  try {
+    const prepared = prepareQuestionPresentation({
+      presentationKind: raw?.presentationKind,
+      content: raw?.content,
+      questionText: raw?.questionText,
+    });
+    presentationKind = prepared.presentationKind;
+    questionText = prepared.questionText;
+    content = prepared.content;
+  } catch (err) {
+    reasons.push(err.message || 'invalid presentation');
+    presentationKind = String(raw?.presentationKind || '').trim() || 'plain';
+    questionText = String(raw?.questionText || '').trim();
+    content = undefined;
+  }
+
+  const options = parseJsonOptions(raw);
+  if (options.length < 2) {
+    reasons.push('options must contain at least two entries');
+  }
+  if (options.some((o) => !o)) {
+    reasons.push('each option must be a non-empty string');
+  }
+  const optionSet = new Set(options.filter(Boolean).map((o) => o.toLowerCase()));
+  if (optionSet.size > 0 && optionSet.size !== options.filter(Boolean).length) {
+    reasons.push('options must be unique within a question');
+  }
+
+  const { indexes: correctIndexes, reason: correctReason } = parseJsonCorrectIndexes(
+    raw,
+    options.length
+  );
+  if (correctReason) reasons.push(correctReason);
+  else if (!correctIndexes || correctIndexes.length === 0) {
+    reasons.push('correctAnswers or correctAnswer is required');
+  }
+
+  const difficulty = raw?.difficulty
+    ? String(raw.difficulty).trim().toLowerCase()
+    : DIFFICULTY.MEDIUM;
+  if (!DIFFICULTY_VALUES.includes(difficulty)) {
+    reasons.push(`difficulty must be one of: ${DIFFICULTY_VALUES.join(', ')}`);
+  }
+
+  const yearRaw = raw?.year;
+  let year = null;
+  if (yearRaw != null && String(yearRaw).trim() !== '') {
+    const y = Number(yearRaw);
+    if (!Number.isInteger(y) || y < 1900 || y > 2100) {
+      reasons.push('year must be an integer 1900..2100');
+    } else {
+      year = y;
+    }
+  }
+
+  const questionImage = String(raw?.questionImage || '').trim();
+  if (questionImage) {
+    try {
+      const u = new URL(questionImage);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        reasons.push('questionImage must be a valid http(s) URL');
+      }
+    } catch {
+      reasons.push('questionImage must be a valid http(s) URL');
+    }
+  }
+
+  const rawType = String(raw?.questionType || '').trim().toLowerCase();
+  if (rawType && !QUESTION_TYPE_VALUES.includes(rawType)) {
+    reasons.push(`questionType must be one of: ${QUESTION_TYPE_VALUES.join(', ')}`);
+  }
+
+  const questionType = inferQuestionType(
+    raw?.questionType,
+    correctIndexes || [],
+    Boolean(questionImage)
+  );
+
+  if (
+    correctIndexes &&
+    correctIndexes.length > 0 &&
+    questionType === QUESTION_TYPES.SINGLE_CORRECT &&
+    correctIndexes.length !== 1
+  ) {
+    reasons.push(
+      'correctAnswers must contain exactly one index for single_correct'
+    );
+  }
+  if (
+    correctIndexes &&
+    questionType === QUESTION_TYPES.MULTIPLE_CORRECT &&
+    correctIndexes.length < 2
+  ) {
+    reasons.push('multiple_correct questions need at least two correct answers');
+  }
+  if (questionType === QUESTION_TYPES.IMAGE_BASED && !questionImage) {
+    reasons.push('image_based questions require a questionImage URL');
+  }
+
+  const postParsed = parseJsonPostIds(raw);
+  reasons.push(...postParsed.reasons);
+
+  return {
+    reasons,
+    parsed: {
+      questionText: questionText || '',
+      options,
+      correctIndexes: correctIndexes || [],
+      difficulty,
+      year,
+      questionImage,
+      questionType,
+      explanation: String(raw?.explanation || '').trim(),
+      csvPostIds: postParsed.csvPostIds,
+      presentationKind,
+      content,
+    },
+  };
 }
 
 /**
@@ -471,8 +798,23 @@ export async function analyzeRows(parsedRows, { tagPostIds = [] } = {}) {
   let invalid = 0;
   let duplicates = 0;
 
-  for (const { line, raw } of parsedRows) {
-    const { reasons: shapeReasons, parsed } = validateRowShape(raw);
+  for (const { line, raw, format, parseError } of parsedRows) {
+    if (parseError) {
+      rowsOut.push({
+        line,
+        status: 'invalid',
+        questionText: '',
+        subject: null,
+        topic: null,
+        difficulty: null,
+        reasons: [parseError],
+      });
+      invalid += 1;
+      continue;
+    }
+
+    const { reasons: shapeReasons, parsed } =
+      format === 'json' ? validateJsonRecordShape(raw) : validateRowShape(raw);
 
     let subject = null;
     let topic = null;
@@ -615,7 +957,7 @@ function buildInsertPayload({ parsed, subject, topic, mergedPostIdStrings }) {
   const postIds = (mergedPostIdStrings || []).map(
     (id) => new mongoose.Types.ObjectId(id)
   );
-  return {
+  const payload = {
     questionText: parsed.questionText,
     options: parsed.options,
     questionType: parsed.questionType,
@@ -631,6 +973,15 @@ function buildInsertPayload({ parsed, subject, topic, mergedPostIdStrings }) {
     difficulty: parsed.difficulty,
     isActive: true,
   };
+  // CSV rows omit these fields so inserts stay identical to the existing importer.
+  // JSONL/JSON rows set presentationKind (and content for structured kinds).
+  if (parsed.presentationKind) {
+    payload.presentationKind = parsed.presentationKind;
+  }
+  if (parsed.content != null) {
+    payload.content = parsed.content;
+  }
+  return payload;
 }
 
 /**

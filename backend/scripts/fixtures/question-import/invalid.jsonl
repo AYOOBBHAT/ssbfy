@@ -1,0 +1,4 @@
+{"questionType":"single_correct","presentationKind":"two_statements","content":{"intro":"Consider the following statements:","statements":[{"label":"Statement – I","text":"Only one statement is present"}],"prompt":"Which one is correct?"},"options":["A","B","C","D"],"correctAnswers":[0],"subject":"Polity","topic":"Union Executive"}
+{"questionType":"single_correct","presentationKind":"table","content":{"intro":"Consider the following pairs:","columns":["Continents","Highest Peak","Extra"],"rows":[["North America","Aconcagua"],["South America","Denali","x"],["Europe","Elbruz","y"]]},"options":["A","B","C","D"],"correctAnswers":[0],"subject":"Geography","topic":"Physical Geography"}
+{"questionType":"single_correct","presentationKind":"plain","questionText":"Phase4-invalid-answers","options":["A","B","C","D"],"correctAnswers":[0,1],"subject":"Geography","topic":"X"}
+this is not json

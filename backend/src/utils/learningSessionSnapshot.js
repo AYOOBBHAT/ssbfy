@@ -4,6 +4,7 @@ import {
   filterSelectedOptionIndexes,
   getCorrectIndexSet,
 } from './attemptResultSnapshot.js';
+import { presentationFieldsFromQuestion } from './questionPresentation.js';
 import { LEARNING_SESSION_SNAPSHOT_VERSION } from '../constants/learningSessionTypes.js';
 import { LEARNING_SESSION_MAX_QUESTION_IMAGE_CHARS } from '../constants/learningSessionLimits.js';
 
@@ -67,6 +68,7 @@ export function buildLearningSessionSnapshotV1({
       options: Array.isArray(q.options) ? [...q.options] : [],
       questionType: q.questionType || 'single_correct',
       questionImage: normalizeQuestionImageForSnapshot(q.questionImage),
+      ...presentationFieldsFromQuestion(q),
       explanation: typeof q.explanation === 'string' ? q.explanation : '',
       topicId: q.topicId ?? null,
       canonicalTopicId:
@@ -137,6 +139,7 @@ function questionDocFromSnapshotRow(row) {
     options: Array.isArray(row.options) ? [...row.options] : [],
     questionType: row.questionType || 'single_correct',
     questionImage: row.questionImage || '',
+    ...presentationFieldsFromQuestion(row),
     explanation: row.explanation ?? '',
     topicId: topicRef,
     ...(row.topicName ? { topicName: row.topicName } : {}),

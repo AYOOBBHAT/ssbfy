@@ -11,6 +11,8 @@ const snapshotQuestionSchema = new mongoose.Schema(
     options: { type: [String], default: [] },
     questionType: { type: String, default: 'single_correct' },
     questionImage: { type: String, default: '' },
+    presentationKind: { type: String, default: 'plain' },
+    content: { type: mongoose.Schema.Types.Mixed, default: null },
     explanation: { type: String, default: '' },
     topicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Topic', default: null },
     canonicalTopicId: {
