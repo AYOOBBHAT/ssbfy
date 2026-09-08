@@ -37,6 +37,7 @@
     "verify:set-a-test-plan": "node scripts/verify-set-a-test-plan.mjs",
     "verify:jkssb-question-format": "node scripts/verify-jkssb-question-format-phase7.mjs",
     "verify:phase9-smoke-test": "node scripts/verify-phase9-smoke-test.mjs",
+    "investigate:phase9-snapshot": "node scripts/investigate-phase9-snapshot.mjs",
     "apply:set-a-catalog": "node scripts/apply-set-a-catalog.mjs --gate-1-approved",
     "dump:set-a-taxonomy": "node scripts/dump-live-subject-topic-taxonomy.mjs",
     "audit:set-a-database-identity": "node scripts/audit-database-identity.mjs",

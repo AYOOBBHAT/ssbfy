@@ -24,6 +24,7 @@ const MARKER = 'PHASE9_SMOKE_TEST_2026';
 const SET_A_COUNT = 250;
 const SET_A_KINDS = { plain: 49, two_statements: 8, numbered_list: 179, table: 14 };
 const ORDERED_KINDS = ['plain', 'two_statements', 'numbered_list', 'table'];
+const EXPECTED_POST_ID = '6a9fe271a6683cc1b21ccded';
 const PRIVATE_KEYS = [
   'correctAnswers',
   'correctAnswerIndex',
@@ -162,6 +163,10 @@ function validateQuestion(q, failures) {
   if (kind !== 'plain' && (pub.content == null || typeof pub.content !== 'object')) {
     failures.push(`${id}: public projection missing structured content`);
   }
+  const postIds = Array.isArray(q.postIds) ? q.postIds.map(String) : [];
+  if (!postIds.includes(EXPECTED_POST_ID)) {
+    failures.push(`${id}: missing Phase 9 Post ${EXPECTED_POST_ID}`);
+  }
 }
 
 async function main() {
@@ -195,6 +200,21 @@ async function main() {
     const questions = await db.collection('questions').find({}).toArray();
     const tests = await db.collection('tests').find({}).toArray();
     const phase9Questions = questions.filter(hasMarker);
+    const posts = await db.collection('posts').find({}).toArray();
+    const phase9Posts = posts.filter(hasMarker);
+    if (phase9Posts.length !== 1) {
+      failures.push(`Phase 9 Posts=${phase9Posts.length}, expected 1`);
+    } else if (String(phase9Posts[0]._id) !== EXPECTED_POST_ID) {
+      failures.push(`Phase 9 Post id ${phase9Posts[0]._id}, expected ${EXPECTED_POST_ID}`);
+    } else if (phase9Posts[0].isActive === false) {
+      failures.push('Phase 9 Post is inactive');
+    } else {
+      passes.push(`Phase 9 Post ${EXPECTED_POST_ID} is present and active.`);
+    }
+
+    if (questions.length !== SET_A_COUNT + 4 && phase9Questions.length === 4) {
+      failures.push(`total questions=${questions.length}, expected ${SET_A_COUNT + 4}`);
+    }
     const setAQuestions = questions.filter((q) => !hasMarker(q));
     const phase9Tests = tests.filter(hasMarker);
     const setAKinds = countKinds(setAQuestions);
@@ -263,8 +283,15 @@ async function main() {
         failures.push(`Phase 9 Test references ${missing.length} unknown questionId(s)`);
       }
       const status = test.status || 'active';
+      const discoverable =
+        status !== 'disabled' && qids.length > 0 && (kind === 'mock' || test.kind == null);
       if (status === 'active' && kind === 'mock' && qids.length === 4 && !setAHits.length) {
         passes.push(`Exactly one Phase 9 mock Test (status=${status}).`);
+      }
+      if (!discoverable) {
+        failures.push('Phase 9 Test would not be visible in the mock catalog');
+      } else {
+        passes.push('Phase 9 Test meets mock catalog discovery rules (active, non-empty, kind=mock).');
       }
     }
 
