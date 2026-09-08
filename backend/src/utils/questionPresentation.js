@@ -232,6 +232,36 @@ export function prepareQuestionPresentation({
 }
 
 /**
+ * Canonical stem used by soft duplicate detection (same text the write path stores).
+ * Plain → trimmed questionText. Structured → flatten after prepare, or '' if invalid.
+ * Unknown/missing kind is treated as plain. Does not affect scoring.
+ */
+export function canonicalDuplicateStem({
+  presentationKind: rawKind,
+  content,
+  questionText,
+} = {}) {
+  let kind = PRESENTATION_KINDS.PLAIN;
+  try {
+    kind = normalizePresentationKind(rawKind);
+  } catch {
+    kind = PRESENTATION_KINDS.PLAIN;
+  }
+  if (kind === PRESENTATION_KINDS.PLAIN) {
+    return asTrimmedString(questionText);
+  }
+  try {
+    return prepareQuestionPresentation({
+      presentationKind: kind,
+      content,
+      questionText,
+    }).questionText;
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Flatten structured content into readable questionText for old clients.
  * Preserves statement labels from source (e.g. "Statement – I").
  */

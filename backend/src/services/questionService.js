@@ -10,6 +10,7 @@ import { postRepository } from '../repositories/postRepository.js';
 import { QUESTION_TYPES, QUESTION_TYPE_VALUES } from '../models/Question.js';
 import {
   PRESENTATION_KINDS,
+  canonicalDuplicateStem,
   normalizePresentationKind,
   prepareQuestionPresentation,
   presentationFieldsFromQuestion,
@@ -1053,8 +1054,12 @@ export const questionService = {
    * when the normalized text matches exactly (handy for the form to render
    * a stronger warning).
    */
-  async findSimilar({ questionText, subjectId, excludeId }) {
-    const text = String(questionText || '').trim();
+  async findSimilar({ questionText, subjectId, excludeId, presentationKind, content }) {
+    const text = canonicalDuplicateStem({
+      presentationKind,
+      content,
+      questionText,
+    });
     if (!text) return { exactDuplicateId: null, similar: [] };
     if (!subjectId || !mongoose.isValidObjectId(String(subjectId))) {
       return { exactDuplicateId: null, similar: [] };

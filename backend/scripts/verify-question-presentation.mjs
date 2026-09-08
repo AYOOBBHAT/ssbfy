@@ -12,7 +12,9 @@ import {
   PRESENTATION_KINDS,
   prepareQuestionPresentation,
   presentationFieldsFromQuestion,
+  canonicalDuplicateStem,
 } from '../src/utils/questionPresentation.js';
+import { normalizeForDuplicate } from '../src/repositories/questionRepository.js';
 import { buildResultSnapshotAtSubmit } from '../src/utils/attemptResultSnapshot.js';
 import { buildLearningSessionSnapshotV1 } from '../src/utils/learningSessionSnapshot.js';
 import {
@@ -350,6 +352,86 @@ async function run() {
     await q.validate();
     assert.match(q.questionText, /Statement – I: The sky is blue\./);
     assert.notEqual(q.questionText, 'client stale text');
+  });
+
+  await test('J. canonical duplicate stem matches stored flatten for structured kinds', () => {
+    const twoA = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.TWO_STATEMENTS,
+      content: twoStatementsContent,
+    });
+    const twoB = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.TWO_STATEMENTS,
+      content: {
+        ...twoStatementsContent,
+        intro: '  Consider the following:  ',
+      },
+    });
+    const twoDifferent = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.TWO_STATEMENTS,
+      content: {
+        ...twoStatementsContent,
+        statements: [
+          { label: 'Statement – I', text: 'Other' },
+          { label: 'Statement – II', text: 'Beta' },
+        ],
+      },
+    });
+    const prepared = prepareQuestionPresentation({
+      presentationKind: PRESENTATION_KINDS.TWO_STATEMENTS,
+      content: twoStatementsContent,
+    });
+    assert.equal(twoA, prepared.questionText);
+    assert.equal(normalizeForDuplicate(twoA), normalizeForDuplicate(twoB));
+    assert.notEqual(normalizeForDuplicate(twoA), normalizeForDuplicate(twoDifferent));
+
+    const listA = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.NUMBERED_LIST,
+      content: numberedListContent,
+    });
+    const listB = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.NUMBERED_LIST,
+      content: numberedListContent,
+    });
+    const listDifferent = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.NUMBERED_LIST,
+      content: {
+        ...numberedListContent,
+        prompt: 'Different prompt',
+      },
+    });
+    assert.equal(normalizeForDuplicate(listA), normalizeForDuplicate(listB));
+    assert.notEqual(normalizeForDuplicate(listA), normalizeForDuplicate(listDifferent));
+
+    const tableA = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.TABLE,
+      content: tableContent,
+    });
+    const tableDifferent = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.TABLE,
+      content: {
+        ...tableContent,
+        rows: [
+          ['A. Delhi', '1. India'],
+          ['B. Tokyo', '2. Japan'],
+        ],
+      },
+    });
+    assert.notEqual(normalizeForDuplicate(tableA), normalizeForDuplicate(tableDifferent));
+
+    const plain = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.PLAIN,
+      questionText: '  What is 2 + 2?  ',
+    });
+    assert.equal(plain, 'What is 2 + 2?');
+
+    const missingKind = canonicalDuplicateStem({ questionText: 'Legacy stem' });
+    assert.equal(missingKind, 'Legacy stem');
+
+    const incomplete = canonicalDuplicateStem({
+      presentationKind: PRESENTATION_KINDS.NUMBERED_LIST,
+      content: { items: [{ n: 1, text: 'only one' }] },
+    });
+    assert.equal(incomplete, '');
   });
 
   console.log(`verify-question-presentation: ${passed} checks passed`);
