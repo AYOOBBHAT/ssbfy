@@ -1,0 +1,464 @@
+{
+  "phase9PostId": "6a9fe271a6683cc1b21ccded",
+  "phase9QuestionIds": [
+    "6aa01e60f2afe2eb763a4bc1",
+    "6aa01e60f2afe2eb763a4bc7",
+    "6aa01e61f2afe2eb763a4bcd",
+    "6aa01e61f2afe2eb763a4bd3"
+  ],
+  "phase9TestId": "6aa01e61f2afe2eb763a4bda",
+  "phase9AttemptIds": [
+    "6aa01e727a012eb44cc636c7",
+    "6aa02a34c3be60ada0ed4805",
+    "6aa02b6cc3be60ada0ed4884"
+  ],
+  "phase9ResultIds": [
+    "6aa01e927a012eb44cc636d6",
+    "6aa02a70c3be60ada0ed4814"
+  ],
+  "oldAttemptId": "6aa01e727a012eb44cc636c7",
+  "newAttemptId": "6aa02a34c3be60ada0ed4805",
+  "extraOpenAttemptIds": [
+    "6aa02b6cc3be60ada0ed4884"
+  ],
+  "newSnapshotOk": true,
+  "references": [
+    {
+      "collection": "tests",
+      "documentId": "6aa01e61f2afe2eb763a4bda",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "tests",
+      "documentId": "6aa01e61f2afe2eb763a4bda",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "tests",
+      "documentId": "6aa01e61f2afe2eb763a4bda",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "tests",
+      "documentId": "6aa01e61f2afe2eb763a4bda",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "testId",
+      "referencedId": "6aa01e61f2afe2eb763a4bda"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.wrongQuestionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.wrongQuestionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa01e727a012eb44cc636c7",
+      "field": "resultSnapshot.wrongQuestionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "testId",
+      "referencedId": "6aa01e61f2afe2eb763a4bda"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.items.postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.wrongQuestionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02a34c3be60ada0ed4805",
+      "field": "resultSnapshot.wrongQuestionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "testId",
+      "referencedId": "6aa01e61f2afe2eb763a4bda"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "questionIds",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "questionIds",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc1"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e60f2afe2eb763a4bc7"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bcd"
+    },
+    {
+      "collection": "testattempts",
+      "documentId": "6aa02b6cc3be60ada0ed4884",
+      "field": "answers.questionId",
+      "referencedId": "6aa01e61f2afe2eb763a4bd3"
+    },
+    {
+      "collection": "results",
+      "documentId": "6aa01e927a012eb44cc636d6",
+      "field": "testId",
+      "referencedId": "6aa01e61f2afe2eb763a4bda"
+    },
+    {
+      "collection": "results",
+      "documentId": "6aa02a70c3be60ada0ed4814",
+      "field": "testId",
+      "referencedId": "6aa01e61f2afe2eb763a4bda"
+    },
+    {
+      "collection": "questions",
+      "documentId": "6aa01e60f2afe2eb763a4bc1",
+      "field": "postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "questions",
+      "documentId": "6aa01e60f2afe2eb763a4bc7",
+      "field": "postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "questions",
+      "documentId": "6aa01e61f2afe2eb763a4bcd",
+      "field": "postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    },
+    {
+      "collection": "questions",
+      "documentId": "6aa01e61f2afe2eb763a4bd3",
+      "field": "postIds",
+      "referencedId": "6a9fe271a6683cc1b21ccded"
+    }
+  ],
+  "unexpectedReferences": [
+    {
+      "code": "EXTRA_OR_MISSING_PHASE9_ATTEMPTS",
+      "expected": 2,
+      "actual": 3,
+      "extraOpenIds": [
+        "6aa02b6cc3be60ada0ed4884"
+      ],
+      "extraCompletedIds": [],
+      "note": "Expected the known old submitted attempt plus exactly one new submitted phone-test attempt. Additional in-progress or extra submitted attempts block cleanup until they are accounted for."
+    }
+  ],
+  "setACount": 250,
+  "setAQuestionIdsAffected": [],
+  "proposedDeletionOrder": [
+    {
+      "collection": "results",
+      "ids": [
+        "6aa01e927a012eb44cc636d6",
+        "6aa02a70c3be60ada0ed4814"
+      ],
+      "reason": "Result documents reference testId only (no attemptId). Remove score rows for the smoke Test first."
+    },
+    {
+      "collection": "testattempts",
+      "ids": [
+        "6aa01e727a012eb44cc636c7",
+        "6aa02a34c3be60ada0ed4805",
+        "6aa02b6cc3be60ada0ed4884"
+      ],
+      "reason": "Attempts reference the Test and embed the four question IDs plus resultSnapshot copies."
+    },
+    {
+      "collection": "tests",
+      "ids": [
+        "6aa01e61f2afe2eb763a4bda"
+      ],
+      "reason": "After attempts/results are gone, no remaining TestAttempt/Result should point at this Test."
+    },
+    {
+      "collection": "questions",
+      "ids": [
+        "6aa01e60f2afe2eb763a4bc1",
+        "6aa01e60f2afe2eb763a4bc7",
+        "6aa01e61f2afe2eb763a4bcd",
+        "6aa01e61f2afe2eb763a4bd3"
+      ],
+      "reason": "Only this Test referenced these IDs. Snapshots live on attempts, which would already be removed."
+    },
+    {
+      "collection": "posts",
+      "ids": [
+        "6a9fe271a6683cc1b21ccded"
+      ],
+      "reason": "Only the four smoke questions tag this Post via postIds. No Test.postId, notes, PDFs, or subjects."
+    }
+  ],
+  "cleanupStatus": "CLEANUP BLOCKED — UNEXPECTED REFERENCES FOUND",
+  "database": {
+    "name": "ssbfy",
+    "host": "memora.evyfu0y.mongodb.net",
+    "protocol": "mongodb+srv",
+    "nodeEnv": "(not set in local env)",
+    "identity": "intended SSBFY database (name ssbfy, SET A 250 present)"
+  },
+  "baseline": {
+    "users": 29,
+    "questions": 254,
+    "tests": 1,
+    "posts": 1,
+    "testAttempts": 3,
+    "results": 2
+  },
+  "finalCounts": {
+    "questions": 254,
+    "tests": 1,
+    "posts": 1,
+    "phase9Attempts": 3,
+    "phase9Results": 2
+  },
+  "mongoWrites": 0,
+  "testUserCleanup": "NOT PROPOSED",
+  "failures": [
+    "Phase 9 attempts=3, expected at most 2 — STOP",
+    "Phase 9 attempts=3, expected 2"
+  ],
+  "notes": [
+    "results for Phase 9 Test=2, attempts=3"
+  ]
+}

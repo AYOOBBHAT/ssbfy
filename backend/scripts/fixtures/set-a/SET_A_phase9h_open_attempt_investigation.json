@@ -1,0 +1,57 @@
+{
+  "attemptId": "6aa02b6cc3be60ada0ed4884",
+  "testId": "6aa01e61f2afe2eb763a4bda",
+  "maskedUserId": "…7f83fa",
+  "status": "open",
+  "attemptNumber": 1,
+  "createdAt": "2026-09-08T15:36:12.849Z",
+  "updatedAt": "2026-09-08T15:38:14.960Z",
+  "expiresAt": null,
+  "answerState": {
+    "answersPresent": true,
+    "answerRowCount": 4,
+    "answeredQuestionCount": 0,
+    "unansweredRowCount": 4,
+    "resultSnapshotPresent": false
+  },
+  "resultExists": false,
+  "references": [],
+  "creationSource": {
+    "code": "A",
+    "label": "Normal abandoned attempt",
+    "evidence": "Document matches testAttemptService.start → testAttemptRepository.create (startTime set, endTime null, no snapshot). Belongs to a different user than both completed attempts. The Phase 9 Test is a public active mock, so any authenticated student can start it. No server-side abandon/expire ran. Logs were not available in this session. updatedAt is later than createdAt, consistent with PATCH /tests/:id/progress after start."
+  },
+  "expirationBehavior": {
+    "schemaExpiresAt": false,
+    "ttlIndex": false,
+    "requestTimeExpiration": false,
+    "clientDurationMinutes": 10,
+    "willNaturallyExpire": false
+  },
+  "userImpact": {
+    "sameAsOldAttemptUser": false,
+    "sameAsNewCompletedUser": false,
+    "otherPhase9AttemptsForUser": 0,
+    "blocksConcurrentStartForThisUser": true,
+    "affectsRankings": false,
+    "affectsResults": false,
+    "isPremium": false
+  },
+  "cleanupClassification": "SAFE TO DELETE LATER",
+  "proposedCleanupAction": "include_open_attempt_in_future_phase9_smoke_deletion_after_explicit_approval",
+  "counts": {
+    "questions": 254,
+    "phase9Questions": 4,
+    "tests": 1,
+    "posts": 1,
+    "phase9Attempts": 3,
+    "phase9Completed": 2,
+    "phase9Open": 1,
+    "phase9Results": 2,
+    "setA": 250
+  },
+  "newSnapshotOk": true,
+  "mongoWrites": 0,
+  "failures": [],
+  "notes": []
+}

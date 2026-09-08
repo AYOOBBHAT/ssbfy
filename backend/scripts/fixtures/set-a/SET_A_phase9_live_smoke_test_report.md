@@ -505,3 +505,117 @@ Old Result modified: 0
 
 Unexpected writes: 0  
 
+---
+
+# Phase 9E retry — post-deploy, from Part 4
+
+Production Node had been restarted (health `uptime` 142s at 2026-09-08T15:21:54Z, still 288s at 15:24:19Z). This retry started at Part 4 as requested. No second attempt was created.
+
+## Production questions API (Part 4)
+
+`GET https://api.jkssbfy.in/api/questions?ids=…` (Phase 9 IDs) → **401 Authentication required**.
+
+No student/admin Bearer token is available in this session:
+
+- `backend/.env` contains `MONGODB_URI` only (no `JWT_SECRET`)
+- no `mobile/.env` / `admin/.env`
+- example JWT secret is rejected by production (`Invalid or expired token`)
+- SSH to `api.jkssbfy.in` as root: publickey denied
+
+Live Question documents in Atlas (same DB, not the HTTP envelope) still have:
+
+| Question | Live presentation | Structured content |
+|---|---|---|
+| Q1 `6aa01e60f2afe2eb763a4bc1` | plain | content null |
+| Q2 `6aa01e60f2afe2eb763a4bc7` | two_statements | intro, 2 statements, prompt |
+| Q3 `6aa01e61f2afe2eb763a4bcd` | numbered_list | intro, 3 items, prompt |
+| Q4 `6aa01e61f2afe2eb763a4bd3` | table | intro, 2 columns, 2 rows, prompt |
+
+Public projection helper does not emit `correctAnswers` / `correctAnswerIndex` / `correctAnswerValue` / `explanation`. That is **local/DB**, not proof of the deployed GET envelope.
+
+**Production structured-field HTTP check: NOT COMPLETED** (no auth).
+
+## Phase 9 Mock Test (Part 5)
+
+`GET https://api.jkssbfy.in/api/tests/6aa01e61f2afe2eb763a4bda`:
+
+- Test ID `6aa01e61f2afe2eb763a4bda`
+- `kind` = `mock`
+- `status` = `active`
+- `updatedAt` still `2026-09-08T14:40:33.972Z` (unchanged)
+- exactly 4 IDs, order plain → two_statements → numbered_list → table
+
+Not modified.
+
+## Existing attempt count (Part 6)
+
+Phase 9 TestAttempts: **1** (`6aa01e727a012eb44cc636c7`). No newer attempt exists.
+
+The old attempt’s user is **free** (`isPremium` false). Free users cannot start the same test again (`Test already completed`). There are **0** premium students. A new attempt would have to use a **different existing** student account. That was not done.
+
+## Fresh attempt (Parts 7–13)
+
+Not created. `POST /api/tests/:id/start` was not called. Submit was not called. Review API was not called.
+
+## Snapshot / scoring / Review API
+
+n/a (no new attempt)
+
+## Old attempt (Part 14)
+
+Unchanged: score **1**, accuracy **25%**, `updatedAt` `2026-09-08T14:41:22.801Z`, snapshot `presentationKind`/`content` still absent.
+
+## SET A Integrity / database counts
+
+`npm run verify:phase9-smoke-test` — **ok: true**
+
+| Check | Actual |
+|---|---|
+| SET A questions | 250 (plain 49 / two_statements 8 / numbered_list 179 / table 14) |
+| Questions | 254 |
+| Phase 9 questions | 4 |
+| Tests | 1 |
+| Posts | 1 |
+| Phase 9 TestAttempts | 1 |
+| Phase 9 Results | 1 |
+
+SET A Test: 0. SET A Post: 0.
+
+## Mobile
+
+Mobile visual verification: **NOT PERFORMED**
+
+## Issues
+
+1. Cannot authenticate to `https://api.jkssbfy.in` as a student, so production `GET /questions` and `POST /tests/:id/start` cannot be executed from this session.
+2. Do not mint tokens without production `JWT_SECRET`. Do not sign up a new user (extra User write). Do not reuse the old free user (start would 409).
+
+To finish 9E, provide **one existing unused student’s Bearer token** (or put production `JWT_SECRET` in `backend/.env` so a token can be minted for an existing unused student). Then approve exactly one start/submit.
+
+## Final Verdict
+
+**FAIL**
+
+Stopped before start. **New TestAttempt created: 0.** Waiting for explicit auth material and approval. Do not proceed to Phase 9F.
+
+---
+
+## Phase 9E retry final safety check
+
+SET A questions modified: 0  
+SET A questions deleted: 0  
+SET A Test created: 0  
+SET A Post created: 0  
+
+New Questions created in 9E: 0  
+New Tests created in 9E: 0  
+New Posts created in 9E: 0  
+
+New TestAttempt created in 9E: 0  
+New Result created in 9E: 0  
+
+Old TestAttempt modified: 0  
+Old Result modified: 0  
+
+Unexpected writes: 0  
+

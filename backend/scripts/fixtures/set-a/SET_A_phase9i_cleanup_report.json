@@ -1,0 +1,48 @@
+{
+  "database": "ssbfy",
+  "preCounts": {
+    "users": 29,
+    "questions": 254,
+    "tests": 1,
+    "posts": 1,
+    "testAttempts": 3,
+    "results": 2
+  },
+  "postCounts": {
+    "users": 29,
+    "questions": 250,
+    "tests": 0,
+    "posts": 0,
+    "testAttempts": 0,
+    "results": 0
+  },
+  "deletedResultIds": [
+    "6aa01e927a012eb44cc636d6",
+    "6aa02a70c3be60ada0ed4814"
+  ],
+  "deletedAttemptIds": [
+    "6aa01e727a012eb44cc636c7",
+    "6aa02a34c3be60ada0ed4805",
+    "6aa02b6cc3be60ada0ed4884"
+  ],
+  "deletedTestIds": [
+    "6aa01e61f2afe2eb763a4bda"
+  ],
+  "deletedQuestionIds": [
+    "6aa01e60f2afe2eb763a4bc1",
+    "6aa01e60f2afe2eb763a4bc7",
+    "6aa01e61f2afe2eb763a4bcd",
+    "6aa01e61f2afe2eb763a4bd3"
+  ],
+  "deletedPostIds": [
+    "6a9fe271a6683cc1b21ccded"
+  ],
+  "unexpectedReferences": [],
+  "setACountBefore": 250,
+  "setACountAfter": 250,
+  "setADeletedCount": 0,
+  "userDeletedCount": 0,
+  "userModifiedCount": 0,
+  "cleanupStatus": "PASS",
+  "transactionUsed": true
+}
