@@ -1,0 +1,323 @@
+{
+  "status": "AWAITING_GATE_1_APPROVAL",
+  "database": "ssbfy",
+  "subjects": [
+    {
+      "name": "Indian Polity",
+      "order": 1,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Fundamental Rights",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Judiciary",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Parliament",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "Constitutional Bodies",
+          "order": 4,
+          "isActive": true
+        },
+        {
+          "name": "Centre-State Relations",
+          "order": 5,
+          "isActive": true
+        },
+        {
+          "name": "Laws and Rights",
+          "order": 6,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Economy",
+      "order": 2,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Indian Economy and Surveys",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Banking and Monetary Policy",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Public Finance and Budget",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "Trade Industry and Infrastructure",
+          "order": 4,
+          "isActive": true
+        },
+        {
+          "name": "Financial Markets and Taxation",
+          "order": 5,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Geography",
+      "order": 3,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Physical Geography",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Indian Geography",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Rivers and Water Resources",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "World Geography",
+          "order": 4,
+          "isActive": true
+        },
+        {
+          "name": "Transport Infrastructure",
+          "order": 5,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Environment",
+      "order": 4,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Biodiversity and Wildlife",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Wetlands and Conservation",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Climate Change",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "Pollution and Environmental Regulation",
+          "order": 4,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Science and Technology",
+      "order": 5,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Space Technology",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Energy and Nuclear Science",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Physics and Research",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "Biotechnology",
+          "order": 4,
+          "isActive": true
+        },
+        {
+          "name": "Digital Technology and AI",
+          "order": 5,
+          "isActive": true
+        },
+        {
+          "name": "Chemistry and Materials",
+          "order": 6,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Defence",
+      "order": 6,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Missile and Weapon Systems",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Armed Forces and Platforms",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Military History and Operations",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "Defence Cooperation",
+          "order": 4,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "International Relations",
+      "order": 7,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "International Organisations",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "India's Bilateral Relations",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Global Reports and Indices",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "World Affairs and Conflicts",
+          "order": 4,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "History and Culture",
+      "order": 8,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Ancient and Medieval India",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Modern India",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Art Architecture and Heritage",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "Culture Festivals and Sports",
+          "order": 4,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Governance and Schemes",
+      "order": 9,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Social Welfare Schemes",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Education and Skills",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Administration and e-Governance",
+          "order": 3,
+          "isActive": true
+        },
+        {
+          "name": "Urban Development",
+          "order": 4,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Agriculture",
+      "order": 10,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Crops and Commodities",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Farm Inputs and Technology",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "Agricultural Policy and Institutions",
+          "order": 3,
+          "isActive": true
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "order": 11,
+      "isActive": true,
+      "topics": [
+        {
+          "name": "Diseases and Public Health",
+          "order": 1,
+          "isActive": true
+        },
+        {
+          "name": "Medicines and Therapeutics",
+          "order": 2,
+          "isActive": true
+        },
+        {
+          "name": "One Health and Food Safety",
+          "order": 3,
+          "isActive": true
+        }
+      ]
+    }
+  ]
+}

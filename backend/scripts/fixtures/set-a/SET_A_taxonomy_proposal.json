@@ -1,0 +1,2017 @@
+{
+  "status": "PROPOSED_NOT_APPROVED",
+  "source": "SET_A_import_ready.jsonl",
+  "totalQuestions": 250,
+  "subjects": [
+    {
+      "proposedName": "Indian Polity",
+      "proposedOrder": 1,
+      "topics": [
+        {
+          "proposedName": "Fundamental Rights",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Judiciary",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Parliament",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "Constitutional Bodies",
+          "proposedOrder": 4
+        },
+        {
+          "proposedName": "Centre-State Relations",
+          "proposedOrder": 5
+        },
+        {
+          "proposedName": "Laws and Rights",
+          "proposedOrder": 6
+        }
+      ]
+    },
+    {
+      "proposedName": "Economy",
+      "proposedOrder": 2,
+      "topics": [
+        {
+          "proposedName": "Indian Economy and Surveys",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Banking and Monetary Policy",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Public Finance and Budget",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "Trade Industry and Infrastructure",
+          "proposedOrder": 4
+        },
+        {
+          "proposedName": "Financial Markets and Taxation",
+          "proposedOrder": 5
+        }
+      ]
+    },
+    {
+      "proposedName": "Geography",
+      "proposedOrder": 3,
+      "topics": [
+        {
+          "proposedName": "Physical Geography",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Indian Geography",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Rivers and Water Resources",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "World Geography",
+          "proposedOrder": 4
+        },
+        {
+          "proposedName": "Transport Infrastructure",
+          "proposedOrder": 5
+        }
+      ]
+    },
+    {
+      "proposedName": "Environment",
+      "proposedOrder": 4,
+      "topics": [
+        {
+          "proposedName": "Biodiversity and Wildlife",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Wetlands and Conservation",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Climate Change",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "Pollution and Environmental Regulation",
+          "proposedOrder": 4
+        }
+      ]
+    },
+    {
+      "proposedName": "Science and Technology",
+      "proposedOrder": 5,
+      "topics": [
+        {
+          "proposedName": "Space Technology",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Energy and Nuclear Science",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Physics and Research",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "Biotechnology",
+          "proposedOrder": 4
+        },
+        {
+          "proposedName": "Digital Technology and AI",
+          "proposedOrder": 5
+        },
+        {
+          "proposedName": "Chemistry and Materials",
+          "proposedOrder": 6
+        }
+      ]
+    },
+    {
+      "proposedName": "Defence",
+      "proposedOrder": 6,
+      "topics": [
+        {
+          "proposedName": "Missile and Weapon Systems",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Armed Forces and Platforms",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Military History and Operations",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "Defence Cooperation",
+          "proposedOrder": 4
+        }
+      ]
+    },
+    {
+      "proposedName": "International Relations",
+      "proposedOrder": 7,
+      "topics": [
+        {
+          "proposedName": "International Organisations",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "India's Bilateral Relations",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Global Reports and Indices",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "World Affairs and Conflicts",
+          "proposedOrder": 4
+        }
+      ]
+    },
+    {
+      "proposedName": "History and Culture",
+      "proposedOrder": 8,
+      "topics": [
+        {
+          "proposedName": "Ancient and Medieval India",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Modern India",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Art Architecture and Heritage",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "Culture Festivals and Sports",
+          "proposedOrder": 4
+        }
+      ]
+    },
+    {
+      "proposedName": "Governance and Schemes",
+      "proposedOrder": 9,
+      "topics": [
+        {
+          "proposedName": "Social Welfare Schemes",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Education and Skills",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Administration and e-Governance",
+          "proposedOrder": 3
+        },
+        {
+          "proposedName": "Urban Development",
+          "proposedOrder": 4
+        }
+      ]
+    },
+    {
+      "proposedName": "Agriculture",
+      "proposedOrder": 10,
+      "topics": [
+        {
+          "proposedName": "Crops and Commodities",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Farm Inputs and Technology",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "Agricultural Policy and Institutions",
+          "proposedOrder": 3
+        }
+      ]
+    },
+    {
+      "proposedName": "Health",
+      "proposedOrder": 11,
+      "topics": [
+        {
+          "proposedName": "Diseases and Public Health",
+          "proposedOrder": 1
+        },
+        {
+          "proposedName": "Medicines and Therapeutics",
+          "proposedOrder": 2
+        },
+        {
+          "proposedName": "One Health and Food Safety",
+          "proposedOrder": 3
+        }
+      ]
+    }
+  ],
+  "questionMappings": [
+    {
+      "questionNumber": 1,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Tests TG identity-certificate law against the Registration of Births and Deaths Act."
+    },
+    {
+      "questionNumber": 2,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "ISRO SpaDeX docking capability and country-rank claim."
+    },
+    {
+      "questionNumber": 3,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "low",
+      "reason": "Epithet for an Indian scientist; not a standard textbook title, so classification is interpretive."
+    },
+    {
+      "questionNumber": 4,
+      "subject": "Economy",
+      "topic": "Indian Economy and Surveys",
+      "confidence": "high",
+      "reason": "Household Consumption Expenditure Survey agency and rural/urban food share."
+    },
+    {
+      "questionNumber": 5,
+      "subject": "Economy",
+      "topic": "Financial Markets and Taxation",
+      "confidence": "medium",
+      "reason": "Ethical-AI tools in finance; could also sit under digital technology."
+    },
+    {
+      "questionNumber": 6,
+      "subject": "Geography",
+      "topic": "Indian Geography",
+      "confidence": "high",
+      "reason": "Kashmir Chillai Kalan seasonal geography and related observances."
+    },
+    {
+      "questionNumber": 7,
+      "subject": "Defence",
+      "topic": "Missile and Weapon Systems",
+      "confidence": "high",
+      "reason": "Manufacturer country of the Bayraktar Akinci UCAV."
+    },
+    {
+      "questionNumber": 8,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Wetland/BHS sites in news (Vembanad, Kaas, Yaya Tso)."
+    },
+    {
+      "questionNumber": 9,
+      "subject": "History and Culture",
+      "topic": "Culture Festivals and Sports",
+      "confidence": "high",
+      "reason": "Origin of Kho-Kho / Chakravyuha sporting tradition."
+    },
+    {
+      "questionNumber": 10,
+      "subject": "Indian Polity",
+      "topic": "Fundamental Rights",
+      "confidence": "high",
+      "reason": "Which listed Fundamental Rights are citizen-only."
+    },
+    {
+      "questionNumber": 11,
+      "subject": "Indian Polity",
+      "topic": "Judiciary",
+      "confidence": "high",
+      "reason": "Rarest-of-rare doctrine and the RG Kar death-penalty holding."
+    },
+    {
+      "questionNumber": 12,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "high",
+      "reason": "Continent–highest-peak pairs."
+    },
+    {
+      "questionNumber": 13,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Non-alcoholic steatohepatitis (NASH) facts."
+    },
+    {
+      "questionNumber": 14,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "high",
+      "reason": "ILO as a tripartite UN agency and 1919 origin."
+    },
+    {
+      "questionNumber": 15,
+      "subject": "Environment",
+      "topic": "Climate Change",
+      "confidence": "medium",
+      "reason": "Impacts of US Paris Agreement withdrawal; also an IR current-affairs item."
+    },
+    {
+      "questionNumber": 16,
+      "subject": "History and Culture",
+      "topic": "Culture Festivals and Sports",
+      "confidence": "high",
+      "reason": "Mythological origin of Kalaripayattu."
+    },
+    {
+      "questionNumber": 17,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "high",
+      "reason": "Ratnagiri Buddhist excavation finds."
+    },
+    {
+      "questionNumber": 18,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Enemy Property Act and the Custodian of Enemy Property."
+    },
+    {
+      "questionNumber": 19,
+      "subject": "Indian Polity",
+      "topic": "Parliament",
+      "confidence": "high",
+      "reason": "Constitutional articles for One Nation One Election."
+    },
+    {
+      "questionNumber": 20,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "Diamond Imprest Authorisation Scheme rules."
+    },
+    {
+      "questionNumber": 21,
+      "subject": "Science and Technology",
+      "topic": "Chemistry and Materials",
+      "confidence": "high",
+      "reason": "Identifies Rhodamine B as a synthetic dye."
+    },
+    {
+      "questionNumber": 22,
+      "subject": "Economy",
+      "topic": "Financial Markets and Taxation",
+      "confidence": "high",
+      "reason": "Definition of grey-market trading."
+    },
+    {
+      "questionNumber": 23,
+      "subject": "Governance and Schemes",
+      "topic": "Social Welfare Schemes",
+      "confidence": "high",
+      "reason": "Beti Bachao Beti Padhao scheme type, ministry, and objective."
+    },
+    {
+      "questionNumber": 24,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Food-borne versus non-food transmission of listed pathogens."
+    },
+    {
+      "questionNumber": 25,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "high",
+      "reason": "Organisations associated with Subhas Chandra Bose."
+    },
+    {
+      "questionNumber": 26,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Guillain-Barré Syndrome mechanism and triggers."
+    },
+    {
+      "questionNumber": 27,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Snakebite burden and antivenom facts for India."
+    },
+    {
+      "questionNumber": 28,
+      "subject": "Indian Polity",
+      "topic": "Judiciary",
+      "confidence": "medium",
+      "reason": "Karnataka HC green-energy open-access ruling; also energy/environment law."
+    },
+    {
+      "questionNumber": 29,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Olive Ridley turtle biology and IUCN status."
+    },
+    {
+      "questionNumber": 30,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "high",
+      "reason": "Pacific Ring of Fire seismicity and geography."
+    },
+    {
+      "questionNumber": 31,
+      "subject": "Defence",
+      "topic": "Military History and Operations",
+      "confidence": "high",
+      "reason": "Operation Gibraltar (1965) in Jammu and Kashmir."
+    },
+    {
+      "questionNumber": 32,
+      "subject": "Science and Technology",
+      "topic": "Physics and Research",
+      "confidence": "high",
+      "reason": "Semi-Dirac fermions versus Majorana/Dirac claims."
+    },
+    {
+      "questionNumber": 33,
+      "subject": "International Relations",
+      "topic": "Global Reports and Indices",
+      "confidence": "high",
+      "reason": "WEF Global Risks Report 2025 authorship and rankings."
+    },
+    {
+      "questionNumber": 34,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "high",
+      "reason": "Oceanic trench locations."
+    },
+    {
+      "questionNumber": 35,
+      "subject": "Defence",
+      "topic": "Missile and Weapon Systems",
+      "confidence": "medium",
+      "reason": "Scramjet test is propulsion technology for missiles/aerospace, not a space mission."
+    },
+    {
+      "questionNumber": 36,
+      "subject": "Environment",
+      "topic": "Wetlands and Conservation",
+      "confidence": "high",
+      "reason": "Indian cities with Ramsar Wetland City Accreditation."
+    },
+    {
+      "questionNumber": 37,
+      "subject": "Economy",
+      "topic": "Financial Markets and Taxation",
+      "confidence": "high",
+      "reason": "Crypto exchanges and KYC in India."
+    },
+    {
+      "questionNumber": 38,
+      "subject": "History and Culture",
+      "topic": "Ancient and Medieval India",
+      "confidence": "low",
+      "reason": "Jalankantha as a historical water-clock term; exact spelling is unverified."
+    },
+    {
+      "questionNumber": 39,
+      "subject": "Environment",
+      "topic": "Wetlands and Conservation",
+      "confidence": "high",
+      "reason": "Ramsar eligibility criteria for wetlands."
+    },
+    {
+      "questionNumber": 40,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Martial law in the Constitution (Art. 34)."
+    },
+    {
+      "questionNumber": 41,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "medium",
+      "reason": "Chinar tree ecology/history; also Kashmir geography."
+    },
+    {
+      "questionNumber": 42,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "NVS-02 / NavIC satellite payload and orbit."
+    },
+    {
+      "questionNumber": 43,
+      "subject": "Environment",
+      "topic": "Pollution and Environmental Regulation",
+      "confidence": "medium",
+      "reason": "Paraquat hazard classification; also a public-health poison."
+    },
+    {
+      "questionNumber": 44,
+      "subject": "Indian Polity",
+      "topic": "Fundamental Rights",
+      "confidence": "high",
+      "reason": "Constitutional provisions that secure liberty."
+    },
+    {
+      "questionNumber": 45,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Corpse flower biology and odour chemistry."
+    },
+    {
+      "questionNumber": 46,
+      "subject": "Defence",
+      "topic": "Missile and Weapon Systems",
+      "confidence": "high",
+      "reason": "Identifies BrahMos from listed missile characteristics."
+    },
+    {
+      "questionNumber": 47,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Punjab state bird identification."
+    },
+    {
+      "questionNumber": 48,
+      "subject": "History and Culture",
+      "topic": "Culture Festivals and Sports",
+      "confidence": "medium",
+      "reason": "Sthala Vriksha as sacred trees in Hindu literature."
+    },
+    {
+      "questionNumber": 49,
+      "subject": "Agriculture",
+      "topic": "Farm Inputs and Technology",
+      "confidence": "high",
+      "reason": "Nano Urea product and producer."
+    },
+    {
+      "questionNumber": 50,
+      "subject": "International Relations",
+      "topic": "World Affairs and Conflicts",
+      "confidence": "medium",
+      "reason": "Greenland’s strategic value to the US; also Arctic geography."
+    },
+    {
+      "questionNumber": 51,
+      "subject": "Economy",
+      "topic": "Indian Economy and Surveys",
+      "confidence": "medium",
+      "reason": "Mixed 75-year achievements including economy, literacy, and Chandrayaan-3."
+    },
+    {
+      "questionNumber": 52,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "What antibody/serology tests detect and are used for."
+    },
+    {
+      "questionNumber": 53,
+      "subject": "Defence",
+      "topic": "Missile and Weapon Systems",
+      "confidence": "high",
+      "reason": "Pralay missile characteristics."
+    },
+    {
+      "questionNumber": 54,
+      "subject": "Governance and Schemes",
+      "topic": "Education and Skills",
+      "confidence": "high",
+      "reason": "ASER is released by Pratham, not NCERT/NITI."
+    },
+    {
+      "questionNumber": 55,
+      "subject": "Indian Polity",
+      "topic": "Parliament",
+      "confidence": "high",
+      "reason": "Office and origin of the parliamentary whip."
+    },
+    {
+      "questionNumber": 56,
+      "subject": "Geography",
+      "topic": "Rivers and Water Resources",
+      "confidence": "high",
+      "reason": "Teesta origin, states, and hydropower location."
+    },
+    {
+      "questionNumber": 57,
+      "subject": "Governance and Schemes",
+      "topic": "Administration and e-Governance",
+      "confidence": "medium",
+      "reason": "Padma awards rules; civilian honours rather than a core constitutional body."
+    },
+    {
+      "questionNumber": 58,
+      "subject": "Environment",
+      "topic": "Climate Change",
+      "confidence": "high",
+      "reason": "India and the Paris Agreement."
+    },
+    {
+      "questionNumber": 59,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "high",
+      "reason": "Freedom-fighter contribution pairs."
+    },
+    {
+      "questionNumber": 60,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "eCoO 2.0 certificates of origin platform."
+    },
+    {
+      "questionNumber": 61,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "Critical minerals listed under the National Critical Mineral Mission."
+    },
+    {
+      "questionNumber": 62,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "MMDR Act 2015 licensing and auction rules."
+    },
+    {
+      "questionNumber": 63,
+      "subject": "Science and Technology",
+      "topic": "Digital Technology and AI",
+      "confidence": "high",
+      "reason": "DeepSeek models and energy-use claims."
+    },
+    {
+      "questionNumber": 64,
+      "subject": "International Relations",
+      "topic": "India's Bilateral Relations",
+      "confidence": "high",
+      "reason": "India–Indonesia defence, trade, and G20 facts."
+    },
+    {
+      "questionNumber": 65,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "Mutual Credit Guarantee Scheme for MSMEs."
+    },
+    {
+      "questionNumber": 66,
+      "subject": "Indian Polity",
+      "topic": "Fundamental Rights",
+      "confidence": "medium",
+      "reason": "Burial-rights split verdict grounded in Article 21 dignity."
+    },
+    {
+      "questionNumber": 67,
+      "subject": "History and Culture",
+      "topic": "Culture Festivals and Sports",
+      "confidence": "high",
+      "reason": "Folk-dance and state pairs."
+    },
+    {
+      "questionNumber": 68,
+      "subject": "Science and Technology",
+      "topic": "Energy and Nuclear Science",
+      "confidence": "high",
+      "reason": "OSOWOG / International Solar Alliance grid initiative."
+    },
+    {
+      "questionNumber": 69,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Human African trypanosomiasis (sleeping sickness)."
+    },
+    {
+      "questionNumber": 70,
+      "subject": "Geography",
+      "topic": "Rivers and Water Resources",
+      "confidence": "high",
+      "reason": "Singtam and Munshithang bridges on the Teesta."
+    },
+    {
+      "questionNumber": 71,
+      "subject": "Governance and Schemes",
+      "topic": "Social Welfare Schemes",
+      "confidence": "high",
+      "reason": "e-Shram microsites for unorganised workers."
+    },
+    {
+      "questionNumber": 72,
+      "subject": "Science and Technology",
+      "topic": "Energy and Nuclear Science",
+      "confidence": "high",
+      "reason": "Nuclear fusion versus fission-bomb terminology."
+    },
+    {
+      "questionNumber": 73,
+      "subject": "Economy",
+      "topic": "Indian Economy and Surveys",
+      "confidence": "medium",
+      "reason": "Occupational Shortage Index labour-market indicators."
+    },
+    {
+      "questionNumber": 74,
+      "subject": "Environment",
+      "topic": "Pollution and Environmental Regulation",
+      "confidence": "high",
+      "reason": "Natural versus cultural eutrophication."
+    },
+    {
+      "questionNumber": 75,
+      "subject": "Science and Technology",
+      "topic": "Energy and Nuclear Science",
+      "confidence": "high",
+      "reason": "EAST tokamak country of origin."
+    },
+    {
+      "questionNumber": 76,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Prohibition of Child Marriage Act 2006."
+    },
+    {
+      "questionNumber": 77,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "high",
+      "reason": "Genocide definition and the 1948 Convention."
+    },
+    {
+      "questionNumber": 78,
+      "subject": "Science and Technology",
+      "topic": "Energy and Nuclear Science",
+      "confidence": "high",
+        "reason": "Tests CNG, sour gas, and LNG as fuel/energy facts."
+    },
+    {
+      "questionNumber": 79,
+      "subject": "Agriculture",
+      "topic": "Agricultural Policy and Institutions",
+      "confidence": "high",
+      "reason": "Agriculture GDP, production ranks, and employment share."
+    },
+    {
+      "questionNumber": 80,
+      "subject": "Health",
+      "topic": "Medicines and Therapeutics",
+      "confidence": "high",
+      "reason": "Suzetrigine as a non-opioid painkiller."
+    },
+    {
+      "questionNumber": 81,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "medium",
+      "reason": "Himachal cannabis project versus the NDPS Act; also agriculture."
+    },
+    {
+      "questionNumber": 82,
+      "subject": "Geography",
+      "topic": "Indian Geography",
+      "confidence": "high",
+      "reason": "Indian coastline origin and recent length change."
+    },
+    {
+      "questionNumber": 83,
+      "subject": "Health",
+      "topic": "Medicines and Therapeutics",
+      "confidence": "high",
+      "reason": "Fentanyl origin, medical use, and potency."
+    },
+    {
+      "questionNumber": 84,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Indian squid taxonomy, genetics, and IUCN status."
+    },
+    {
+      "questionNumber": 85,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Mangrove ecosystem “link strength”."
+    },
+    {
+      "questionNumber": 86,
+      "subject": "Geography",
+      "topic": "World Geography",
+      "confidence": "high",
+      "reason": "Land borders of the Democratic Republic of the Congo."
+    },
+    {
+      "questionNumber": 87,
+      "subject": "Environment",
+      "topic": "Pollution and Environmental Regulation",
+      "confidence": "high",
+      "reason": "Construction and Demolition Waste Management Rules 2016."
+    },
+    {
+      "questionNumber": 88,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Biodiversity Heritage Sites definition, notifier, and Guneri inland mangrove."
+    },
+    {
+      "questionNumber": 89,
+      "subject": "Economy",
+      "topic": "Public Finance and Budget",
+      "confidence": "high",
+      "reason": "Union Budget 2025-26 income-tax cut effects."
+    },
+    {
+      "questionNumber": 90,
+      "subject": "Governance and Schemes",
+      "topic": "Administration and e-Governance",
+      "confidence": "high",
+      "reason": "SwaRail SuperApp services."
+    },
+    {
+      "questionNumber": 91,
+      "subject": "Geography",
+      "topic": "Indian Geography",
+      "confidence": "high",
+      "reason": "Indian states sharing a border with Bangladesh."
+    },
+    {
+      "questionNumber": 92,
+      "subject": "Environment",
+      "topic": "Wetlands and Conservation",
+      "confidence": "high",
+      "reason": "New Ramsar designations and state-wise counts."
+    },
+    {
+      "questionNumber": 93,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Bickerstaff encephalitis versus Guillain-Barré Syndrome."
+    },
+    {
+      "questionNumber": 94,
+      "subject": "Agriculture",
+      "topic": "Crops and Commodities",
+      "confidence": "medium",
+      "reason": "Food-item nicknames; several pairs are non-standard."
+    },
+    {
+      "questionNumber": 95,
+      "subject": "International Relations",
+      "topic": "India's Bilateral Relations",
+      "confidence": "medium",
+      "reason": "US H-1B visa rules affecting Indian professionals."
+    },
+    {
+      "questionNumber": 96,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "high",
+      "reason": "WHO membership of listed countries."
+    },
+    {
+      "questionNumber": 97,
+      "subject": "Agriculture",
+      "topic": "Crops and Commodities",
+      "confidence": "high",
+      "reason": "Extra-long staple cotton in India."
+    },
+    {
+      "questionNumber": 98,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "Sagarmala objectives and maritime trade shares."
+    },
+    {
+      "questionNumber": 99,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+        "reason": "Identifies the agency that launched the Gaia spacecraft."
+    },
+    {
+      "questionNumber": 100,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "Trojan asteroids sharing a planet’s orbit."
+    },
+    {
+      "questionNumber": 101,
+      "subject": "Economy",
+      "topic": "Public Finance and Budget",
+      "confidence": "high",
+      "reason": "Fiscal deficit definition versus inflation."
+    },
+    {
+      "questionNumber": 102,
+      "subject": "Science and Technology",
+      "topic": "Biotechnology",
+      "confidence": "high",
+      "reason": "Applications of genetic modification."
+    },
+    {
+      "questionNumber": 103,
+      "subject": "Governance and Schemes",
+      "topic": "Education and Skills",
+      "confidence": "high",
+      "reason": "Prime Minister’s Internship Scheme design."
+    },
+    {
+      "questionNumber": 104,
+      "subject": "Governance and Schemes",
+      "topic": "Education and Skills",
+      "confidence": "high",
+      "reason": "NAAC status, funding, and grade benefits."
+    },
+    {
+      "questionNumber": 105,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "medium",
+      "reason": "Sacred groves by state; also cultural geography."
+    },
+    {
+      "questionNumber": 106,
+      "subject": "Geography",
+      "topic": "World Geography",
+      "confidence": "high",
+      "reason": "Location of Mount Taranaki."
+    },
+    {
+      "questionNumber": 107,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Brucellosis cause, transmission, and symptoms."
+    },
+    {
+      "questionNumber": 108,
+      "subject": "Economy",
+      "topic": "Banking and Monetary Policy",
+      "confidence": "high",
+      "reason": "SLR and LCR dual liquidity mandates."
+    },
+    {
+      "questionNumber": 109,
+      "subject": "Indian Polity",
+      "topic": "Fundamental Rights",
+      "confidence": "high",
+      "reason": "Article 25 and the absence of a uniform national anti-conversion law."
+    },
+    {
+      "questionNumber": 110,
+      "subject": "Agriculture",
+      "topic": "Crops and Commodities",
+      "confidence": "high",
+      "reason": "Pulses covered by the Pulse Mission."
+    },
+    {
+      "questionNumber": 111,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "high",
+      "reason": "ICC jurisdiction and India’s non-recognition."
+    },
+    {
+      "questionNumber": 112,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Foreigners Tribunals procedure and burden of proof."
+    },
+    {
+      "questionNumber": 113,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "medium",
+      "reason": "Aga Khan restorations and Padma; also philanthropy/IR."
+    },
+    {
+      "questionNumber": 114,
+      "subject": "Environment",
+      "topic": "Pollution and Environmental Regulation",
+      "confidence": "high",
+      "reason": "Flue-gas desulphurisation at coal plants."
+    },
+    {
+      "questionNumber": 115,
+      "subject": "Defence",
+      "topic": "Military History and Operations",
+      "confidence": "high",
+      "reason": "Renaming Fort William to Vijay Durg."
+    },
+    {
+      "questionNumber": 116,
+      "subject": "Defence",
+      "topic": "Armed Forces and Platforms",
+      "confidence": "high",
+      "reason": "Stryker infantry combat vehicle facts."
+    },
+    {
+      "questionNumber": 117,
+      "subject": "Environment",
+      "topic": "Climate Change",
+      "confidence": "high",
+      "reason": "Arctic warming, albedo, and heat trapping."
+    },
+    {
+      "questionNumber": 118,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Parole under Indian prison practice."
+    },
+    {
+      "questionNumber": 119,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Bombay Prevention of Beggary Act 1959."
+    },
+    {
+      "questionNumber": 120,
+      "subject": "Economy",
+      "topic": "Public Finance and Budget",
+      "confidence": "high",
+      "reason": "Viksit Bharat 2047 priorities in Budget 2025."
+    },
+    {
+      "questionNumber": 121,
+      "subject": "Science and Technology",
+      "topic": "Biotechnology",
+      "confidence": "high",
+      "reason": "Human Genome Project dates, funding, and aim."
+    },
+    {
+      "questionNumber": 122,
+      "subject": "Science and Technology",
+      "topic": "Energy and Nuclear Science",
+      "confidence": "medium",
+      "reason": "Atomic Energy Act / CLNDA Budget amendments; also public law."
+    },
+    {
+      "questionNumber": 123,
+      "subject": "Agriculture",
+      "topic": "Agricultural Policy and Institutions",
+      "confidence": "high",
+      "reason": "PM-KISAN eligibility and instalments."
+    },
+    {
+      "questionNumber": 124,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "GARBH-INi-DRISHTI maternal-health research."
+    },
+    {
+      "questionNumber": 125,
+      "subject": "Agriculture",
+      "topic": "Crops and Commodities",
+      "confidence": "medium",
+      "reason": "Ethanol feedstocks; also energy policy."
+    },
+    {
+      "questionNumber": 126,
+      "subject": "Science and Technology",
+      "topic": "Energy and Nuclear Science",
+      "confidence": "high",
+      "reason": "Nuclear power’s share of electricity and GHG intensity."
+    },
+    {
+      "questionNumber": 127,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "Dedicated Freight Corridor alignments."
+    },
+    {
+      "questionNumber": 128,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "Indian Railways size, electrification, and funds."
+    },
+    {
+      "questionNumber": 129,
+      "subject": "Governance and Schemes",
+      "topic": "Social Welfare Schemes",
+      "confidence": "high",
+      "reason": "NAMASTE mechanised sanitation scheme."
+    },
+    {
+      "questionNumber": 130,
+      "subject": "Agriculture",
+      "topic": "Farm Inputs and Technology",
+      "confidence": "high",
+      "reason": "Potash use, import dependence, and properties."
+    },
+    {
+      "questionNumber": 131,
+      "subject": "Governance and Schemes",
+      "topic": "Social Welfare Schemes",
+      "confidence": "high",
+      "reason": "National Commission for Safai Karamcharis status."
+    },
+    {
+      "questionNumber": 132,
+      "subject": "Economy",
+      "topic": "Banking and Monetary Policy",
+      "confidence": "high",
+      "reason": "Effects of an RBI repo-rate cut."
+    },
+    {
+      "questionNumber": 133,
+      "subject": "Indian Polity",
+      "topic": "Centre-State Relations",
+      "confidence": "high",
+      "reason": "Governor’s options under Article 200."
+    },
+    {
+      "questionNumber": 134,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "high",
+      "reason": "National Mission for Manuscripts."
+    },
+    {
+      "questionNumber": 135,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "NTCA and tiger-reserve boundary changes."
+    },
+    {
+      "questionNumber": 136,
+      "subject": "International Relations",
+      "topic": "World Affairs and Conflicts",
+      "confidence": "high",
+      "reason": "Location of the Netzarim Corridor."
+    },
+    {
+      "questionNumber": 137,
+      "subject": "Environment",
+      "topic": "Climate Change",
+      "confidence": "high",
+      "reason": "Why La Niña failed to cool January 2025."
+    },
+    {
+      "questionNumber": 138,
+      "subject": "Defence",
+      "topic": "Defence Cooperation",
+      "confidence": "high",
+      "reason": "India–UK Aero India 2025 defence agreements."
+    },
+    {
+      "questionNumber": 139,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "medium",
+      "reason": "ASHA workers; also a health-system scheme."
+    },
+    {
+      "questionNumber": 140,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Sambar deer IUCN status and captive breeding."
+    },
+    {
+      "questionNumber": 141,
+      "subject": "Economy",
+      "topic": "Indian Economy and Surveys",
+      "confidence": "high",
+      "reason": "Gross Domestic Knowledge Product proposal."
+    },
+    {
+      "questionNumber": 142,
+      "subject": "Indian Polity",
+      "topic": "Centre-State Relations",
+      "confidence": "high",
+      "reason": "President’s Rule and judicial review."
+    },
+    {
+      "questionNumber": 143,
+      "subject": "International Relations",
+      "topic": "India's Bilateral Relations",
+      "confidence": "high",
+      "reason": "India–UK Young Professionals Scheme."
+    },
+    {
+      "questionNumber": 144,
+      "subject": "Economy",
+      "topic": "Banking and Monetary Policy",
+      "confidence": "high",
+      "reason": "Factors depreciating the Indian rupee."
+    },
+    {
+      "questionNumber": 145,
+      "subject": "Environment",
+      "topic": "Climate Change",
+      "confidence": "high",
+      "reason": "Marine heatwave definition and causes."
+    },
+    {
+      "questionNumber": 146,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "high",
+      "reason": "UNESCO World Heritage sites and dynasties."
+    },
+    {
+      "questionNumber": 147,
+      "subject": "Defence",
+      "topic": "Armed Forces and Platforms",
+      "confidence": "high",
+      "reason": "INS Imphal / Project 15B destroyer."
+    },
+    {
+      "questionNumber": 148,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "Human coronavirus HKU1 versus pandemic coronaviruses."
+    },
+    {
+      "questionNumber": 149,
+      "subject": "Indian Polity",
+      "topic": "Constitutional Bodies",
+      "confidence": "high",
+      "reason": "CAG appointment, removal, and PSU audit."
+    },
+    {
+      "questionNumber": 150,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "medium",
+      "reason": "GI-tagged products and states; also agriculture."
+    },
+    {
+      "questionNumber": 151,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "high",
+      "reason": "R.G. Bhandarkar associations and offices."
+    },
+    {
+      "questionNumber": 152,
+      "subject": "International Relations",
+      "topic": "World Affairs and Conflicts",
+      "confidence": "medium",
+      "reason": "Raisina Dialogue is an India-hosted geopolitics forum, not a bilateral treaty."
+    },
+    {
+      "questionNumber": 153,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "high",
+      "reason": "Chhatrapati Shivaji Maharaj temple claims."
+    },
+    {
+      "questionNumber": 154,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "high",
+      "reason": "Biswedari feudal tenure in Patiala."
+    },
+    {
+      "questionNumber": 155,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "high",
+      "reason": "Patharughat peasant uprising."
+    },
+    {
+      "questionNumber": 156,
+      "subject": "International Relations",
+      "topic": "Global Reports and Indices",
+      "confidence": "high",
+      "reason": "Future of Free Speech Index 2025."
+    },
+    {
+      "questionNumber": 157,
+      "subject": "Science and Technology",
+      "topic": "Physics and Research",
+      "confidence": "medium",
+      "reason": "Audible-enclave applications of directed sound."
+    },
+    {
+      "questionNumber": 158,
+      "subject": "Geography",
+      "topic": "Indian Geography",
+      "confidence": "high",
+      "reason": "Ana Sagar Lake origin and history."
+    },
+    {
+      "questionNumber": 159,
+      "subject": "Agriculture",
+      "topic": "Crops and Commodities",
+      "confidence": "high",
+      "reason": "Arecanut soils and leading producing state."
+    },
+    {
+      "questionNumber": 160,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "high",
+        "reason": "Physical-geography facts about the vernal equinox."
+    },
+    {
+      "questionNumber": 161,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "high",
+      "reason": "Sequence of rill, gully, and badland erosion."
+    },
+    {
+      "questionNumber": 162,
+      "subject": "Science and Technology",
+      "topic": "Digital Technology and AI",
+      "confidence": "high",
+      "reason": "Samarth incubation in telecom and IT."
+    },
+    {
+      "questionNumber": 163,
+      "subject": "Governance and Schemes",
+      "topic": "Urban Development",
+      "confidence": "high",
+      "reason": "Smart Cities Mission SPVs and progress."
+    },
+    {
+      "questionNumber": 164,
+      "subject": "Economy",
+      "topic": "Public Finance and Budget",
+      "confidence": "medium",
+      "reason": "BHIM-UPI merchant incentive scheme."
+    },
+    {
+      "questionNumber": 165,
+      "subject": "Defence",
+      "topic": "Missile and Weapon Systems",
+      "confidence": "medium",
+      "reason": "Sonic weapons as non-lethal acoustic systems."
+    },
+    {
+      "questionNumber": 166,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "Crew-9 ISS scientific experiments."
+    },
+    {
+      "questionNumber": 167,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "ISS partner space agencies."
+    },
+    {
+      "questionNumber": 168,
+      "subject": "Science and Technology",
+      "topic": "Energy and Nuclear Science",
+      "confidence": "medium",
+      "reason": "Indian nuclear plant–state pairs; also geography."
+    },
+    {
+      "questionNumber": 169,
+      "subject": "International Relations",
+      "topic": "Global Reports and Indices",
+      "confidence": "high",
+      "reason": "World Happiness Report 2025 rankings."
+    },
+    {
+      "questionNumber": 170,
+      "subject": "Geography",
+      "topic": "World Geography",
+      "confidence": "high",
+      "reason": "Countries bordering the Red Sea."
+    },
+    {
+      "questionNumber": 171,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "ISRO YUVIKA student space-education programme."
+    },
+    {
+      "questionNumber": 172,
+      "subject": "International Relations",
+      "topic": "Global Reports and Indices",
+      "confidence": "high",
+      "reason": "Global Residence Program Index publisher."
+    },
+    {
+      "questionNumber": 173,
+      "subject": "Agriculture",
+      "topic": "Agricultural Policy and Institutions",
+      "confidence": "high",
+      "reason": "National Programme for Dairy Development."
+    },
+    {
+      "questionNumber": 174,
+      "subject": "Economy",
+      "topic": "Financial Markets and Taxation",
+      "confidence": "high",
+      "reason": "Antitrust / competition law in India."
+    },
+    {
+      "questionNumber": 175,
+      "subject": "Indian Polity",
+      "topic": "Centre-State Relations",
+      "confidence": "high",
+      "reason": "Inner Line Permit states."
+    },
+    {
+      "questionNumber": 176,
+      "subject": "History and Culture",
+      "topic": "Ancient and Medieval India",
+      "confidence": "high",
+      "reason": "Pottery wares by archaeological age."
+    },
+    {
+      "questionNumber": 177,
+      "subject": "Environment",
+      "topic": "Climate Change",
+      "confidence": "medium",
+      "reason": "World Water Day 2025 glacier theme; UN observance."
+    },
+    {
+      "questionNumber": 178,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "medium",
+      "reason": "Challenger 150 deep-sea biodiversity expedition."
+    },
+    {
+      "questionNumber": 179,
+      "subject": "Environment",
+      "topic": "Climate Change",
+      "confidence": "high",
+      "reason": "Which listed gases are greenhouse gases."
+    },
+    {
+      "questionNumber": 180,
+      "subject": "Governance and Schemes",
+      "topic": "Administration and e-Governance",
+      "confidence": "high",
+      "reason": "CPGRAMS portal and nodal department."
+    },
+    {
+      "questionNumber": 181,
+      "subject": "Governance and Schemes",
+      "topic": "Social Welfare Schemes",
+      "confidence": "high",
+      "reason": "PM Jan Vikas Karyakram (PMJVK)."
+    },
+    {
+      "questionNumber": 182,
+      "subject": "History and Culture",
+      "topic": "Ancient and Medieval India",
+      "confidence": "high",
+      "reason": "Lapis lazuli and Badakhshan / Harappan trade."
+    },
+    {
+      "questionNumber": 183,
+      "subject": "History and Culture",
+      "topic": "Culture Festivals and Sports",
+      "confidence": "high",
+      "reason": "Shigmotsav and associated Goan folk dances."
+    },
+    {
+      "questionNumber": 184,
+      "subject": "Geography",
+      "topic": "World Geography",
+      "confidence": "high",
+        "reason": "Location of Cook Strait as world-geography knowledge."
+    },
+    {
+      "questionNumber": 185,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "high",
+      "reason": "Ram Manohar Lohia’s Sapta Kranti."
+    },
+    {
+      "questionNumber": 186,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "IT Act section 69 content-blocking powers."
+    },
+    {
+      "questionNumber": 187,
+      "subject": "History and Culture",
+      "topic": "Ancient and Medieval India",
+      "confidence": "high",
+      "reason": "Aurangzeb’s title, religious policy, and Sikh history claim."
+    },
+    {
+      "questionNumber": 188,
+      "subject": "Geography",
+      "topic": "Rivers and Water Resources",
+      "confidence": "high",
+      "reason": "Himalayan rivers and source glaciers."
+    },
+    {
+      "questionNumber": 189,
+      "subject": "Defence",
+      "topic": "Defence Cooperation",
+      "confidence": "medium",
+      "reason": "Indian Navy IOS SAGAR and AIKEYME with African partners; also IR."
+    },
+    {
+      "questionNumber": 190,
+      "subject": "History and Culture",
+      "topic": "Ancient and Medieval India",
+      "confidence": "high",
+      "reason": "Nalanda versus Vikramshila periods and curricula."
+    },
+    {
+      "questionNumber": 191,
+      "subject": "Agriculture",
+      "topic": "Crops and Commodities",
+      "confidence": "high",
+      "reason": "Indian cotton output, GM stagnation, and trade."
+    },
+    {
+      "questionNumber": 192,
+      "subject": "Economy",
+      "topic": "Financial Markets and Taxation",
+      "confidence": "high",
+      "reason": "Mar-a-Lago Accord as a weak-dollar strategy."
+    },
+    {
+      "questionNumber": 193,
+      "subject": "History and Culture",
+      "topic": "Modern India",
+      "confidence": "high",
+      "reason": "First woman legislator / medical graduate of Madras Presidency."
+    },
+    {
+      "questionNumber": 194,
+      "subject": "Agriculture",
+      "topic": "Crops and Commodities",
+      "confidence": "medium",
+      "reason": "Anthurium cultivation in the Northeast; ornamental crop."
+    },
+    {
+      "questionNumber": 195,
+      "subject": "Science and Technology",
+      "topic": "Biotechnology",
+      "confidence": "high",
+      "reason": "DNA fingerprinting, STRs, and PCR."
+    },
+    {
+      "questionNumber": 196,
+      "subject": "Economy",
+      "topic": "Public Finance and Budget",
+      "confidence": "high",
+      "reason": "Equalisation Levy on digital services."
+    },
+    {
+      "questionNumber": 197,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "high",
+      "reason": "India TB burden and NTEP strategy."
+    },
+    {
+      "questionNumber": 198,
+      "subject": "History and Culture",
+      "topic": "Ancient and Medieval India",
+      "confidence": "high",
+      "reason": "Poompuhar, Cholas, and Pallavas."
+    },
+    {
+      "questionNumber": 199,
+      "subject": "Health",
+      "topic": "Medicines and Therapeutics",
+      "confidence": "high",
+      "reason": "Tirzepatide as a weight-loss drug."
+    },
+    {
+      "questionNumber": 200,
+      "subject": "Agriculture",
+      "topic": "Agricultural Policy and Institutions",
+      "confidence": "high",
+      "reason": "Bharatiya Beej Sahakari Samiti purpose and nodal ministry."
+    },
+    {
+      "questionNumber": 201,
+      "subject": "Indian Polity",
+      "topic": "Judiciary",
+      "confidence": "high",
+      "reason": "High Court judge transfers and the Collegium."
+    },
+    {
+      "questionNumber": 202,
+      "subject": "Governance and Schemes",
+      "topic": "Education and Skills",
+      "confidence": "high",
+      "reason": "Prime Minister’s Internship Scheme eligibility facts."
+    },
+    {
+      "questionNumber": 203,
+      "subject": "Health",
+      "topic": "Diseases and Public Health",
+      "confidence": "medium",
+      "reason": "ICMR i-DRONE medical delivery; also technology."
+    },
+    {
+      "questionNumber": 204,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "medium",
+      "reason": "Bedmap3 Antarctic under-ice mapping; also earth science."
+    },
+    {
+      "questionNumber": 205,
+      "subject": "Indian Polity",
+      "topic": "Laws and Rights",
+      "confidence": "high",
+      "reason": "Criminal and civil defamation in India."
+    },
+    {
+      "questionNumber": 206,
+      "subject": "Defence",
+      "topic": "Missile and Weapon Systems",
+      "confidence": "high",
+      "reason": "VL-SRSAM indigenous naval SAM."
+    },
+    {
+      "questionNumber": 207,
+      "subject": "Health",
+      "topic": "One Health and Food Safety",
+      "confidence": "high",
+      "reason": "Pillars of the One Health approach."
+    },
+    {
+      "questionNumber": 208,
+      "subject": "Indian Polity",
+      "topic": "Judiciary",
+      "confidence": "high",
+      "reason": "Removal of Supreme Court judges."
+    },
+    {
+      "questionNumber": 209,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "medium",
+      "reason": "Tests which UN body publishes WWDR (UNESCO), not climate science itself."
+    },
+    {
+      "questionNumber": 210,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "high",
+      "reason": "Commonwealth membership and Games cycle."
+    },
+    {
+      "questionNumber": 211,
+      "subject": "Environment",
+      "topic": "Biodiversity and Wildlife",
+      "confidence": "high",
+      "reason": "Wildlife health surveillance architecture in India."
+    },
+    {
+      "questionNumber": 212,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "high",
+      "reason": "PRIP scheme for Pharma-MedTech innovation."
+    },
+    {
+      "questionNumber": 213,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "Gaia mission orbit (Lagrange point)."
+    },
+    {
+      "questionNumber": 214,
+      "subject": "History and Culture",
+      "topic": "Culture Festivals and Sports",
+      "confidence": "high",
+      "reason": "Sangita Kalanidhi Carnatic award."
+    },
+    {
+      "questionNumber": 215,
+      "subject": "Science and Technology",
+      "topic": "Physics and Research",
+      "confidence": "high",
+      "reason": "Gravitational waves speed and cosmology uses."
+    },
+    {
+      "questionNumber": 216,
+      "subject": "Indian Polity",
+      "topic": "Judiciary",
+      "confidence": "high",
+      "reason": "Three Judges Cases on appointments."
+    },
+    {
+      "questionNumber": 217,
+      "subject": "Science and Technology",
+      "topic": "Physics and Research",
+      "confidence": "high",
+      "reason": "Abel Prize founder and awarding bodies."
+    },
+    {
+      "questionNumber": 218,
+      "subject": "Indian Polity",
+      "topic": "Parliament",
+      "confidence": "high",
+      "reason": "Leader of Opposition recognition and 10% rule."
+    },
+    {
+      "questionNumber": 219,
+      "subject": "Health",
+      "topic": "Medicines and Therapeutics",
+      "confidence": "high",
+      "reason": "Definition of an orphan drug."
+    },
+    {
+      "questionNumber": 220,
+      "subject": "History and Culture",
+      "topic": "Culture Festivals and Sports",
+      "confidence": "high",
+      "reason": "Sarhul New Year festival of Jharkhand."
+    },
+    {
+      "questionNumber": 221,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "medium",
+      "reason": "Sahkar Taxi multi-state cooperative; also urban transport."
+    },
+    {
+      "questionNumber": 222,
+      "subject": "Science and Technology",
+      "topic": "Physics and Research",
+      "confidence": "high",
+      "reason": "AMoRE neutrinoless double-beta-decay experiment."
+    },
+    {
+      "questionNumber": 223,
+      "subject": "International Relations",
+      "topic": "World Affairs and Conflicts",
+      "confidence": "medium",
+      "reason": "Indian humanitarian rescue operations and theatres; also defence outreach."
+    },
+    {
+      "questionNumber": 224,
+      "subject": "Environment",
+      "topic": "Pollution and Environmental Regulation",
+      "confidence": "high",
+      "reason": "Asbestos uses, carcinogen class, and school ban."
+    },
+    {
+      "questionNumber": 225,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "high",
+      "reason": "Myanmar earthquake and the Sagaing Fault."
+    },
+    {
+      "questionNumber": 226,
+      "subject": "Science and Technology",
+      "topic": "Digital Technology and AI",
+      "confidence": "high",
+      "reason": "ChatGPT image generation and Studio Ghibli style."
+    },
+    {
+      "questionNumber": 227,
+      "subject": "International Relations",
+      "topic": "World Affairs and Conflicts",
+      "confidence": "high",
+      "reason": "Conflict cities/regions and countries."
+    },
+    {
+      "questionNumber": 228,
+      "subject": "Geography",
+      "topic": "World Geography",
+      "confidence": "high",
+      "reason": "Kaffeklubben Island as northernmost land."
+    },
+    {
+      "questionNumber": 229,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "medium",
+      "reason": "Gounsa Temple (Korea), not Bihar."
+    },
+    {
+      "questionNumber": 230,
+      "subject": "Health",
+      "topic": "Medicines and Therapeutics",
+      "confidence": "high",
+      "reason": "SPEN tumours and the Whipple operation."
+    },
+    {
+      "questionNumber": 231,
+      "subject": "Health",
+      "topic": "One Health and Food Safety",
+      "confidence": "high",
+      "reason": "Food adulteration types including calcium carbide ripening."
+    },
+    {
+      "questionNumber": 232,
+      "subject": "Geography",
+      "topic": "Indian Geography",
+      "confidence": "high",
+      "reason": "Sukhatal as a feeder of Naini Lake."
+    },
+    {
+      "questionNumber": 233,
+      "subject": "Governance and Schemes",
+      "topic": "Education and Skills",
+      "confidence": "high",
+      "reason": "Baalpan ki Kavita nodal ministry."
+    },
+    {
+      "questionNumber": 234,
+      "subject": "Economy",
+      "topic": "Public Finance and Budget",
+      "confidence": "high",
+      "reason": "Gold Monetisation Scheme objectives and rates."
+    },
+    {
+      "questionNumber": 235,
+      "subject": "History and Culture",
+      "topic": "Ancient and Medieval India",
+      "confidence": "high",
+      "reason": "Vijayanagara capital, insignia, and Virupaksha temple."
+    },
+    {
+      "questionNumber": 236,
+      "subject": "Geography",
+      "topic": "Physical Geography",
+      "confidence": "high",
+      "reason": "Seismic seiches in enclosed water bodies."
+    },
+    {
+      "questionNumber": 237,
+      "subject": "Economy",
+      "topic": "Trade Industry and Infrastructure",
+      "confidence": "medium",
+      "reason": "US tariff impacts; also international political economy."
+    },
+    {
+      "questionNumber": 238,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "Fram2 polar human spaceflight."
+    },
+    {
+      "questionNumber": 239,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "high",
+      "reason": "Mahabodhi Temple origin, river, and UNESCO status."
+    },
+    {
+      "questionNumber": 240,
+      "subject": "International Relations",
+      "topic": "India's Bilateral Relations",
+      "confidence": "high",
+      "reason": "Dragon-Elephant Tango as India–China diplomacy metaphor."
+    },
+    {
+      "questionNumber": 241,
+      "subject": "International Relations",
+      "topic": "World Affairs and Conflicts",
+      "confidence": "medium",
+      "reason": "Comparative democratic-erosion concept; could also sit under Indian Polity."
+    },
+    {
+      "questionNumber": 242,
+      "subject": "Governance and Schemes",
+      "topic": "Administration and e-Governance",
+      "confidence": "high",
+        "reason": "SAHYOG portal operated by I4C under Home Affairs."
+    },
+    {
+      "questionNumber": 243,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "high",
+        "reason": "BIMSTEC membership of listed South and Southeast Asian countries."
+    },
+    {
+      "questionNumber": 244,
+      "subject": "Environment",
+      "topic": "Pollution and Environmental Regulation",
+      "confidence": "high",
+      "reason": "Deep-sea mining and the Clarion-Clipperton Zone."
+    },
+    {
+      "questionNumber": 245,
+      "subject": "Science and Technology",
+      "topic": "Space Technology",
+      "confidence": "high",
+      "reason": "Jupiter missions and space agencies."
+    },
+    {
+      "questionNumber": 246,
+      "subject": "Agriculture",
+      "topic": "Farm Inputs and Technology",
+      "confidence": "high",
+      "reason": "Farm mechanisation coverage and regional pattern."
+    },
+    {
+      "questionNumber": 247,
+      "subject": "International Relations",
+      "topic": "International Organisations",
+      "confidence": "high",
+      "reason": "UN Security Council composition and binding resolutions."
+    },
+    {
+      "questionNumber": 248,
+      "subject": "Environment",
+      "topic": "Pollution and Environmental Regulation",
+      "confidence": "high",
+      "reason": "Green Credit Programme rules."
+    },
+    {
+      "questionNumber": 249,
+      "subject": "Geography",
+      "topic": "Transport Infrastructure",
+      "confidence": "high",
+      "reason": "India’s first vertical-lift railway sea bridge location."
+    },
+    {
+      "questionNumber": 250,
+      "subject": "History and Culture",
+      "topic": "Art Architecture and Heritage",
+      "confidence": "high",
+      "reason": "Indian painting styles and regions."
+    }
+  ]
+}
