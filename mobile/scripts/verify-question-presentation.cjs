@@ -167,6 +167,40 @@ function run() {
     });
     assert.equal(unknown.kind, 'plain');
     assert.equal(unknown.text, 'Unknown kind');
+
+    const oneItem = resolveQuestionPresentation({
+      questionText: 'Need two items',
+      presentationKind: 'numbered_list',
+      content: { items: [{ n: 1, text: 'Only one' }] },
+    });
+    assert.equal(oneItem.kind, 'plain');
+    assert.equal(oneItem.text, 'Need two items');
+
+    const badN = resolveQuestionPresentation({
+      questionText: 'Bad n',
+      presentationKind: 'numbered_list',
+      content: {
+        items: [
+          { n: 0, text: 'Zero' },
+          { n: 1, text: 'One' },
+        ],
+      },
+    });
+    assert.equal(badN.kind, 'plain');
+    assert.equal(badN.text, 'Bad n');
+
+    const emptyItem = resolveQuestionPresentation({
+      questionText: 'Empty item',
+      presentationKind: 'numbered_list',
+      content: {
+        items: [
+          { n: 1, text: '  ' },
+          { n: 2, text: 'Two' },
+        ],
+      },
+    });
+    assert.equal(emptyItem.kind, 'plain');
+    assert.equal(emptyItem.text, 'Empty item');
   });
 
   test('7. long statement text is kept intact', () => {

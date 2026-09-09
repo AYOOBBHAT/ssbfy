@@ -21,6 +21,8 @@ const STRUCTURED_KINDS = new Set([
 
 const MAX_TABLE_COLUMNS = 8;
 const MAX_TABLE_ROWS = 20;
+const MIN_NUMBERED_ITEMS = 2;
+const MAX_NUMBERED_ITEMS = 20;
 
 function asTrimmedString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -62,14 +64,22 @@ function parseTwoStatements(content) {
 function parseNumberedList(content) {
   if (!isPlainObject(content)) return null;
   const itemsRaw = content.items;
-  if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) return null;
+  if (
+    !Array.isArray(itemsRaw) ||
+    itemsRaw.length < MIN_NUMBERED_ITEMS ||
+    itemsRaw.length > MAX_NUMBERED_ITEMS
+  ) {
+    return null;
+  }
   const items = [];
   for (const row of itemsRaw) {
     if (!isPlainObject(row)) return null;
     const n = Number(row.n);
-    if (!Number.isInteger(n)) return null;
+    if (!Number.isInteger(n) || n < 1) return null;
     if (typeof row.text !== 'string') return null;
-    items.push({ n, text: row.text.trim() });
+    const text = row.text.trim();
+    if (!text) return null;
+    items.push({ n, text });
   }
   return {
     intro: asTrimmedString(content.intro),
