@@ -8,6 +8,7 @@ import {
   getPdfNotes,
   getApiErrorMessage,
 } from '../services/api';
+import { presentationKindLabel } from '../utils/questionPresentationForm.js';
 
 const DIFFICULTIES = ['', 'easy', 'medium', 'hard'];
 const PAGE_SIZE = 30;
@@ -874,6 +875,9 @@ export default function CreateTest() {
                       <div className="question-body">
                         <div className="question-text">{q.questionText}</div>
                         <div className="question-meta">
+                          <span className="badge badge-presentation">
+                            {presentationKindLabel(q.presentationKind)}
+                          </span>
                           {q.difficulty ? (
                             <span className={`badge badge-${q.difficulty}`}>{q.difficulty}</span>
                           ) : null}

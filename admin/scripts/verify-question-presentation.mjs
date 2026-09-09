@@ -13,8 +13,11 @@ import {
   addTableRow,
   buildPresentationPayload,
   contentDraftFromQuestion,
+  duplicateStemFromForm,
   emptyContentDraft,
+  flattenQuestionContentToText,
   normalizePresentationKind,
+  presentationKindLabel,
   removeNumberedItem,
   removeTableColumn,
   removeTableRow,
@@ -329,6 +332,7 @@ function run() {
     assert.match(src, /id="presentationKind"/);
     assert.match(src, /QuestionPresentationFields/);
     assert.match(src, /buildPresentationPayload/);
+    assert.match(src, /duplicateStemFromForm/);
     assert.match(src, /content: null|buildPresentationPayload\(form, \{ isEdit \}\)/);
     assert.doesNotMatch(src, /flattenQuestionContentToText/);
     assert.match(src, /single_correct/);
@@ -339,6 +343,127 @@ function run() {
   test('importer and mobile were not modified by this helper suite', () => {
     const importer = read('src/pages/ImportQuestions.jsx');
     assert.doesNotMatch(importer, /presentationKind/);
+  });
+
+  test('duplicate stem: plain still uses questionText', () => {
+    const stem = duplicateStemFromForm({
+      ...base,
+      questionText: '  Capital of India?  ',
+      presentationKind: 'plain',
+    });
+    assert.equal(stem, 'Capital of India?');
+  });
+
+  test('duplicate stem: matching two_statements collide', () => {
+    const formA = {
+      ...base,
+      presentationKind: 'two_statements',
+      content: {
+        ...emptyContentDraft(),
+        intro: 'Consider the following:',
+        statements: [
+          { label: 'Statement – I', text: 'Sky is blue.' },
+          { label: 'Statement – II', text: 'Ocean is deep.' },
+        ],
+        prompt: 'Which is correct?',
+      },
+    };
+    const formB = {
+      ...formA,
+      content: {
+        ...formA.content,
+        intro: '  Consider the following:  ',
+      },
+    };
+    const a = duplicateStemFromForm(formA);
+    const b = duplicateStemFromForm(formB);
+    assert.ok(a.length >= 8);
+    assert.equal(
+      a.replace(/\s+/g, ' ').trim().toLowerCase(),
+      b.replace(/\s+/g, ' ').trim().toLowerCase()
+    );
+    assert.equal(a, flattenQuestionContentToText('two_statements', buildPresentationPayload(formA).content));
+  });
+
+  test('duplicate stem: matching numbered_list and table collide; different content does not', () => {
+    const listA = {
+      ...base,
+      presentationKind: 'numbered_list',
+      content: {
+        ...emptyContentDraft(),
+        items: [
+          { n: 1, text: 'Wheat' },
+          { n: 2, text: 'Rice' },
+        ],
+        prompt: 'How many?',
+      },
+    };
+    const listB = {
+      ...listA,
+      content: { ...listA.content, items: [...listA.content.items] },
+    };
+    const listOther = {
+      ...listA,
+      content: {
+        ...listA.content,
+        items: [
+          { n: 1, text: 'Wheat' },
+          { n: 2, text: 'Barley' },
+        ],
+      },
+    };
+    assert.equal(duplicateStemFromForm(listA), duplicateStemFromForm(listB));
+    assert.notEqual(duplicateStemFromForm(listA), duplicateStemFromForm(listOther));
+
+    const tableA = {
+      ...base,
+      presentationKind: 'table',
+      content: {
+        ...emptyContentDraft(),
+        columns: ['List I', 'List II'],
+        rows: [
+          ['Delhi', 'India'],
+          ['Paris', 'France'],
+        ],
+        prompt: 'Match',
+      },
+    };
+    const tableOther = {
+      ...tableA,
+      content: {
+        ...tableA.content,
+        rows: [
+          ['Delhi', 'India'],
+          ['Tokyo', 'Japan'],
+        ],
+      },
+    };
+    assert.notEqual(duplicateStemFromForm(tableA), duplicateStemFromForm(tableOther));
+    assert.equal(duplicateStemFromForm(tableA), duplicateStemFromForm({ ...tableA }));
+  });
+
+  test('incomplete structured form does not produce a duplicate stem', () => {
+    const stem = duplicateStemFromForm({
+      ...base,
+      presentationKind: 'two_statements',
+      content: emptyContentDraft(),
+    });
+    assert.equal(stem, '');
+  });
+
+  test('presentationKindLabel maps kinds and missing/unknown to Plain', () => {
+    assert.equal(presentationKindLabel('plain'), 'Plain');
+    assert.equal(presentationKindLabel('two_statements'), 'Two Statements');
+    assert.equal(presentationKindLabel('numbered_list'), 'Numbered List');
+    assert.equal(presentationKindLabel('table'), 'Table');
+    assert.equal(presentationKindLabel(undefined), 'Plain');
+    assert.equal(presentationKindLabel('assertion_reason'), 'Plain');
+  });
+
+  test('CreateTest picker shows presentationKind label', () => {
+    const src = read('src/pages/CreateTest.jsx');
+    assert.match(src, /presentationKindLabel/);
+    assert.match(src, /badge-presentation/);
   });
 
   console.log(`verify-question-presentation: ${passed} checks passed`);

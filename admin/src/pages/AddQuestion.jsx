@@ -16,6 +16,7 @@ import {
   PRESENTATION_OPTIONS,
   buildPresentationPayload,
   contentDraftFromQuestion,
+  duplicateStemFromForm,
   emptyContentDraft,
   isStructuredPresentation,
   normalizePresentationKind,
@@ -247,10 +248,7 @@ export default function AddQuestion() {
   // duplicate detection to anything meaningful, and the server-side helper
   // refuses unscoped queries anyway.
   useEffect(() => {
-    if (normalizePresentationKind(form.presentationKind) !== PRESENTATION_KINDS.PLAIN) {
-      return undefined;
-    }
-    const text = form.questionText.trim();
+    const text = duplicateStemFromForm(form);
     if (!text || text.length < 8 || !form.subjectId) {
       setSimilar({ exactDuplicateId: null, similar: [] });
       return undefined;
@@ -281,7 +279,7 @@ export default function AddQuestion() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [form.questionText, form.subjectId, form.presentationKind, editId]);
+  }, [form, editId]);
 
   function updateField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -408,11 +406,7 @@ export default function AddQuestion() {
     // (legacy data may already contain near-duplicates), so this is a
     // client-side speed bump. Admin can override by ticking
     // "Save anyway" — we never silently let an exact duplicate through.
-    if (
-      normalizePresentationKind(form.presentationKind) === PRESENTATION_KINDS.PLAIN &&
-      similar.exactDuplicateId &&
-      !acknowledgedDuplicate
-    ) {
+    if (similar.exactDuplicateId && !acknowledgedDuplicate) {
       setErrorMsg(
         'A question with the same text already exists in this subject. ' +
           'Tick "Save anyway" below the warning to insert it as a separate question, ' +
@@ -818,11 +812,11 @@ export default function AddQuestion() {
           ) : null}
         </div>
 
-        {isStructured ? null : similarLoading ? (
+        {similarLoading ? (
           <p className="helper">Checking for similar questions…</p>
         ) : null}
 
-        {!isStructured && !similarLoading && similar.exactDuplicateId ? (
+        {!similarLoading && similar.exactDuplicateId ? (
           <div className="alert alert-warning">
             <div>
               <strong>Possible exact duplicate.</strong> A question with the
@@ -858,8 +852,7 @@ export default function AddQuestion() {
           </div>
         ) : null}
 
-        {!isStructured &&
-        !similarLoading &&
+        {!similarLoading &&
         !similar.exactDuplicateId &&
         similar.similar.length > 0 ? (
           <div className="alert alert-info">

@@ -1,6 +1,7 @@
 /**
- * Admin presentation form helpers. Payload assembly only — no flattening of
- * questionText (the backend generates that for structured kinds).
+ * Admin presentation form helpers.
+ * Structured creates still omit questionText (backend generates it).
+ * Flattening here is only for duplicate-detection lookup against stored stems.
  */
 
 export const PRESENTATION_KINDS = Object.freeze({
@@ -57,6 +58,85 @@ export function normalizePresentationKind(raw) {
 
 export function isStructuredPresentation(kind) {
   return normalizePresentationKind(kind) !== PRESENTATION_KINDS.PLAIN;
+}
+
+export const PRESENTATION_KIND_LABELS = Object.freeze({
+  [PRESENTATION_KINDS.PLAIN]: 'Plain',
+  [PRESENTATION_KINDS.TWO_STATEMENTS]: 'Two Statements',
+  [PRESENTATION_KINDS.NUMBERED_LIST]: 'Numbered List',
+  [PRESENTATION_KINDS.TABLE]: 'Table',
+});
+
+/** Missing/unknown kinds follow the same fallback as rendering: Plain. */
+export function presentationKindLabel(kind) {
+  return PRESENTATION_KIND_LABELS[normalizePresentationKind(kind)];
+}
+
+function asTrimmedString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * Same flatten as backend `flattenQuestionContentToText` so duplicate lookup
+ * matches the questionText stored on write. Admin still does not send this
+ * as a stored field for structured creates.
+ */
+export function flattenQuestionContentToText(presentationKind, content) {
+  const kind = typeof presentationKind === 'string' ? presentationKind.trim() : '';
+  if (!kind || kind === PRESENTATION_KINDS.PLAIN || !content || typeof content !== 'object') {
+    return '';
+  }
+
+  const intro = asTrimmedString(content.intro);
+  const body = [];
+
+  if (kind === PRESENTATION_KINDS.TWO_STATEMENTS && Array.isArray(content.statements)) {
+    for (const row of content.statements) {
+      const label = asTrimmedString(row?.label);
+      const text = asTrimmedString(row?.text);
+      if (label && text) body.push(`${label}: ${text}`);
+      else if (text) body.push(text);
+    }
+  } else if (kind === PRESENTATION_KINDS.NUMBERED_LIST && Array.isArray(content.items)) {
+    for (const row of content.items) {
+      const text = asTrimmedString(row?.text);
+      if (!text) continue;
+      const n = Number(row?.n);
+      body.push(Number.isInteger(n) ? `${n}. ${text}` : text);
+    }
+  } else if (kind === PRESENTATION_KINDS.TABLE) {
+    const columns = Array.isArray(content.columns)
+      ? content.columns.map((c) => asTrimmedString(c))
+      : [];
+    if (columns.some(Boolean)) body.push(columns.join(' | '));
+    if (Array.isArray(content.rows)) {
+      for (const row of content.rows) {
+        const cells = Array.isArray(row) ? row.map((c) => asTrimmedString(c)) : [];
+        if (cells.length) body.push(cells.join(' | '));
+      }
+    }
+  }
+
+  const prompt = asTrimmedString(content.prompt);
+  const sections = [];
+  if (intro) sections.push(intro);
+  if (body.length) sections.push(body.join('\n'));
+  if (prompt) sections.push(prompt);
+  return sections.join('\n\n');
+}
+
+/**
+ * Stem sent to GET /questions/admin/similar. Empty until the form is valid
+ * enough to flatten the same way the backend stores questionText.
+ */
+export function duplicateStemFromForm(form) {
+  if (validatePresentation(form)) return '';
+  const kind = normalizePresentationKind(form?.presentationKind);
+  if (kind === PRESENTATION_KINDS.PLAIN) {
+    return asString(form?.questionText).trim();
+  }
+  const payload = buildPresentationPayload(form);
+  return flattenQuestionContentToText(kind, payload.content);
 }
 
 function asString(value) {

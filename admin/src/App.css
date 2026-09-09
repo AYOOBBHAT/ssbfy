@@ -535,6 +535,12 @@ select.input {
   color: #b91c1c;
 }
 
+.badge-presentation {
+  background: #e0e7ff;
+  color: #3730a3;
+  text-transform: none;
+}
+
 /* Login */
 .boot-screen {
   display: flex;
