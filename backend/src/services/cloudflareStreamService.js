@@ -178,7 +178,7 @@ export const cloudflareStreamService = {
    * Permission: Stream Write.
    * https://developers.cloudflare.com/stream/uploading-videos/direct-creator-uploads/
    *
-   * @param {{ maxDurationSeconds: number, expiry?: string, requireSignedURLs?: boolean }} input
+   * @param {{ maxDurationSeconds: number, expiry?: string, requireSignedURLs?: boolean, meta?: Record<string, string> }} input
    * @returns {Promise<{ uid: string, uploadURL: string }>}
    */
   async createDirectUploadUrl(input) {
@@ -194,6 +194,9 @@ export const cloudflareStreamService = {
       requireSignedURLs: input?.requireSignedURLs !== false,
     };
     if (input?.expiry) body.expiry = input.expiry;
+    if (input?.meta && typeof input.meta === 'object' && !Array.isArray(input.meta)) {
+      body.meta = input.meta;
+    }
 
     const { payload } = await cloudflareApiRequest({
       method: 'POST',
@@ -209,5 +212,38 @@ export const cloudflareStreamService = {
       );
     }
     return { uid: String(uid), uploadURL: String(uploadURL) };
+  },
+
+  /**
+   * GET /accounts/{account_id}/stream/{video_uid}
+   * Server-side only. Do not expose the API token or poll from HTTP handlers
+   * unless a later phase explicitly needs a refresh.
+   */
+  async getVideo(videoId) {
+    const uid = String(videoId || '').trim();
+    if (!uid) {
+      throw new AppError('video id is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    const { payload } = await cloudflareApiRequest({
+      method: 'GET',
+      pathname: `/accounts/${streamConfig().accountId}/stream/${encodeURIComponent(uid)}`,
+    });
+    return payload?.result ?? null;
+  },
+
+  /**
+   * DELETE /accounts/{account_id}/stream/{video_uid}
+   * Explicit future cleanup helper. Phase 3 must not call this.
+   */
+  async deleteVideo(videoId) {
+    const uid = String(videoId || '').trim();
+    if (!uid) {
+      throw new AppError('video id is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    await cloudflareApiRequest({
+      method: 'DELETE',
+      pathname: `/accounts/${streamConfig().accountId}/stream/${encodeURIComponent(uid)}`,
+    });
+    return { ok: true };
   },
 };

@@ -140,10 +140,9 @@ test('connectivity script is read-only (no mint, no mongo, no upload)', () => {
   assert.match(connectivity, /listVideosSummary/);
 });
 
-test('no VideoLecture or Playlist model', () => {
-  assert.equal(fs.existsSync(path.join(backendRoot, 'src/models/VideoLecture.js')), false);
+test('Playlist model is still absent (VideoLecture is allowed after Phase 3)', () => {
   assert.equal(fs.existsSync(path.join(backendRoot, 'src/models/Playlist.js')), false);
-  assert.doesNotMatch(modelsIndex, /VideoLecture|Playlist/);
+  assert.doesNotMatch(modelsIndex, /Playlist/);
 });
 
 test('report records zero mongo writes and zero videos created', () => {
@@ -167,13 +166,13 @@ test('tracked source does not hardcode a Stream token value', () => {
   }
 });
 
-test('app.js and routes do not import Stream client (startup unchanged)', () => {
+test('startup does not import Stream API client', () => {
   const app = readBackend('src/app.js');
   const routes = readBackend('src/routes/index.js');
   const server = readBackend('src/server.js');
-  assert.doesNotMatch(app, /cloudflareStream/);
-  assert.doesNotMatch(routes, /cloudflareStream/);
-  assert.doesNotMatch(server, /cloudflareStream/);
+  assert.doesNotMatch(app, /cloudflareStreamService/);
+  assert.doesNotMatch(routes, /cloudflareStreamService/);
+  assert.doesNotMatch(server, /cloudflareStreamService/);
 });
 
 test('connectivity script does not print secret assignment values', () => {

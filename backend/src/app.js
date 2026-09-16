@@ -65,9 +65,12 @@ app.use(
   express.json({
     limit: '1mb',
     verify: (req, res, buf) => {
-      // Razorpay webhook HMAC is computed over the raw JSON bytes.
+      // Razorpay / Cloudflare Stream webhook HMAC is computed over the raw JSON bytes.
       const pathOnly = String(req.originalUrl || '').split('?')[0];
-      if (pathOnly === '/api/payments/webhook') {
+      if (
+        pathOnly === '/api/payments/webhook' ||
+        pathOnly === '/api/webhooks/cloudflare/stream'
+      ) {
         req.rawBody = buf;
       }
     },

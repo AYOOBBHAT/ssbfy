@@ -90,6 +90,24 @@ export const env = {
    */
   cloudflareAccountId: (process.env.CLOUDFLARE_ACCOUNT_ID || '').trim(),
   cloudflareStreamApiToken: (process.env.CLOUDFLARE_STREAM_API_TOKEN || '').trim(),
+  /**
+   * Cloudflare Stream webhook HMAC secret from GET/PUT
+   * /accounts/{account_id}/stream/webhook. Backend only. Never send to clients.
+   */
+  cloudflareStreamWebhookSecret: (process.env.CLOUDFLARE_STREAM_WEBHOOK_SECRET || '').trim(),
+  /**
+   * Direct-upload maxDurationSeconds cap/default (seconds). Clamped 1–14400.
+   * Used when provisioning Stream upload URLs; never sent to clients as a secret.
+   */
+  cloudflareStreamMaxDurationSeconds: Math.min(
+    14400,
+    Math.max(1, Number(process.env.CLOUDFLARE_STREAM_MAX_DURATION_SECONDS) || 3600)
+  ),
+  /** One-time upload URL lifetime (seconds). Clamped 300–7200. Default 1800. */
+  cloudflareStreamUploadExpirySeconds: Math.min(
+    7200,
+    Math.max(300, Number(process.env.CLOUDFLARE_STREAM_UPLOAD_EXPIRY_SECONDS) || 1800)
+  ),
 
   /**
    * Google Sign-In — server verifies ID tokens; never trust client profile alone.

@@ -20,6 +20,8 @@ import subscriptionPlanRoutes from './subscriptionPlanRoutes.js';
 import battleRoutes from './battleRoutes.js';
 import adminSubscriptionPlanRoutes from './adminSubscriptionPlanRoutes.js';
 import adminPaymentRoutes from './adminPaymentRoutes.js';
+import videoLectureRoutes from './videoLectureRoutes.js';
+import cloudflareStreamWebhookRoutes from './cloudflareStreamWebhookRoutes.js';
 import { apiLimiter, adminMutationLimiter } from '../middlewares/upstashRateLimiter.js';
 
 const router = Router();
@@ -45,5 +47,7 @@ router.use('/saved-materials', savedMaterialRoutes);
 router.use('/subscription-plans', subscriptionPlanRoutes);
 router.use('/admin/subscription-plans', adminMutationLimiter, adminSubscriptionPlanRoutes);
 router.use('/admin/payments', adminMutationLimiter, adminPaymentRoutes);
+router.use('/video-lectures', videoLectureRoutes);
+router.use('/webhooks/cloudflare', cloudflareStreamWebhookRoutes);
 
 export default router;

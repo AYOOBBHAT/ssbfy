@@ -19,3 +19,4 @@ export { PasswordResetThrottle } from './PasswordResetThrottle.js';
 export { PracticeIssuance } from './PracticeIssuance.js';
 export { BattleSession } from './BattleSession.js';
 export { BattleUsage } from './BattleUsage.js';
+export { VideoLecture } from './VideoLecture.js';
