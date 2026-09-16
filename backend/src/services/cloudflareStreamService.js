@@ -137,12 +137,12 @@ export const cloudflareStreamService = {
 
   /**
    * Confirms the API token is recognized (no Stream mutation).
-   * GET /user/tokens/verify
+   * GET /accounts/{account_id}/tokens/verify
    */
   async verifyApiToken() {
     const { payload } = await cloudflareApiRequest({
       method: 'GET',
-      pathname: '/user/tokens/verify',
+      pathname: `/accounts/${streamConfig().accountId}/tokens/verify`,
     });
     const status = payload?.result?.status || null;
     return { ok: payload?.success === true, status };
