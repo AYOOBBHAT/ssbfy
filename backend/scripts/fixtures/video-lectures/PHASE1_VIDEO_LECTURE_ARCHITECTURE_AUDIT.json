@@ -1,0 +1,448 @@
+{
+  "phase": 1,
+  "title": "Video Lecture Architecture Audit",
+  "status": "PASS_WITH_WARNINGS",
+  "date": "2026-09-12",
+  "mode": "read-only",
+  "gitSnapshotAtStart": {
+    "branch": "main",
+    "tracking": "origin/main",
+    "upToDate": true,
+    "preExistingDirty": ["mobile/app.json"]
+  },
+  "safety": {
+    "mongoWrites": 0,
+    "mongoCollectionsCreated": 0,
+    "mongoIndexesCreated": 0,
+    "cloudflareResourcesCreated": 0,
+    "cloudflareVideosCreated": 0,
+    "cloudflareTokensCreated": 0,
+    "backendSrcModified": 0,
+    "adminModified": 0,
+    "mobileModified": 0,
+    "environmentFilesModified": 0,
+    "productionDeployed": false
+  },
+  "backend": {
+    "path": "backend/",
+    "packageManager": "npm",
+    "lockfile": "backend/package-lock.json",
+    "nodeEngines": ">=20",
+    "framework": "express",
+    "moduleType": "esm",
+    "entry": "backend/src/server.js",
+    "app": "backend/src/app.js",
+    "apiPrefix": "/api",
+    "orm": "mongoose",
+    "uploadPackages": ["multer", "@supabase/supabase-js"],
+    "storagePackages": ["@supabase/supabase-js"],
+    "mediaPackages": [],
+    "hasCloudflareSdk": false,
+    "jsonBodyLimit": "1mb",
+    "corsAllowedHeaders": ["Content-Type", "Authorization"]
+  },
+  "admin": {
+    "path": "admin/",
+    "packageManager": "npm",
+    "framework": "vite-react",
+    "react": "^19.2.5",
+    "router": "react-router-dom ^7",
+    "hosting": "vercel-spa",
+    "axiosDefaultTimeoutMs": 20000,
+    "pdfUploadTimeoutMs": 120000,
+    "csvImportTimeoutMs": 180000,
+    "hasTusClient": false,
+    "hasUploadProgress": false,
+    "toastLibrary": "none — alert-success / alert-error",
+    "layout": ["admin/src/App.jsx", "admin/src/components/AdminLayout.jsx", "admin/src/components/Navbar.jsx"],
+    "subjectTopicSelectors": ["admin/src/pages/AddQuestion.jsx", "admin/src/pages/ManageTopics.jsx", "admin/src/pages/CreateTest.jsx"],
+    "proposedPages": {
+      "list": "/lectures",
+      "create": "/lectures/new",
+      "edit": "/lectures/:id",
+      "playlistsLater": ["/playlists", "/playlists/new"]
+    }
+  },
+  "mobile": {
+    "path": "mobile/",
+    "packageManager": "npm",
+    "expoSdk": "~54.0.36",
+    "reactNative": "0.81.5",
+    "react": "19.1.0",
+    "packageId": "com.ayoobbhat.ssbfy",
+    "hasExpoVideo": false,
+    "hasExpoAv": false,
+    "hasReactNativeVideo": false,
+    "recommendedPlayer": "expo-video",
+    "hlsSupportedWithRecommendedPlayer": true,
+    "hlsNotes": "SDK 54 expo-video supports HLS; use .m3u8 URI or contentType hls; iOS HLS cache unsupported",
+    "navigationTabs": ["Home", "Practice", "Tests", "Papers", "Profile"],
+    "apiClient": "mobile/src/services/api.js"
+  },
+  "existingStorage": {
+    "pdf": {
+      "throughBackend": true,
+      "directToExternalFromBrowser": false,
+      "middleware": "backend/src/middlewares/upload.js handlePdfUpload",
+      "maxSizeMb": 25,
+      "mime": ["application/pdf", ".pdf"],
+      "temp": "os.tmpdir disk",
+      "objectStore": "Supabase Storage private bucket",
+      "mongoModel": "PdfNote",
+      "metadataFields": ["title", "postIds", "fileName", "storedName", "fileSize", "mimeType", "uploadedBy", "isActive"],
+      "signedUrl": "supabase.storage.createSignedUrl via pdfSupabaseStorage.getSignedPdfUrl",
+      "signedUrlTtlSecondsDefault": 90,
+      "premium": "signed-url requires isPremiumUser or admin; list returns locked metadata for free users",
+      "adminAuth": "adminChain"
+    },
+    "csvImport": {
+      "throughBackend": true,
+      "maxBytes": 5242880,
+      "storage": "multer memory"
+    },
+    "s3": false,
+    "r2": false,
+    "cloudflareStream": false,
+    "reusableForLargeVideo": false
+  },
+  "taxonomy": {
+    "subject": {
+      "path": "backend/src/models/Subject.js",
+      "scope": "global unique name",
+      "postId": "deprecated compatibility only",
+      "indexes": ["uniq_subject_name_ci_global", "idx_subject_post_name", "order", "isActive"]
+    },
+    "topic": {
+      "path": "backend/src/models/Topic.js",
+      "scope": "unique per subjectId+name",
+      "required": ["subjectId", "name"],
+      "indexes": ["uniq_subjectId_name_ci", "subjectId", "canonicalTopicId", "deprecated", "order", "isActive"]
+    },
+    "question": {
+      "path": "backend/src/models/Question.js",
+      "subjectId": "required",
+      "topicId": "required",
+      "postIds": "optional exam tags",
+      "hierarchyValidation": "questionService.resolveHierarchy — topic.subjectId must match"
+    },
+    "note": {
+      "path": "backend/src/models/Note.js",
+      "subjectId": "required",
+      "topicId": "required",
+      "postIds": "optional tags"
+    },
+    "videoLectureShouldUse": "same Subject/Topic as Question and Note"
+  },
+  "authentication": {
+    "mechanism": "JWT Bearer",
+    "files": [
+      "backend/src/utils/jwt.js",
+      "backend/src/middlewares/auth.js",
+      "backend/src/middlewares/adminGuard.js",
+      "backend/src/constants/roles.js"
+    ],
+    "roles": ["admin", "user"],
+    "adminMiddleware": "adminChain = [authenticate, requireRole(ADMIN)]",
+    "adminTokenExpiryEnv": "JWT_ADMIN_EXPIRES_IN",
+    "userTokenExpiryEnv": "JWT_EXPIRES_IN",
+    "patternForUploadUrl": {
+      "limiter": "adminMutationLimiter",
+      "auth": "adminChain",
+      "validators": "express-validator + validateRequest",
+      "noMulter": true
+    }
+  },
+  "premiumAccess": {
+    "helper": "backend/src/utils/freeTierAccess.js isPremiumUser",
+    "lifetime": "isPremium true AND no subscriptionEnd",
+    "timed": "subscriptionEnd > now",
+    "meEndpoint": "GET /api/users/me overwrites isPremium with computed value",
+    "mobileMirror": "mobile/src/utils/premiumAccess.js userHasPremiumAccess",
+    "pdfEnforcement": "GET /api/notes/pdfs/:id/signed-url",
+    "testEnforcement": "checkTestAccess device quota",
+    "notesTextGated": false,
+    "pdfPerItemFreePremium": false,
+    "videoNeedsPerLectureAccess": true
+  },
+  "currentVideoPlayer": {
+    "installed": "none",
+    "recommended": "expo-video",
+    "hls": true,
+    "docs": "https://docs.expo.dev/versions/v54.0.0/sdk/video"
+  },
+  "existingContentArchitecture": {
+    "hasLesson": false,
+    "hasCourse": false,
+    "hasChapter": false,
+    "hasModule": false,
+    "hasPlaylist": false,
+    "hasLecture": false,
+    "postIs": "exam/job tag, not a content tree",
+    "testIs": "timed mock or previous_year paper",
+    "playlistRequired": true
+  },
+  "existingExamTestArchitecture": {
+    "model": "backend/src/models/Test.js",
+    "kinds": ["mock", "previous_year"],
+    "types": ["subject", "post", "topic", "mixed"],
+    "engine": "questionIds + TestAttempt",
+    "lecturesShouldReferenceTest": false,
+    "reason": "Test is an assessment paper, not a lecture collection"
+  },
+  "cloudflareIntegration": {
+    "currentCode": "none",
+    "proposed": {
+      "directCreatorUploads": true,
+      "preferredProtocol": "tus",
+      "basicPostUnder200mbOptional": true,
+      "oneTimeUploadUrl": true,
+      "videoUidField": "cloudflareVideoId",
+      "playback": "HLS m3u8 via customer subdomain",
+      "signedPlayback": "requireSignedURLs true; production signing keys; /token API only for low volume",
+      "webhooks": "POST notification after processing; HMAC Webhook-Signature time/sig1",
+      "oneWebhookPerAccount": true,
+      "polling": "admin refresh fallback when webhook missed",
+      "docs": [
+        "https://developers.cloudflare.com/stream/uploading-videos/direct-creator-uploads/",
+        "https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/",
+        "https://developers.cloudflare.com/stream/manage-video-library/using-webhooks/",
+        "https://developers.cloudflare.com/stream/pricing/"
+      ]
+    }
+  },
+  "videoLectureSchemaProposal": {
+    "mustHaveNow": [
+      "_id",
+      "title",
+      "description",
+      "subjectId",
+      "topicId",
+      "cloudflareVideoId",
+      "status",
+      "access",
+      "topicOrder",
+      "durationSeconds",
+      "thumbnailTimestampPct",
+      "readyToStream",
+      "requireSignedUrls",
+      "processingError",
+      "upload",
+      "uploadedBy",
+      "publishedAt",
+      "createdAt",
+      "updatedAt"
+    ],
+    "statusEnumRecommended": [
+      "draft",
+      "processing",
+      "ready",
+      "published",
+      "failed",
+      "archived"
+    ],
+    "userProposedStatusEnum": [
+      "draft",
+      "processing",
+      "published",
+      "failed",
+      "archived"
+    ],
+    "accessEnum": ["free", "premium"],
+    "futureOptional": [
+      "slug",
+      "tags",
+      "transcript",
+      "captions",
+      "scheduledPublishAt",
+      "postIds",
+      "viewCount",
+      "inputWidth",
+      "inputHeight"
+    ],
+    "doNotStore": [
+      "permanentHlsUrl",
+      "apiToken",
+      "rawVideoBytes",
+      "supabasePath",
+      "testId"
+    ]
+  },
+  "playlistSchemaProposal": {
+    "entity": "Playlist",
+    "modes": ["dynamic", "curated"],
+    "dynamicStores": ["subjectId", "topicIds", "mode"],
+    "dynamicDoesNotStoreLectureIds": true,
+    "curatedStores": ["items.lectureId", "items.order"],
+    "optionalExamTag": "postId",
+    "separateExamCollectionInV1": false,
+    "doNotUseTest": true
+  },
+  "apiProposal": {
+    "videoLectures": {
+      "adminCreate": "POST /api/video-lectures",
+      "adminList": "GET /api/video-lectures/admin",
+      "adminGet": "GET /api/video-lectures/admin/:id",
+      "adminPatch": "PATCH /api/video-lectures/:id",
+      "uploadUrl": "POST /api/video-lectures/:id/upload-url",
+      "adminDelete": "DELETE /api/video-lectures/:id",
+      "studentList": "GET /api/video-lectures",
+      "studentGet": "GET /api/video-lectures/:id",
+      "playback": "POST /api/video-lectures/:id/playback",
+      "webhook": "POST /api/video-lectures/webhook"
+    },
+    "playlists": {
+      "create": "POST /api/playlists",
+      "list": "GET /api/playlists",
+      "get": "GET /api/playlists/:id",
+      "patch": "PATCH /api/playlists/:id",
+      "delete": "DELETE /api/playlists/:id",
+      "addLecture": "POST /api/playlists/:id/lectures",
+      "removeLecture": "DELETE /api/playlists/:id/lectures/:lectureId"
+    },
+    "conventions": {
+      "envelope": "{ success, message, data }",
+      "adminAuth": "adminChain",
+      "studentAuth": "authenticate",
+      "validationFail": 422,
+      "literalRoutesBeforeParam": true
+    }
+  },
+  "security": {
+    "tokenBackendOnly": true,
+    "oneTimeUploadUrls": true,
+    "adminAuthorization": true,
+    "premiumPlaybackAuthorization": true,
+    "webhookVerification": "HMAC-SHA256 Webhook-Signature",
+    "noPermanentPrivateUrls": true,
+    "noMongoVideoBlobs": true,
+    "noEc2VideoStorage": true,
+    "rateLimiting": ["adminMutationLimiter", "playback limiter (new)", "webhookLimiter"]
+  },
+  "environmentProposal": {
+    "doNotAddInPhase1": true,
+    "names": [
+      "CLOUDFLARE_ACCOUNT_ID",
+      "CLOUDFLARE_STREAM_API_TOKEN",
+      "CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN",
+      "CLOUDFLARE_STREAM_WEBHOOK_SECRET",
+      "CLOUDFLARE_STREAM_MAX_DURATION_SECONDS",
+      "CLOUDFLARE_STREAM_UPLOAD_EXPIRY_SECONDS",
+      "CLOUDFLARE_STREAM_PLAYBACK_TTL_SECONDS",
+      "CLOUDFLARE_STREAM_REQUIRE_SIGNED_URLS",
+      "CLOUDFLARE_STREAM_SIGNING_KEY_ID",
+      "CLOUDFLARE_STREAM_SIGNING_KEY_PEM"
+    ],
+    "currentEnvLoader": "backend/src/config/env.js",
+    "currentExample": "backend/.env.example",
+    "adminPublic": "VITE_API_BASE_URL",
+    "mobilePublic": "EXPO_PUBLIC_API_BASE_URL",
+    "pm2ConfigInRepo": false,
+    "syncIndexesFlag": "SYNC_INDEXES"
+  },
+  "indexProposal": {
+    "doNotCreateInPhase1": true,
+    "productionAutoIndex": false,
+    "builder": "npm run build:indexes uses createIndexes not syncIndexes",
+    "videoLecture": [
+      {
+        "name": "uniq_videolecture_cf_uid",
+        "keys": { "cloudflareVideoId": 1 },
+        "unique": true,
+        "partial": "string uid present"
+      },
+      {
+        "name": "idx_vl_subject_topic_status_order",
+        "keys": {
+          "subjectId": 1,
+          "topicId": 1,
+          "status": 1,
+          "topicOrder": 1,
+          "createdAt": 1
+        },
+        "reason": "dynamic playlist and topic listing; includes topicOrder unlike a createdAt-only compound"
+      },
+      {
+        "name": "idx_vl_status_created",
+        "keys": { "status": 1, "createdAt": -1 },
+        "reason": "admin list and published catalog"
+      }
+    ],
+    "notRecommendedAlone": ["access-only index"]
+  },
+  "implementationPhases": [
+    { "phase": 1, "name": "Architecture audit", "status": "this-document" },
+    { "phase": 2, "name": "Cloudflare account + backend env names (no src upload yet)" },
+    { "phase": 3, "name": "VideoLecture model + admin CRUD + indexes" },
+    { "phase": 4, "name": "Direct TUS upload-url + webhook + processing states" },
+    { "phase": 5, "name": "Admin lecture UI with progress/resume" },
+    { "phase": 6, "name": "Mobile list + expo-video HLS for free published lectures" },
+    { "phase": 7, "name": "Premium signed playback" },
+    { "phase": 8, "name": "Watch progress / resume" },
+    { "phase": 9, "name": "Dynamic + curated playlists" },
+    { "phase": 10, "name": "Playlist Post tagging / exam campaign entry points" },
+    { "phase": 11, "name": "Analytics" }
+  ],
+  "codeReuse": [
+    { "component": "adminChain", "reuse": true, "reason": "admin JWT + role" },
+    { "component": "handlePdfUpload", "reuse": false, "reason": "EC2 temp disk, 25MB, PDF only" },
+    { "component": "isPremiumUser", "reuse": true, "reason": "existing premium truth" },
+    { "component": "subjectService/topicService", "reuse": true, "reason": "same taxonomy" },
+    { "component": "pdfSupabaseStorage", "reuse": false, "reason": "wrong product" },
+    { "component": "Test/checkTestAccess", "reuse": false, "reason": "assessment engine" },
+    { "component": "Razorpay webhook rawBody HMAC", "reuse": "pattern", "reason": "adapt to Stream Webhook-Signature" },
+    { "component": "admin form/select/alerts", "reuse": true, "reason": "existing admin UX" },
+    { "component": "mobile expo-video", "reuse": false, "reason": "not installed; add in phase 6" }
+  ],
+  "risks": [
+    "Cloudflare /token endpoint is low-volume; production needs signing keys",
+    "Only one Stream webhook URL per Cloudflare account",
+    "Stream webhooks cannot target localhost",
+    "Admin axios 20s timeout makes through-backend video upload unsafe",
+    "No tus client or progress UI in admin today",
+    "Production autoIndex is false; indexes must be built explicitly",
+    "Copying Razorpay 200-on-bad-signature may hide Stream webhook spoofing",
+    "expo-video requires a new native EAS build",
+    "Unrelated dirty mobile/app.json at audit start"
+  ],
+  "openQuestions": [
+    "TUS-only vs POST fallback under 200MB",
+    "Explicit ready+manual publish vs auto-publish on webhook",
+    "requireSignedURLs on free lectures as well as premium",
+    "Local signing keys vs Cloudflare token API for v1",
+    "Optional postIds on VideoLecture in v1",
+    "New mobile Lectures tab vs Home card",
+    "Archive-only vs hard delete of Stream assets",
+    "Reuse WebhookEvent with provider prefix vs new collection",
+    "Razorpay-style 200 vs 401/403 on invalid Stream webhook signatures"
+  ],
+  "decisionsRequiringApproval": [
+    "TUS-first for all admin uploads",
+    "Add ready status distinct from published",
+    "Sign all playback including free lectures",
+    "Use Stream signing keys before student launch",
+    "New Playlist entity; do not extend Test",
+    "Defer playlists until after mobile playback",
+    "Do not auto-start Phase 2"
+  ],
+  "backwardCompatibility": {
+    "additiveOnly": true,
+    "mustNotDependOnVideoLecture": [
+      "Question",
+      "Test",
+      "PYQ",
+      "DailyPractice",
+      "Battle",
+      "PdfNote",
+      "subscriptions",
+      "payments",
+      "users"
+    ]
+  },
+  "officialSources": {
+    "cloudflareDirectUploads": "https://developers.cloudflare.com/stream/uploading-videos/direct-creator-uploads/",
+    "cloudflareSignedPlayback": "https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/",
+    "cloudflareWebhooks": "https://developers.cloudflare.com/stream/manage-video-library/using-webhooks/",
+    "cloudflarePricing": "https://developers.cloudflare.com/stream/pricing/",
+    "expoVideoSdk54": "https://docs.expo.dev/versions/v54.0.0/sdk/video"
+  }
+}

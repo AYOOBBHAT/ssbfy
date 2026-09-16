@@ -1,0 +1,56 @@
+{
+  "phase": 2,
+  "title": "Cloudflare Stream Setup",
+  "status": "BLOCKED",
+  "date": "2026-09-12",
+  "accountConfigured": false,
+  "tokenConfigured": false,
+  "connectivity": false,
+  "directUploadCapability": "not_exercised",
+  "directUploadSkippedReason": "POST /accounts/{account_id}/stream/direct_upload creates a pending Stream video UID before bytes are uploaded. Phase 2 does not call it.",
+  "webhookReadyForFuturePhase": true,
+  "signedPlaybackReadyForFuturePhase": true,
+  "mongoWrites": 0,
+  "mongoCollectionsCreated": 0,
+  "mongoIndexesCreated": 0,
+  "cloudflareVideosCreated": 0,
+  "cloudflareExistingVideosModified": 0,
+  "productionConfigured": false,
+  "productionDeployed": false,
+  "phase3Ready": false,
+  "backendIntegration": {
+    "envOptional": true,
+    "servicePath": "backend/src/services/cloudflareStreamService.js",
+    "httpClient": "fetch",
+    "wiredIntoRoutes": false,
+    "startupImport": false
+  },
+  "variableNamesOnly": [
+    "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_STREAM_API_TOKEN"
+  ],
+  "tokenPermissionsRequired": [
+    "Stream Write (dashboard: Account → Stream → Edit)"
+  ],
+  "tokenPermissionsNotRequested": [
+    "DNS",
+    "Workers",
+    "R2",
+    "Pages",
+    "account administrator"
+  ],
+  "localEnv": {
+    "file": "backend/.env",
+    "gitignored": true,
+    "placeholdersPresent": true,
+    "valuesFilled": false
+  },
+  "officialDocs": {
+    "directUploads": "https://developers.cloudflare.com/stream/uploading-videos/direct-creator-uploads/",
+    "listVideos": "https://developers.cloudflare.com/api/resources/stream/methods/list",
+    "webhooks": "https://developers.cloudflare.com/stream/manage-video-library/using-webhooks/",
+    "signedPlayback": "https://developers.cloudflare.com/stream/viewing-videos/securing-your-stream/",
+    "permissions": "https://developers.cloudflare.com/fundamentals/api/reference/permissions/"
+  },
+  "blockedReason": "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_STREAM_API_TOKEN are not set to non-empty values in local backend/.env"
+}

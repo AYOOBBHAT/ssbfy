@@ -84,6 +84,14 @@ export const env = {
   upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN || '',
 
   /**
+   * Cloudflare Stream (video lectures — backend only). Optional until a Stream
+   * operation is invoked; missing values must not crash local/dev startup.
+   * Never send CLOUDFLARE_STREAM_API_TOKEN to admin/mobile or logs.
+   */
+  cloudflareAccountId: (process.env.CLOUDFLARE_ACCOUNT_ID || '').trim(),
+  cloudflareStreamApiToken: (process.env.CLOUDFLARE_STREAM_API_TOKEN || '').trim(),
+
+  /**
    * Google Sign-In — server verifies ID tokens; never trust client profile alone.
    * Android client ID + Web client ID (OAuth 2.0) from Google Cloud Console.
    */
