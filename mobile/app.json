@@ -66,7 +66,8 @@
           "androidAppId": "ca-app-pub-7420252276948628~4551564612",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
         }
-      ]
+      ],
+      "expo-video"
     ]
   }
 }

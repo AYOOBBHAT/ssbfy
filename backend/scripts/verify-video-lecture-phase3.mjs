@@ -130,7 +130,10 @@ test('provisioning uses hierarchy validation and does not accept client cloudfla
   assert.match(service, /resolveHierarchy/);
   assert.match(service, /createDirectUploadUrl/);
   assert.match(service, /UPLOADING/);
-  assert.doesNotMatch(service, /status:\s*VIDEO_LECTURE_STATUS\.PUBLISHED/);
+  const start = service.indexOf('async provisionDirectUpload');
+  const end = service.indexOf('async getById');
+  const provision = service.slice(start, end);
+  assert.doesNotMatch(provision, /status:\s*VIDEO_LECTURE_STATUS\.PUBLISHED/);
   assert.doesNotMatch(service, /req\.body\.cloudflareVideoId/);
 });
 

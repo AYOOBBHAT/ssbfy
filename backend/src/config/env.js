@@ -108,6 +108,23 @@ export const env = {
     7200,
     Math.max(300, Number(process.env.CLOUDFLARE_STREAM_UPLOAD_EXPIRY_SECONDS) || 1800)
   ),
+  /**
+   * Stream signed-playback signing key (optional). When either id or PEM is set,
+   * local RS256 minting is required (no silent /token fallback). Backend only —
+   * never EXPO_PUBLIC_/VITE_. Dashboard/API: POST /accounts/{id}/stream/keys.
+   */
+  cloudflareStreamSigningKeyId: (process.env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || '').trim(),
+  cloudflareStreamSigningKeyPem: (process.env.CLOUDFLARE_STREAM_SIGNING_KEY_PEM || '').trim(),
+  /**
+   * Optional customer host for HLS (customer-xxxxx.cloudflarestream.com).
+   * Empty → videodelivery.net. Not a secret; still backend-owned for URL building.
+   */
+  cloudflareStreamCustomerSubdomain: (
+    process.env.CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || ''
+  )
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/$/, ''),
 
   /**
    * Google Sign-In — server verifies ID tokens; never trust client profile alone.

@@ -81,6 +81,7 @@ async function atomicIncrExpire(key, windowSeconds) {
  * @param {string} opts.routeName — static bucket id (never use req.path)
  * @param {boolean} [opts.allowWithoutRedis=false] — only for webhook: if Redis is unset, log error once and allow traffic
  * @param {'high'|'medium'|'low'} [opts.sensitivity] — provider-error policy; default MEDIUM
+ * @param {(req: import('express').Request) => string} [opts.resolveBucketKey] — extra identity (e.g. admin id). IP is always included unless this returns a full replacement token.
  */
 export function createUpstashLimiter({
   windowSeconds,
@@ -88,6 +89,7 @@ export function createUpstashLimiter({
   routeName,
   allowWithoutRedis = false,
   sensitivity = RateLimitSensitivity.MEDIUM,
+  resolveBucketKey,
 }) {
   if (!routeName || typeof routeName !== 'string') {
     throw new Error('createUpstashLimiter requires `routeName`');
@@ -95,7 +97,10 @@ export function createUpstashLimiter({
 
   return async function upstashRateLimit(req, res, next) {
     const ip = String(resolveClientIp(req));
-    const key = `rate_limit:${ip}:${routeName}`;
+    const extra = typeof resolveBucketKey === 'function' ? String(resolveBucketKey(req) || '').trim() : '';
+    const key = extra
+      ? `rate_limit:${routeName}:${extra}:ip:${ip}`
+      : `rate_limit:${ip}:${routeName}`;
 
     if (!redis) {
       if (allowWithoutRedis) {
@@ -263,12 +268,41 @@ export const smartPracticeIssueLimiter = createUpstashLimiter({
   sensitivity: RateLimitSensitivity.HIGH,
 });
 
+/** Student lecture catalog — pull-to-refresh tolerant. */
+export const lectureReadLimiter = createUpstashLimiter({
+  windowSeconds: 60,
+  maxRequests: 80,
+  routeName: 'video_lecture_read',
+  sensitivity: RateLimitSensitivity.MEDIUM,
+});
+
+/** Student playback token mint — discourage token farming. */
+export const lecturePlaybackLimiter = createUpstashLimiter({
+  windowSeconds: 60,
+  maxRequests: 20,
+  routeName: 'video_lecture_playback',
+  sensitivity: RateLimitSensitivity.HIGH,
+});
+
 /** Admin mutation surface — conservative shared bucket per IP. */
 export const adminMutationLimiter = createUpstashLimiter({
   windowSeconds: 60,
   maxRequests: 120,
   routeName: 'admin_mutation',
   sensitivity: RateLimitSensitivity.HIGH,
+});
+
+/**
+ * POST /video-lectures/admin/upload-url — mints a Cloudflare pending video.
+ * 10 / 10 minutes per admin+IP. Far stricter than apiLimiter (60/min) or
+ * adminMutationLimiter (120/min) because each hit is a Stream write.
+ */
+export const lectureUploadUrlLimiter = createUpstashLimiter({
+  windowSeconds: 600,
+  maxRequests: 10,
+  routeName: 'video_lecture_upload_url',
+  sensitivity: RateLimitSensitivity.HIGH,
+  resolveBucketKey: (req) => (req.user?.id ? `admin:${req.user.id}` : 'admin:unknown'),
 });
 
 /** Authenticated password change — HIGH (credential abuse). */

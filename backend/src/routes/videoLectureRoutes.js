@@ -1,11 +1,18 @@
 import { Router } from 'express';
 import { videoLectureController } from '../controllers/videoLectureController.js';
 import { adminChain } from '../middlewares/adminGuard.js';
+import { authenticate } from '../middlewares/auth.js';
 import { validateRequest } from '../middlewares/validate.js';
-import { adminMutationLimiter } from '../middlewares/upstashRateLimiter.js';
+import {
+  adminMutationLimiter,
+  lecturePlaybackLimiter,
+  lectureReadLimiter,
+  lectureUploadUrlLimiter,
+} from '../middlewares/upstashRateLimiter.js';
 import {
   lectureIdParam,
   listLecturesValidators,
+  listStudentLecturesValidators,
   provisionUploadValidators,
   updateLectureValidators,
 } from '../validators/videoLectureValidators.js';
@@ -19,8 +26,8 @@ const router = Router();
 
 router.post(
   '/admin/upload-url',
-  adminMutationLimiter,
   ...adminChain,
+  lectureUploadUrlLimiter,
   provisionUploadValidators,
   validateRequest,
   videoLectureController.provisionUpload
@@ -58,6 +65,33 @@ router.patch(
   updateLectureValidators,
   validateRequest,
   videoLectureController.update
+);
+
+router.get(
+  '/',
+  lectureReadLimiter,
+  authenticate,
+  listStudentLecturesValidators,
+  validateRequest,
+  videoLectureController.listPublished
+);
+
+router.post(
+  '/:id/playback',
+  lecturePlaybackLimiter,
+  authenticate,
+  ...lectureIdParam,
+  validateRequest,
+  videoLectureController.authorizePlayback
+);
+
+router.get(
+  '/:id',
+  lectureReadLimiter,
+  authenticate,
+  ...lectureIdParam,
+  validateRequest,
+  videoLectureController.getPublished
 );
 
 export default router;

@@ -1,5 +1,10 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
+import jwt from 'jsonwebtoken';
+import {
+  VIDEO_LECTURE_PLAYBACK_TTL_MAX_SECONDS,
+  VIDEO_LECTURE_PLAYBACK_TTL_MIN_SECONDS,
+} from '../constants/videoLecture.js';
 
 /** Official Cloudflare API v4 base. https://developers.cloudflare.com/api/ */
 export const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -17,6 +22,53 @@ function streamConfig() {
     accountId: (process.env.CLOUDFLARE_ACCOUNT_ID || '').trim(),
     apiToken: (process.env.CLOUDFLARE_STREAM_API_TOKEN || '').trim(),
   };
+}
+
+function playbackSigningConfig() {
+  return {
+    keyId: (process.env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || '').trim(),
+    pemRaw: (process.env.CLOUDFLARE_STREAM_SIGNING_KEY_PEM || '').trim(),
+    customerHost: (process.env.CLOUDFLARE_STREAM_CUSTOMER_SUBDOMAIN || '')
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/$/, ''),
+  };
+}
+
+function decodeSigningPem(raw) {
+  const input = String(raw || '').trim();
+  if (!input) return '';
+  let pem = input.replace(/\\n/g, '\n');
+  if (!pem.includes('BEGIN')) {
+    try {
+      pem = Buffer.from(pem, 'base64').toString('utf8').trim();
+    } catch {
+      return '';
+    }
+  }
+  return pem.includes('BEGIN') ? pem : '';
+}
+
+export function isCloudflareStreamSigningKeyConfigured() {
+  const { keyId, pemRaw } = playbackSigningConfig();
+  return Boolean(keyId && decodeSigningPem(pemRaw));
+}
+
+function clampPlaybackTtl(seconds) {
+  const n = Number(seconds);
+  if (!Number.isInteger(n)) {
+    return VIDEO_LECTURE_PLAYBACK_TTL_MIN_SECONDS;
+  }
+  return Math.min(
+    VIDEO_LECTURE_PLAYBACK_TTL_MAX_SECONDS,
+    Math.max(VIDEO_LECTURE_PLAYBACK_TTL_MIN_SECONDS, n)
+  );
+}
+
+function buildSignedPlaybackUrl(token) {
+  const host = playbackSigningConfig().customerHost;
+  const base = host ? `https://${host}` : 'https://videodelivery.net';
+  return `${base}/${token}/manifest/video.m3u8`;
 }
 
 export function isCloudflareStreamConfigured() {
@@ -134,6 +186,7 @@ export async function cloudflareApiRequest(opts) {
 export const cloudflareStreamService = {
   isConfigured: isCloudflareStreamConfigured,
   assertConfigured: assertCloudflareStreamConfigured,
+  isSigningKeyConfigured: isCloudflareStreamSigningKeyConfigured,
 
   /**
    * Confirms the API token is recognized (no Stream mutation).
@@ -229,6 +282,70 @@ export const cloudflareStreamService = {
       pathname: `/accounts/${streamConfig().accountId}/stream/${encodeURIComponent(uid)}`,
     });
     return payload?.result ?? null;
+  },
+
+  /**
+   * Mint a short-lived signed playback token for requireSignedURLs videos.
+   * If CLOUDFLARE_STREAM_SIGNING_KEY_ID or PEM is set, ALWAYS mint locally (RS256).
+   * Incomplete signing-key config fails closed (no silent /token fallback).
+   * Fallback POST /accounts/{id}/stream/{uid}/token only when both signing env vars are unset.
+   * Never logs the token or playback URL.
+   *
+   * @param {{ videoId: string, expiresInSeconds: number }} input
+   * @returns {Promise<{ playbackUrl: string, expiresAt: string, expiresInSeconds: number }>}
+   */
+  async createSignedPlaybackToken(input) {
+    const uid = String(input?.videoId || '').trim();
+    if (!uid) {
+      throw new AppError('video id is required', HTTP_STATUS.BAD_REQUEST);
+    }
+    const expiresInSeconds = clampPlaybackTtl(input?.expiresInSeconds);
+    const exp = Math.floor(Date.now() / 1000) + expiresInSeconds;
+    const { keyId, pemRaw } = playbackSigningConfig();
+    const pem = decodeSigningPem(pemRaw);
+    const signingConfigured = Boolean(keyId || pemRaw);
+
+    let token = '';
+    if (signingConfigured) {
+      if (!keyId || !pem) {
+        throw new AppError(
+          'Cloudflare Stream signing key is incomplete.',
+          HTTP_STATUS.SERVICE_UNAVAILABLE
+        );
+      }
+      try {
+        token = jwt.sign({ sub: uid, kid: keyId, exp }, pem, {
+          algorithm: 'RS256',
+          keyid: keyId,
+        });
+      } catch {
+        throw new AppError(
+          'Cloudflare Stream signing key is invalid.',
+          HTTP_STATUS.SERVICE_UNAVAILABLE
+        );
+      }
+    } else {
+      assertCloudflareStreamConfigured();
+      const { payload } = await cloudflareApiRequest({
+        method: 'POST',
+        pathname: `/accounts/${streamConfig().accountId}/stream/${encodeURIComponent(uid)}/token`,
+        jsonBody: { exp, downloadable: false },
+      });
+      token = typeof payload?.result?.token === 'string' ? payload.result.token.trim() : '';
+    }
+
+    if (!token) {
+      throw new AppError(
+        'Cloudflare Stream did not return a playback token',
+        HTTP_STATUS.BAD_GATEWAY
+      );
+    }
+
+    return {
+      playbackUrl: buildSignedPlaybackUrl(token),
+      expiresAt: new Date(exp * 1000).toISOString(),
+      expiresInSeconds,
+    };
   },
 
   /**

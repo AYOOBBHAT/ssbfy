@@ -81,6 +81,25 @@ export const listLecturesValidators = [
     .toInt(),
 ];
 
+export const listStudentLecturesValidators = [
+  query('subjectId').optional().isMongoId().withMessage('subjectId must be a valid id'),
+  query('topicId').optional().isMongoId().withMessage('topicId must be a valid id'),
+  query('access')
+    .optional()
+    .isIn(VIDEO_LECTURE_ACCESS_VALUES)
+    .withMessage(`access must be one of: ${VIDEO_LECTURE_ACCESS_VALUES.join(', ')}`),
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('page must be a positive integer')
+    .toInt(),
+  query('pageSize')
+    .optional()
+    .isInt({ min: 1, max: 50 })
+    .withMessage('pageSize must be from 1 to 50')
+    .toInt(),
+];
+
 export const updateLectureValidators = [
   ...lectureIdParam,
   body('title')

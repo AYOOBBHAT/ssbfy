@@ -18,6 +18,21 @@ export const videoLectureController = {
     return sendSuccess(res, { lecture }, 'Video lecture');
   }),
 
+  listPublished: asyncHandler(async (req, res) => {
+    const data = await videoLectureService.listPublished(req.query, req.user);
+    return sendSuccess(res, data, 'Video lectures');
+  }),
+
+  getPublished: asyncHandler(async (req, res) => {
+    const lecture = await videoLectureService.getPublished(req.params.id, req.user);
+    return sendSuccess(res, { lecture }, 'Video lecture');
+  }),
+
+  authorizePlayback: asyncHandler(async (req, res) => {
+    const data = await videoLectureService.authorizePlayback(req.params.id, req.user);
+    return sendSuccess(res, data, 'Playback authorized');
+  }),
+
   update: asyncHandler(async (req, res) => {
     const lecture = await videoLectureService.update(req.params.id, req.body);
     return sendSuccess(res, { lecture }, 'Video lecture updated');

@@ -6,7 +6,11 @@ import {
   VIDEO_LECTURE_DEFAULT_MAX_DURATION_SECONDS,
   VIDEO_LECTURE_DEFAULT_UPLOAD_EXPIRY_SECONDS,
   VIDEO_LECTURE_STATUS,
+  resolvePlaybackTtlSeconds,
 } from '../constants/videoLecture.js';
+import { ROLES } from '../constants/roles.js';
+import { isPremiumUser } from '../utils/freeTierAccess.js';
+import { userRepository } from '../repositories/userRepository.js';
 import { subjectRepository } from '../repositories/subjectRepository.js';
 import { topicRepository } from '../repositories/topicRepository.js';
 import { videoLectureRepository } from '../repositories/videoLectureRepository.js';
@@ -73,6 +77,56 @@ function toAdminDto(doc) {
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
+}
+
+/**
+ * Student DTO: no Cloudflare UID, no playback URL, no processing internals.
+ * thumbnailUrl is omitted unless a future signed-thumbnail path exists —
+ * stored Stream UID thumbnails are not anonymously fetchable with requireSignedURLs.
+ */
+function toStudentDto(doc, { locked, subjectName = '', topicName = '' } = {}) {
+  if (!doc) return null;
+  return {
+    id: String(doc._id),
+    title: doc.title,
+    description: doc.description || '',
+    subjectId: doc.subjectId,
+    topicId: doc.topicId,
+    subjectName,
+    topicName,
+    access: doc.access,
+    durationSeconds: doc.durationSeconds ?? null,
+    thumbnailUrl: null,
+    locked: Boolean(locked),
+    order: doc.order ?? 0,
+  };
+}
+
+function isLectureLocked(doc, { premium, isAdmin }) {
+  if (isAdmin) return false;
+  if (doc.access !== VIDEO_LECTURE_ACCESS.PREMIUM) return false;
+  return !premium;
+}
+
+async function resolveStudentEntitlement(actingUser) {
+  const user = await userRepository.findById(actingUser?.id);
+  if (!user) {
+    throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+  }
+  const isAdmin = actingUser.role === ROLES.ADMIN;
+  return { user, isAdmin, premium: isPremiumUser(user) };
+}
+
+async function attachTaxonomyNames(rows) {
+  const subjectIds = [...new Set(rows.map((row) => String(row.subjectId || '')).filter(Boolean))];
+  const topicIds = [...new Set(rows.map((row) => String(row.topicId || '')).filter(Boolean))];
+  const [subjects, topics] = await Promise.all([
+    subjectRepository.findNamesByIds(subjectIds),
+    topicRepository.findNamesByIds(topicIds),
+  ]);
+  const subjectNames = Object.fromEntries(subjects.map((s) => [String(s._id), s.name]));
+  const topicNames = Object.fromEntries(topics.map((t) => [String(t._id), t.name]));
+  return { subjectNames, topicNames };
 }
 
 function durationCapSeconds() {
@@ -236,6 +290,101 @@ export const videoLectureService = {
     return toAdminDto(updated);
   },
 
+  async listPublished(query = {}, actingUser) {
+    const { premium, isAdmin } = await resolveStudentEntitlement(actingUser);
+    const page = Math.max(Number(query.page) || 1, 1);
+    const pageSize = Math.min(Math.max(Number(query.pageSize) || 20, 1), 50);
+    const skip = (page - 1) * pageSize;
+    const filter = { status: VIDEO_LECTURE_STATUS.PUBLISHED };
+    if (query.subjectId) filter.subjectId = query.subjectId;
+    if (query.topicId) filter.topicId = query.topicId;
+    if (query.access) filter.access = query.access;
+
+    const { rows, total, limit } = await videoLectureRepository.findForAdminList(filter, {
+      limit: pageSize,
+      skip,
+      sort: { order: 1, createdAt: -1 },
+      projection:
+        'title description subjectId topicId access durationSeconds thumbnailUrl order',
+    });
+    const { subjectNames, topicNames } = await attachTaxonomyNames(rows);
+    const lectures = rows.map((row) =>
+      toStudentDto(row, {
+        locked: isLectureLocked(row, { premium, isAdmin }),
+        subjectName: subjectNames[String(row.subjectId)] || '',
+        topicName: topicNames[String(row.topicId)] || '',
+      })
+    );
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+    return {
+      lectures,
+      pagination: { total, page, pageSize: limit, totalPages },
+    };
+  },
+
+  async getPublished(id, actingUser) {
+    const { premium, isAdmin } = await resolveStudentEntitlement(actingUser);
+    const doc = await videoLectureRepository.findPublishedById(id);
+    if (!doc) {
+      throw new AppError('Video lecture not found', HTTP_STATUS.NOT_FOUND);
+    }
+    const { subjectNames, topicNames } = await attachTaxonomyNames([doc]);
+    return toStudentDto(doc, {
+      locked: isLectureLocked(doc, { premium, isAdmin }),
+      subjectName: subjectNames[String(doc.subjectId)] || '',
+      topicName: topicNames[String(doc.topicId)] || '',
+    });
+  },
+
+  async authorizePlayback(id, actingUser) {
+    const { premium, isAdmin } = await resolveStudentEntitlement(actingUser);
+    const doc = await videoLectureRepository.findPublishedById(id);
+    if (!doc) {
+      throw new AppError('Video lecture not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (isLectureLocked(doc, { premium, isAdmin })) {
+      throw new AppError('Premium required', HTTP_STATUS.FORBIDDEN);
+    }
+    const uid = String(doc.cloudflareVideoId || '').trim();
+    if (!uid) {
+      throw new AppError('Video lecture is not ready for playback', HTTP_STATUS.NOT_FOUND);
+    }
+
+    // TTL is server-side from Mongo duration only — never from the request body.
+    const expiresInSeconds = resolvePlaybackTtlSeconds(doc.durationSeconds);
+    let signed;
+    try {
+      signed = await cloudflareStreamService.createSignedPlaybackToken({
+        videoId: uid,
+        expiresInSeconds,
+      });
+    } catch (err) {
+      logger.warn('[VIDEO LECTURE PLAYBACK] authorization mint failed', {
+        lectureId: String(doc._id),
+        errorName: err?.name,
+        statusCode: err?.statusCode || null,
+      });
+      throw new AppError(
+        'Unable to start playback. Please try again.',
+        HTTP_STATUS.BAD_GATEWAY
+      );
+    }
+
+    logger.info('[VIDEO LECTURE PLAYBACK] authorized', {
+      lectureId: String(doc._id),
+      access: doc.access,
+      expiresInSeconds: signed.expiresInSeconds,
+    });
+
+    return {
+      lectureId: String(doc._id),
+      playbackUrl: signed.playbackUrl,
+      expiresAt: signed.expiresAt,
+      durationSeconds: doc.durationSeconds ?? null,
+      access: doc.access,
+    };
+  },
+
   /**
    * Apply a verified Cloudflare Stream video notification to an existing lecture.
    * Does not create lectures or Cloudflare videos. Idempotent status/metadata writes.
@@ -280,12 +429,13 @@ export const videoLectureService = {
 
     if (
       existing.status === VIDEO_LECTURE_STATUS.PUBLISHED &&
-      incomingStatus === VIDEO_LECTURE_STATUS.PROCESSING
+      incomingStatus !== VIDEO_LECTURE_STATUS.PUBLISHED
     ) {
       logger.info('[VIDEO LECTURE WEBHOOK] skip status downgrade', {
         lectureId,
         cloudflareVideoId: uid,
         status: existing.status,
+        incomingStatus,
       });
       return {
         handled: false,
@@ -297,6 +447,27 @@ export const videoLectureService = {
     }
 
     const eventId = buildCloudflareStreamWebhookEventId(payload);
+    const claimed = await webhookEventRepository.tryInsertEvent({
+      eventId,
+      event: `stream.${incomingStatus}`,
+    });
+    if (!claimed.inserted) {
+      logger.info('[VIDEO LECTURE WEBHOOK] idempotent skip', {
+        lectureId,
+        cloudflareVideoId: uid,
+        status: existing.status,
+      });
+      return {
+        handled: true,
+        reason: 'idempotent',
+        lectureId,
+        cloudflareVideoId: uid,
+        status: existing.status,
+        durationSeconds: existing.durationSeconds ?? null,
+        thumbnailUrl: existing.thumbnailUrl || null,
+      };
+    }
+
     let media = extractLectureMediaMetadata(payload);
     const publishedAndComplete =
       incomingStatus === VIDEO_LECTURE_STATUS.PUBLISHED &&
@@ -308,10 +479,6 @@ export const videoLectureService = {
       existing.status === incomingStatus;
 
     if (publishedAndComplete || nonPublishedIdempotent) {
-      await webhookEventRepository.tryInsertEvent({
-        eventId,
-        event: `stream.${incomingStatus}`,
-      });
       logger.info('[VIDEO LECTURE WEBHOOK] idempotent skip', {
         lectureId,
         cloudflareVideoId: uid,
@@ -352,10 +519,6 @@ export const videoLectureService = {
     if (media.thumbnailUrl) patch.thumbnailUrl = media.thumbnailUrl;
 
     const updated = await videoLectureRepository.updateById(existing._id, patch);
-    await webhookEventRepository.tryInsertEvent({
-      eventId,
-      event: `stream.${incomingStatus}`,
-    });
 
     logger.info('[VIDEO LECTURE WEBHOOK] lecture updated', {
       lectureId,

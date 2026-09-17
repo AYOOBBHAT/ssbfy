@@ -13,6 +13,7 @@
  *   - POST /questions/smart-practice (smartPracticeIssueLimiter)
  *   - POST /payments/create-order, /payments/verify (paymentLimiter)
  *   - /admin/subscription-plans, /admin/payments (adminMutationLimiter)
+ *   - POST /video-lectures/admin/upload-url (lectureUploadUrlLimiter)
  *
  * MEDIUM — provider errors: fail-open + structured security log (no emergency store):
  *   - apiLimiter mounts: /users (GET /me, /profile-analytics share bucket with other

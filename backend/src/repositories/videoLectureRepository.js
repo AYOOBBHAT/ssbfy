@@ -1,4 +1,5 @@
 import { VideoLecture } from '../models/VideoLecture.js';
+import { VIDEO_LECTURE_STATUS } from '../constants/videoLecture.js';
 
 export const videoLectureRepository = {
   async findById(id) {
@@ -9,6 +10,15 @@ export const videoLectureRepository = {
     const id = String(uid || '').trim();
     if (!id) return null;
     return VideoLecture.findOne({ cloudflareVideoId: id }).lean().exec();
+  },
+
+  async findPublishedById(id) {
+    return VideoLecture.findOne({
+      _id: id,
+      status: VIDEO_LECTURE_STATUS.PUBLISHED,
+    })
+      .lean()
+      .exec();
   },
 
   async create(data) {
@@ -26,14 +36,11 @@ export const videoLectureRepository = {
       .exec();
   },
 
-  async findForAdminList(filter, { limit, skip, sort }) {
+  async findForAdminList(filter, { limit, skip, sort, projection } = {}) {
+    let query = VideoLecture.find(filter).sort(sort).skip(skip).limit(limit);
+    if (projection) query = query.select(projection);
     const [rows, total] = await Promise.all([
-      VideoLecture.find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .exec(),
+      query.lean().exec(),
       VideoLecture.countDocuments(filter).exec(),
     ]);
     return { rows, total, limit };

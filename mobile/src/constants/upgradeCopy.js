@@ -18,6 +18,8 @@ export const PREMIUM_FROM_COPY = {
   notes:
     'Notes are free to read. Premium lets you bookmark notes and PDFs for quick revision.',
   pdf: 'Topic notes are free to read. Premium unlocks the full PDF library.',
+  lecture:
+    'This lecture is Premium. Upgrade to watch signed video lessons for your syllabus.',
   'saved-materials':
     'Bookmark notes and PDFs to revisit them anytime during revision.',
   home: 'Upgrade when you’re ready — mocks, PDFs, and saved materials are included with Premium.',
@@ -56,6 +58,10 @@ export const PDF_UPSELL_TITLE = 'Full PDF library';
 export const PDF_UPSELL_SUB =
   'Topic notes are free to read. Premium unlocks every PDF in your syllabus.';
 
+export const LECTURE_UPSELL_TITLE = 'Premium lecture';
+export const LECTURE_UPSELL_SUB =
+  'This video is included with Premium. Upgrade to watch it.';
+
 /** Save / bookmark alerts */
 export const SAVE_ALERT_TITLE = 'Save with Premium';
 export const SAVE_ALERT_MESSAGE =
@@ -77,3 +83,4 @@ export const PROFILE_CTA_RENEW = 'Renew plan';
 /** Home study material row subtitles */
 export const HOME_NOTES_SUB = 'Topic-wise notes — free to read';
 export const HOME_PDF_SUB = 'Full PDF library — included with Premium';
+export const HOME_LECTURES_SUB = 'Subject and topic video lectures';

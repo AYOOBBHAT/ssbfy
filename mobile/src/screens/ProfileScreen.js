@@ -279,6 +279,19 @@ export default function ProfileScreen({ navigation }) {
       </View>
       <View style={styles.card}>
         <Pressable
+          onPress={() => navigation.navigate('VideoLectures')}
+          style={({ pressed }) => [styles.row, pressCardStyle(pressed)]}
+        >
+          <Ionicons name="play-circle-outline" size={22} color={colors.text} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Video Lectures</Text>
+            <Text style={styles.rowSub}>Watch subject and topic lectures</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+        </Pressable>
+      </View>
+      <View style={styles.card}>
+        <Pressable
           onPress={() => {
             if (isPremium) {
               navigation.navigate('SavedMaterials');

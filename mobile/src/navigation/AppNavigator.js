@@ -16,6 +16,8 @@ import TestScreen from '../screens/TestScreen';
 import ResultScreen from '../screens/ResultScreen';
 import ReviewAnswersScreen from '../screens/ReviewAnswersScreen';
 import PdfListScreen from '../screens/PdfListScreen';
+import VideoLecturesScreen from '../screens/VideoLecturesScreen';
+import LecturePlayerScreen from '../screens/LecturePlayerScreen';
 import NotesListScreen from '../screens/NotesListScreen';
 import NoteDetailScreen from '../screens/NoteDetailScreen';
 import PremiumScreen from '../screens/PremiumScreen';
@@ -236,6 +238,16 @@ export default function AppNavigator() {
             name="PdfList"
             component={PdfListScreen}
             options={{ title: 'PDF Notes', ...stackMotion.defaultPush }}
+          />
+          <RootStack.Screen
+            name="VideoLectures"
+            component={VideoLecturesScreen}
+            options={{ title: 'Video Lectures', ...stackMotion.defaultPush }}
+          />
+          <RootStack.Screen
+            name="LecturePlayer"
+            component={LecturePlayerScreen}
+            options={{ title: 'Lecture', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="NotesList"
