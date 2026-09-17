@@ -16,6 +16,8 @@ import ManageTests from './pages/ManageTests.jsx';
 import ManageTopics from './pages/ManageTopics.jsx';
 import ManageSubscriptionPlans from './pages/ManageSubscriptionPlans.jsx';
 import ManagePayments from './pages/ManagePayments.jsx';
+import AddLecture from './pages/AddLecture.jsx';
+import ManageLectures from './pages/ManageLectures.jsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import Terms from './pages/Terms.jsx';
 import DeleteAccount from './pages/DeleteAccount.jsx';
@@ -55,6 +57,8 @@ export default function App() {
                 element={<ManageSubscriptionPlans />}
               />
               <Route path="/payments" element={<ManagePayments />} />
+              <Route path="/add-lecture" element={<AddLecture />} />
+              <Route path="/manage-lectures" element={<ManageLectures />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

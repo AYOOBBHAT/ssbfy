@@ -63,6 +63,11 @@ export function getApiErrorMessage(error) {
   const st = error?.response?.status;
   const body = error?.response?.data;
   if (typeof body?.message === 'string' && body.message.trim()) {
+    const details = Array.isArray(body.details) ? body.details : [];
+    const first = details.find((d) => typeof d?.message === 'string' && d.message.trim());
+    if (body.message === 'Validation failed' && first) {
+      return first.message;
+    }
     return body.message;
   }
   if (!error?.response) {
@@ -653,6 +658,47 @@ export async function reconcileAdminPayment(orderId) {
   if (!orderId) throw new Error('reconcileAdminPayment requires orderId.');
   const res = await api.post(`${ADMIN_PAYMENTS_BASE}/reconcile`, { orderId });
   return unwrap(res);
+}
+
+/* ---------------- Video lectures (admin) ---------------- */
+
+/**
+ * Provision a one-time Cloudflare direct-upload URL.
+ * Body: title, description, subjectId, topicId, access, maxDurationSeconds.
+ * Returns { lectureId, cloudflareVideoId, uploadURL, status }.
+ * Does not accept or send video bytes.
+ */
+export async function provisionLectureUploadUrl(payload) {
+  const res = await api.post('/video-lectures/admin/upload-url', payload);
+  return unwrap(res);
+}
+
+/** List lectures. Query: subjectId, topicId, status, access, page, pageSize. */
+export async function listAdminLectures(params = {}) {
+  const res = await api.get('/video-lectures/admin', { params });
+  return unwrap(res) ?? { lectures: [], pagination: {} };
+}
+
+export async function getAdminLecture(id) {
+  if (!id) throw new Error('getAdminLecture requires an id.');
+  const res = await api.get(`/video-lectures/admin/${id}`);
+  const data = unwrap(res);
+  return data?.lecture ?? data;
+}
+
+/** Metadata only. Must not send cloudflareVideoId or status. */
+export async function updateAdminLecture(id, payload) {
+  if (!id) throw new Error('updateAdminLecture requires an id.');
+  const res = await api.patch(`/video-lectures/admin/${id}`, payload);
+  const data = unwrap(res);
+  return data?.lecture ?? data;
+}
+
+export async function archiveAdminLecture(id) {
+  if (!id) throw new Error('archiveAdminLecture requires an id.');
+  const res = await api.patch(`/video-lectures/admin/${id}/archive`);
+  const data = unwrap(res);
+  return data?.lecture ?? data;
 }
 
 export default api;

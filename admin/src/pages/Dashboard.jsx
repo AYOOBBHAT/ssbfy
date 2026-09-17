@@ -62,6 +62,16 @@ const cards = [
     description:
       'Trace Razorpay orders, webhook verification, premium activation, and manual reconcile.',
   },
+  {
+    to: '/add-lecture',
+    title: 'Add Lecture',
+    description: 'Upload a video lecture directly to Cloudflare Stream for a subject and topic.',
+  },
+  {
+    to: '/manage-lectures',
+    title: 'Video Lectures',
+    description: 'Filter, edit metadata, and archive lectures. Status comes from Cloudflare processing.',
+  },
 ];
 
 export default function Dashboard() {

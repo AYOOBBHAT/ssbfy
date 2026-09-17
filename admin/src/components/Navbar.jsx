@@ -15,6 +15,8 @@ const links = [
   { to: '/topics', label: 'Subjects & Topics' },
   { to: '/subscription-plans', label: 'Subscription Plans' },
   { to: '/payments', label: 'Payments' },
+  { to: '/add-lecture', label: 'Add Lecture' },
+  { to: '/manage-lectures', label: 'Manage Lectures' },
 ];
 
 export default function Navbar() {

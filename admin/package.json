@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "verify:question-presentation": "node ./scripts/verify-question-presentation.mjs"
+    "verify:question-presentation": "node ./scripts/verify-question-presentation.mjs",
+    "verify:phase5-video-lecture": "node ./scripts/verify-video-lecture-phase5.mjs"
   },
   "dependencies": {
     "@sentry/react": "^10.52.0",

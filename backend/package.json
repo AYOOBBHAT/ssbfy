@@ -54,6 +54,7 @@
     "verify:phase2-cloudflare-stream": "node scripts/verify-phase2-cloudflare-stream.mjs",
     "verify:phase3-video-lecture": "node scripts/verify-video-lecture-phase3.mjs",
     "verify:phase4-video-lecture": "node scripts/verify-video-lecture-phase4.mjs",
+    "verify:phase4-upload-url": "node scripts/verify-video-lecture-phase4-upload-url.mjs",
     "backfill:canonical-topics": "node scripts/backfill-canonical-topics.mjs"
   },
   "engines": {
