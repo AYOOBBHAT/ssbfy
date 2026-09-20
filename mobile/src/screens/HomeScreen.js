@@ -24,7 +24,6 @@ import { PremiumHomeBanner } from '../components/PremiumHomeBanner';
 import {
   HOME_NOTES_SUB,
   HOME_PDF_SUB,
-  HOME_LECTURES_SUB,
   HOME_PREMIUM_BUTTON,
   HOME_PREMIUM_SUB,
   HOME_PREMIUM_TITLE,
@@ -293,13 +292,15 @@ export default function HomeScreen() {
         </Pressable>
         <View style={styles.studyDivider} />
         <Pressable
-          onPress={() => navigation.navigate('VideoLectures')}
+          onPress={() => navigation.navigate('PreviousYearPapers')}
           style={({ pressed }) => [styles.studyRow, pressCardStyle(pressed)]}
         >
-          <Ionicons name="play-circle-outline" size={22} color={colors.primary} />
+          <Ionicons name="document-text-outline" size={22} color={colors.primary} />
           <View style={styles.studyRowText}>
-            <Text style={styles.studyRowTitle}>Video Lectures</Text>
-            <Text style={styles.studyRowSub}>{HOME_LECTURES_SUB}</Text>
+            <Text style={styles.studyRowTitle}>Previous Year Papers</Text>
+            <Text style={styles.studyRowSub}>
+              Practice with real previous-year questions
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>

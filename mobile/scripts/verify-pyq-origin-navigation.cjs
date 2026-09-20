@@ -73,14 +73,19 @@ function run() {
   assert.doesNotMatch(hook, /originMainTab:\s*['"]Home['"]/);
   assert.doesNotMatch(hook, /kind:\s*TEST_KIND_PREVIOUS_YEAR[\s\S]*originMainTab:\s*['"]Home['"]/);
 
-  // 2–3. Origin is the navigator that mounted the screen, not test.kind
+  // 2–3. Origin is the navigator that mounted the screen, not test.kind.
+  // Papers tab is gone; catalog is Home-stack PreviousYearPapers only.
   assert.equal(pyq.PYQ_ROUTE_PAPERS_TAB, 'PapersMain');
   assert.equal(pyq.PYQ_ROUTE_HOME, 'PreviousYearPapers');
   assert.equal(pyq.resolvePyqOriginMainTab('PapersMain'), 'Papers');
   assert.equal(pyq.resolvePyqOriginMainTab('PreviousYearPapers'), 'Home');
   assert.equal(pyq.resolvePyqOriginMainTab(undefined), 'Home');
-  assert.match(appNav, /name="PapersMain"/);
+  assert.doesNotMatch(appNav, /name="PapersMain"/);
+  assert.doesNotMatch(appNav, /name="Papers"/);
   assert.match(appNav, /name="PreviousYearPapers"/);
+  assert.match(appNav, /name="VideoLecturesTab"/);
+  assert.match(appNav, /name="VideoLecturesMain"/);
+  assert.doesNotMatch(appNav, /name="VideoLectures"/);
 
   // 4. TestScreen does not blindly overwrite a supplied origin with Tests
   assert.match(testScreen, /resolveTimedTestOriginMainTab\(originMainTab\)/);
@@ -109,12 +114,12 @@ function run() {
   assert.match(testScreen, /practiceType === 'battle' && battleId/);
   assert.match(testScreen, /name:\s*['"]BattleResult['"]/);
 
-  // 8. Result navigation preserves origin (returnMainTab + Papers back target)
+  // 8. Result navigation preserves origin (legacy Papers → Home/PreviousYearPapers)
   assert.match(flowNav, /returnMainTab:\s*tab/);
   assert.equal(nav.MAIN_TABS.PAPERS, 'Papers');
   assert.deepEqual(nav.buildMainReturnRoute('Papers'), {
     name: 'Main',
-    params: { screen: 'Papers', params: { screen: 'PapersMain' } },
+    params: { screen: 'Home', params: { screen: 'PreviousYearPapers' } },
   });
   assert.deepEqual(nav.buildMainReturnRoute('Home'), {
     name: 'Main',
@@ -125,8 +130,9 @@ function run() {
     params: { screen: 'Tests', params: { screen: 'TestsMain' } },
   });
   const papersBack = nav.resolveResultBackTarget({ returnMainTab: 'Papers' });
-  assert.equal(papersBack.label, 'Back to Papers');
-  assert.equal(papersBack.route.params.screen, 'Papers');
+  assert.equal(papersBack.label, 'Back to Previous Year Papers');
+  assert.equal(papersBack.route.params.screen, 'Home');
+  assert.equal(papersBack.route.params.params.screen, 'PreviousYearPapers');
   const testsBack = nav.resolveResultBackTarget({ returnMainTab: 'Tests' });
   assert.equal(testsBack.label, 'Back to Tests');
   const homeBack = nav.resolveResultBackTarget({ returnMainTab: 'Home' });

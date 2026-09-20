@@ -5,7 +5,7 @@
  * - Practice → Finish → Result → Android back → Practice tab (not stale Test).
  * - Daily → Finish → Result → Android back → Home tab.
  * - Mock submit → Result → Android back / footer → Tests tab (not Home).
- * - PYQ from Papers → Result / leave → Papers; PYQ from Home → Home.
+ * - PYQ from Home (or legacy Papers origin) → Result / leave → Home/PreviousYearPapers.
  * - Spam Android back during “Finishing…” / Submitting → back consumed, single Result.
  * - Retry chain: Result → Test → Finish Retry → one Result; returnMainTab preserved.
  * - Finish while app backgrounds → no duplicate reset / orphaned Test (see testTransitionLifecycle.js).
@@ -29,8 +29,13 @@ const NESTED_MAIN = {
   [MAIN_TABS.PRACTICE]: 'PracticeMain',
   [MAIN_TABS.HOME]: 'HomeMain',
   [MAIN_TABS.TESTS]: 'TestsMain',
-  [MAIN_TABS.PAPERS]: 'PapersMain',
   [MAIN_TABS.PROFILE]: 'ProfileMain',
+};
+
+/** Legacy Papers-tab origin: catalog now lives on the Home stack. */
+const PAPERS_RETURN_ROUTE = {
+  name: 'Main',
+  params: { screen: MAIN_TABS.HOME, params: { screen: 'PreviousYearPapers' } },
 };
 
 const VALID_ORIGIN_TABS = new Set(Object.values(MAIN_TABS));
@@ -70,6 +75,9 @@ export function consumeHardwareBackDuringTransition(ctx) {
 /** Route object for `navigation.reset` bottom of stack (tab + nested screen). */
 export function buildMainReturnRoute(mainTab = MAIN_TABS.HOME) {
   const tab = mainTab || MAIN_TABS.HOME;
+  if (tab === MAIN_TABS.PAPERS) {
+    return PAPERS_RETURN_ROUTE;
+  }
   const nested = NESTED_MAIN[tab] || NESTED_MAIN[MAIN_TABS.HOME];
   return {
     name: 'Main',
@@ -126,7 +134,10 @@ export function resolveResultBackTarget(params) {
     return { label: 'Back to Tests', route: buildMainReturnRoute(MAIN_TABS.TESTS) };
   }
   if (tab === MAIN_TABS.PAPERS) {
-    return { label: 'Back to Papers', route: buildMainReturnRoute(MAIN_TABS.PAPERS) };
+    return {
+      label: 'Back to Previous Year Papers',
+      route: buildMainReturnRoute(MAIN_TABS.PAPERS),
+    };
   }
   if (tab === MAIN_TABS.PROFILE || params?.viewingHistoricalAttempt || params?.historicalAttemptMode) {
     return { label: 'Back to Profile', route: buildMainReturnRoute(MAIN_TABS.PROFILE) };

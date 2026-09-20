@@ -279,7 +279,9 @@ export default function ProfileScreen({ navigation }) {
       </View>
       <View style={styles.card}>
         <Pressable
-          onPress={() => navigation.navigate('VideoLectures')}
+          onPress={() =>
+            navigation.navigate('Main', { screen: 'VideoLecturesTab' })
+          }
           style={({ pressed }) => [styles.row, pressCardStyle(pressed)]}
         >
           <Ionicons name="play-circle-outline" size={22} color={colors.text} />

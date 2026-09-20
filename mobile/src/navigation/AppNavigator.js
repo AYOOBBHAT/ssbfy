@@ -38,7 +38,7 @@ const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
 const PracticeStack = createNativeStackNavigator();
 const TestsStack = createNativeStackNavigator();
-const PapersStack = createNativeStackNavigator();
+const VideoLecturesStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 
 const themedHeader = {
@@ -90,15 +90,15 @@ function TestsStackNavigator() {
   );
 }
 
-function PapersStackNavigator() {
+function VideoLecturesStackNavigator() {
   return (
-    <PapersStack.Navigator screenOptions={{ ...themedHeader }}>
-      <PapersStack.Screen
-        name="PapersMain"
-        component={PreviousYearPapersScreen}
-        options={{ title: 'Previous Year Papers' }}
+    <VideoLecturesStack.Navigator screenOptions={{ ...themedHeader }}>
+      <VideoLecturesStack.Screen
+        name="VideoLecturesMain"
+        component={VideoLecturesScreen}
+        options={{ title: 'Video Lectures' }}
       />
-    </PapersStack.Navigator>
+    </VideoLecturesStack.Navigator>
   );
 }
 
@@ -118,7 +118,7 @@ const tabIcons = {
   Home: 'home-outline',
   Practice: 'book-outline',
   Tests: 'clipboard-outline',
-  Papers: 'document-text-outline',
+  VideoLecturesTab: 'play-circle-outline',
   Profile: 'person-outline',
 };
 
@@ -173,9 +173,9 @@ function MainTabs() {
         options={{ tabBarLabel: 'Tests' }}
       />
       <Tab.Screen
-        name="Papers"
-        component={PapersStackNavigator}
-        options={{ tabBarLabel: 'Papers' }}
+        name="VideoLecturesTab"
+        component={VideoLecturesStackNavigator}
+        options={{ tabBarLabel: 'Video Lectures' }}
       />
       <Tab.Screen
         name="Profile"
@@ -238,11 +238,6 @@ export default function AppNavigator() {
             name="PdfList"
             component={PdfListScreen}
             options={{ title: 'PDF Notes', ...stackMotion.defaultPush }}
-          />
-          <RootStack.Screen
-            name="VideoLectures"
-            component={VideoLecturesScreen}
-            options={{ title: 'Video Lectures', ...stackMotion.defaultPush }}
           />
           <RootStack.Screen
             name="LecturePlayer"

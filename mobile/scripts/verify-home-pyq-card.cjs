@@ -27,7 +27,10 @@ function run() {
   // 2. Explore Papers opens the existing PreviousYearPapers route
   assert.match(home, /navigate\('PreviousYearPapers'\)/);
   const homeNavHits = home.match(/navigate\('PreviousYearPapers'\)/g) || [];
-  assert.equal(homeNavHits.length, 1);
+  assert.equal(homeNavHits.length, 2);
+  assert.match(home, /studyRowTitle}>Previous Year Papers/);
+  assert.doesNotMatch(home, /navigate\('VideoLectures'\)/);
+  assert.doesNotMatch(home, /studyRowTitle}>Video Lectures/);
 
   // 10. No duplicate navigation route
   const routeHits = nav.match(/name="PreviousYearPapers"/g) || [];

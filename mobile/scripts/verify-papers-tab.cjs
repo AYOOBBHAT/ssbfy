@@ -1,5 +1,6 @@
 /**
- * Papers tab replaces public streak Leaderboard in bottom navigation.
+ * Fourth bottom tab is Video Lectures; Previous Year Papers stays on Home.
+ * Public streak Leaderboard remains retired.
  * Run from mobile/: node scripts/verify-papers-tab.cjs
  */
 const assert = require('assert/strict');
@@ -15,14 +16,21 @@ function read(rel) {
 function run() {
   const nav = read('src/navigation/AppNavigator.js');
   const home = read('src/screens/HomeScreen.js');
+  const profile = read('src/screens/ProfileScreen.js');
   const daily = read('src/services/dailyPracticeService.js');
 
-  assert.match(nav, /name="Papers"/);
-  assert.match(nav, /tabBarLabel: 'Papers'/);
-  assert.match(nav, /Papers: 'document-text-outline'/);
-  assert.match(nav, /function PapersStackNavigator/);
-  assert.match(nav, /name="PapersMain"/);
-  assert.match(nav, /PapersStack\.Screen[\s\S]*component=\{PreviousYearPapersScreen\}/);
+  assert.doesNotMatch(nav, /name="Papers"/);
+  assert.doesNotMatch(nav, /tabBarLabel: 'Papers'/);
+  assert.doesNotMatch(nav, /function PapersStackNavigator/);
+  assert.doesNotMatch(nav, /name="PapersMain"/);
+  assert.match(nav, /name="VideoLecturesTab"/);
+  assert.match(nav, /tabBarLabel: 'Video Lectures'/);
+  assert.match(nav, /VideoLecturesTab: 'play-circle-outline'/);
+  assert.match(nav, /function VideoLecturesStackNavigator/);
+  assert.match(nav, /name="VideoLecturesMain"/);
+  assert.match(nav, /VideoLecturesStack\.Screen[\s\S]*component=\{VideoLecturesScreen\}/);
+  assert.match(nav, /name="LecturePlayer"/);
+  assert.doesNotMatch(nav, /name="VideoLectures"/);
 
   assert.doesNotMatch(nav, /LeaderboardScreen/);
   assert.doesNotMatch(nav, /LeaderboardStackNavigator/);
@@ -40,6 +48,12 @@ function run() {
   assert.match(home, /Daily Practice/);
   assert.match(home, /getDailyPractice/);
   assert.match(home, /mode: 'daily'/);
+  assert.doesNotMatch(home, /navigate\('VideoLectures'\)/);
+  assert.match(
+    profile,
+    /navigate\('Main',\s*\{\s*screen:\s*'VideoLecturesTab'\s*\}\)/
+  );
+  assert.doesNotMatch(profile, /navigate\('VideoLectures'\)/);
 
   assert.match(daily, /export async function getDailyPractice/);
   assert.match(daily, /export async function completeDailyPractice/);
